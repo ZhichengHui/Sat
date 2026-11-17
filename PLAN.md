@@ -44,12 +44,13 @@ of an improvement, not a reason to avoid one; never route a change around the pr
 - The framework supports a subset of Rust, and not yet all of it. Write the code in that subset:
   the translation has no placeholders (`urust/PLACEHOLDERS.txt` reports 0) and no new stubs of
   external functions in `urust/*_Template.thy`.
-- When a construct you need is not supported, first rewrite the code with supported constructs.
-  When that is not reasonable, report the gap to the framework: an issue in its repository (the
-  front end for what does not translate, AutoCorrode for what its library or automation lacks),
-  labelled `from-agent`, with a minimal Rust example, what the translation produced, and the
-  workaround you took; link it from the issue of your task. The owner, or agents working on the
-  framework, improve it from these issues.
+- When a construct you need is not supported, rewrite the code with supported constructs that do
+  the same. Stop the task (and say why on its issue) only when no reasonable rewrite exists.
+- Report every gap you meet to the framework, also the ones you worked around: an issue in its
+  repository (the front end for what does not translate, AutoCorrode for what its library or
+  automation lacks), labelled `from-agent`, with a minimal Rust example, what the translation
+  produced, and the workaround you took, if any; link it from the issue of your task. The owner,
+  or agents working on the framework, improve it from these issues.
 - Before relying on the framework (regenerating `urust/`, or concluding that a construct is not
   supported), check that it is the newest commit of its main branch: the front end against its
   `master`, and the AutoCorrode revision of the proofs (`AUTOCORRODE_REV` in CI, which the heap on
