@@ -51,11 +51,9 @@ of an improvement, not a reason to avoid one; never route a change around the pr
   automation lacks), labelled `from-agent`, with a minimal Rust example, what the translation
   produced, and the workaround you took, if any; link it from the issue of your task. The owner,
   or agents working on the framework, improve it from these issues.
-- Before relying on the framework (regenerating `urust/`, or concluding that a construct is not
-  supported), check that it is the newest commit of its main branch: the front end against its
-  `master`, and the AutoCorrode revision of the proofs (`AUTOCORRODE_REV` in CI, which the heap on
-  the server follows) against AutoCorrode's `main`. Update the front end when it is behind. When
-  AutoCorrode is behind, tell the owner in an issue: the shared heap and CI are the owner's.
+- The framework is always the newest commit of its main branches: the agents' launcher updates the
+  front end and AutoCorrode (rebuilding its heap) before every start, and CI checks out both at
+  their newest commit.
 
 ### Verified code
 

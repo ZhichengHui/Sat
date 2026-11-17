@@ -19,10 +19,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # The AutoCorrode revision the proofs are checked against.
-  AUTOCORRODE_REV: 5366db727a5538b10a4b4a20f2959634ab8f3a42
-
 jobs:
   spec:
     name: spec unchanged
@@ -74,8 +70,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ZhichengHui/AutoCorrode
-          ref: ${{ env.AUTOCORRODE_REV }}
+          ref: main
           path: autocorrode
+      - name: AutoCorrode revision (newest main, never pinned)
+        shell: bash
+        run: echo "AUTOCORRODE_REV=$(git -C autocorrode rev-parse HEAD)" >> "$GITHUB_ENV"
       - name: Checkout AFP
         uses: actions/checkout@v4
         with:

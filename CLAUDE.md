@@ -13,11 +13,10 @@ header); pod agents get all of it from the environment their launcher sets.
   request.
 - Differential testing: `python3 tools/fuzz.py target/release/sat z3 300 SEED`.
 - After changing `core/src/lib.rs`, or when CI's `translation up to date` fails: regenerate
-  `urust/` with the newest front end (never pinned): `git -C "$URUST_FRONTEND_DIR" pull -q`,
-  `cargo build --release` there, then
+  `urust/` with
   `"$URUST_FRONTEND_DIR"/scripts/urust-frontend.sh --out urust --name Sat core/src/lib.rs`.
-  (`URUST_FRONTEND_DIR` is the checkout of the AutoCorrode front end, set in the agents' environment;
-  if it is unset, stop and ask.)
+  (`URUST_FRONTEND_DIR` is the front end, kept at its newest commit by the agents' launcher; if it
+  is unset, stop and ask.)
   If the new translation breaks `spec/`, do not change `spec/`: report it on the issue and stop.
 
 ## Developing proofs
@@ -48,10 +47,6 @@ header); pod agents get all of it from the environment their launcher sets.
 The rules of this repository are in `PLAN.md` (the specification, verified code, the trusted base);
 follow them. In practice:
 
-- Before regenerating `urust/`: `git -C "$URUST_FRONTEND_DIR" fetch -q` and compare with
-  `origin/master` (pull and rebuild when behind); compare
-  `gh api repos/ZhichengHui/AutoCorrode/commits/main -q .sha` with `AUTOCORRODE_REV` in
-  `.github/workflows/ci.yml` (open an issue for the owner when they differ).
 - After regenerating `urust/`: `urust/PLACEHOLDERS.txt` must report 0, and `urust/*_Template.thy`
   must have no new stubs. If not, rewrite the code in the supported subset; in every case report
   the gap to the framework as `PLAN.md` says.
