@@ -76,6 +76,25 @@ locale `Sat_heap` 的假设（AutoCorrode 引用模型的假设）；未验证�
   随机公式）；`cli/tests/dimacs.rs` 经命令行端到端测试 DIMACS 输入、回答和退出码。
 - `tools/fuzz.py BIN Z3 N [SEED]`：随机小 CNF 公式，与 `z3 -dimacs` 比较回答。
 
+## 用 pod 派任务
+
+仓库按 lean-zip 的做法配置了 pod（<https://github.com/kim-em/pod>，多代理管理器）：在计算服务器上运行一组
+Claude Code agent，每个 agent 在自己的 git worktree 和分支上工作，通过 GitHub issue 接任务、通过 PR 交付，
+PR 的 CI（spec 校验、cargo test、全部证明）通过后自动 squash 合并。
+
+- 下达任务：开一个 issue。带标签 `agent-plan` 的 issue 由 worker 直接认领去做；带标签 `directive` 的较大任务
+  由 planner 拆成若干 `agent-plan` issue。只有仓库所有者和协作者写的 issue 与评论会被 agent 读到。
+- 规则：agent 遵守 `CLAUDE.md`；`PLAN.md` 说明本仓库没有自主路线图，只做 issue 里的任务。pod 拒绝为改动
+  `spec/`、`tools/spec.sha256`、`CLAUDE.md`、`PLAN.md`、`.github/`、`.pod/` 的分支开 PR（`.pod/config.toml` 的
+  `protected_files`）。
+- 启动（在计算服务器上，pod 的工作副本 `$RT/pod/Sat`）：`tmux new -s pod-sat`，然后
+  `tools/pod-remote.sh`（监视界面）或 `tools/pod-remote.sh add N`（启动 N 个 agent）；`tools/pod-remote.sh status`、
+  `list`、`finish all` 等见 pod 的说明。`tools/pod-remote.sh` 设置 agent 的环境：`HOME=$RT/home`（服务器上的
+  Claude Code 配置：auto 权限模式、Isabelle skill、Pool Server MCP），令牌取自 `$RT/secrets/claude_token` 和
+  `$RT/secrets/github_sat_token`，PATH 含 claude、gh、cargo、z3。
+- agent 开发证明时，用 `tools/devcopy.sh` 生成 `dev/`（导入去掉 session 限定的扁平副本），在 Pool Server 上检查
+  其中的理论；提交前 `tools/check.sh` 必须通过。
+
 ## 重新生成翻译
 
 `core/src/lib.rs` 改动后，在仓库根目录运行 AutoCorrode 前端：

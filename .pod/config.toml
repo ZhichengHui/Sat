@@ -1,0 +1,201 @@
+# pod configuration — all values have sensible defaults.
+# Edit this file to customise agent behaviour.
+
+[project]
+worktree_base = "worktrees"        # Where git worktrees are created
+session_dir = "sessions"           # Session stdout capture directory
+build_cache_dir = "target"         # Build cache seeded into worktrees (cargo)
+build_cache_symlink_subdirs = []  # Subdirs of build_cache_dir to symlink
+                                            # instead of copy (immutable shared deps).
+                                            # Set to [] to copy everything.
+# Files agents may not modify in PRs (git pathspecs): the fixed specification and its manifest,
+# the steering files, CI and this configuration.
+protected_files = ["spec", "tools/spec.sha256", "PLAN.md", "CLAUDE.md", ".github", ".pod"]
+min_free_disk_gb = 2               # Pause dispatch when free disk drops below this
+
+[merge]
+# Status check contexts that must pass before a PR can auto-merge.
+# These are the `name:` field of jobs in .github/workflows/*.yml.
+# Leave empty to skip branch-protection setup.
+#
+# Why this matters: `coordination create-pr` runs `gh pr merge --auto` on
+# every PR it opens, but GitHub only honours --auto when the default branch
+# has branch protection with at least one required status check. Without
+# that, PRs go green but never merge.
+#
+# Example: required_checks = ["build-and-test"]
+required_checks = ["spec unchanged", "rust", "proofs"]
+
+[agent]
+backend = "claude"                 # "claude", "codex", or "auto"
+# In "auto" mode, each iteration picks whichever backend has available
+# quota. Settings under [agent.auto] apply only to auto mode.
+quota_retry_seconds = 60           # Auto-mode sleep when no backend has quota
+
+[agent.auto]
+prefer = "codex"                   # Tie-break when both backends have quota
+
+[agent.claude]
+model = "opus"                     # Claude model to use (back-compat default)
+# Ordered list of acceptable model tiers; first satisfiable per account
+# wins. Set to ["opus"] to require Opus, ["opus", "sonnet"] to fall
+# through to Sonnet when no account has Opus quota. Absent → [model].
+accepted_models = ["opus"]
+# This deployment (PGR compute server) has one subscription token, passed as
+# CLAUDE_CODE_OAUTH_TOKEN by tools/pod-remote.sh, and no quota helper; .pod/force-quota
+# (created by that script) makes pod launch `claude` without probing accounts.
+quota_check = ""
+quota_check_required = false
+quota_retry_seconds = 60           # Sleep duration when quota unavailable
+# When isolated_config = true, each agent gets its own
+# CLAUDE_CONFIG_DIR under .pod/claude-config/<short_id>/ with its own
+# keychain entry, so different agents can simultaneously run on
+# different Claude accounts.
+# Off: agents use the Claude Code configuration of the server (HOME=$RT/home): auto permission
+# mode, the Isabelle skills and the Pool Server MCP.
+isolated_config = false
+
+[agent.codex]
+model = "gpt-5.4"                  # Codex model to use
+quota_check = "~/.claude/skills/claude-usage/codex-available-model"
+quota_check_required = true        # Hard-fail if quota unavailable
+quota_retry_seconds = 60           # Sleep duration when quota unavailable
+isolated_config = true             # Use strict pod-managed CODEX_HOME (no ~/.codex state except auth.json)
+
+[agent.bubble]
+# Run each agent inside a `bubble` container instead of directly on the
+# host. The host's ~/.claude/CLAUDE.md, skills/, commands/, and
+# settings.json are NOT exposed to agents; only .credentials.json is
+# mounted (read-only) so subscription auth still works. Requires the
+# `bubble` CLI on PATH and a working Incus runtime. When enabled,
+# `[agent.claude] isolated_config` is ignored: transcripts land in
+# ~/.bubble/ai-projects/<bubble-name>/ and are read from there.
+enabled = false
+
+[quota]
+# When an external account manager owns account selection — signalled by
+# ~/.claude/.current-account, which pins pod to one account (see
+# accounts.select_for_dispatch) — pod drives that manager itself rather than
+# relying on its (typically systemd-user-timer) schedule, which can wedge on
+# an unprivileged host across a `nixos-rebuild switch`. On the housekeeping
+# cadence, and before sleeping on `waiting_quota`, pod runs `<cmd> best` to
+# re-pick the best-quota account and refresh tokens, and un-wedges a stuck
+# `systemd --user` rotation timer via `daemon-reexec`. Set to "" to disable;
+# a no-op when ~/.claude/.current-account is absent or the command is missing.
+account_manager_cmd = ""
+# Max seconds a resuming agent will hold its claim/worktree while waiting for
+# quota to return before giving up and releasing them.
+max_pause_secs = 5400
+
+# Dollars per million tokens.
+# Resolution order when pricing an agent (see `_pricing_for`):
+#   [pricing.<backend>.<model>]
+#   → [pricing.<backend>.default]
+#   → legacy flat [pricing]
+#   → baked-in Claude Opus constants
+# Legacy flat [pricing] remains honoured for backward compatibility.
+
+[pricing.claude.opus]
+input = 5.00
+output = 25.00
+cache_read = 0.50
+cache_create = 6.25
+
+[pricing.claude.default]
+input = 5.00
+output = 25.00
+cache_read = 0.50
+cache_create = 6.25
+
+[pricing.codex."gpt-5.4"]
+input = 2.50
+output = 15.00
+cache_read = 0.25
+cache_create = 0.0
+
+[pricing.codex.default]
+input = 2.50
+output = 15.00
+cache_read = 0.25
+cache_create = 0.0
+
+[dispatch]
+# Built-in strategies: "queue_balance", "round_robin"
+# Or a path to a custom script (receives env vars, prints worker type name)
+strategy = "queue_balance"
+min_queue = 1                      # queue_balance: below this → planner-type
+
+[repair]
+# A PR is considered "stuck" if a required check has been IN_PROGRESS
+# longer than this many minutes. Used by `coordination list-pr-repair`.
+stuck_ci_minutes = 120
+
+[security]
+# Pod ingests issue/comment text into agent prompts. On a public repo,
+# anyone can post that text unless GitHub interaction limits are set.
+# Pod refuses to dispatch agents on a public repo whose interaction
+# limit is missing, weaker than `minimum_interaction_limit`, or expiring
+# in less than `minimum_expiry_days`.
+#
+# To set/renew the limit:
+#   gh api -X PUT repos/<owner>/<repo>/interaction-limits #     -f limit=collaborators_only -f expiry=six_months
+enforce_interaction_limits = true
+minimum_interaction_limit = "collaborators_only"  # or "contributors_only", "existing_users"
+minimum_expiry_days = 7
+
+# Per-message author provenance gate. On top of the repo-wide
+# interaction-limit check, refuse to surface issue bodies / comments
+# whose authors don't have a trusted association with the repo.
+# See README for the threat model and limits, including the org-
+# membership caveat for `MEMBER`.
+trust_only_collaborators = true
+trusted_author_associations = ["OWNER", "MEMBER", "COLLABORATOR"]
+trusted_users = []                 # bot allowlist
+                                   # e.g. ["dependabot[bot]", "github-actions[bot]"]
+provenance_cache_seconds = 60      # applies to list/orient; claim/read are always fresh
+
+[monitor]
+poll_interval = 2                  # Seconds between status updates
+jsonl_stale_warning = 300          # Warn if JSONL unchanged for this many seconds
+jsonl_missing_warning = 60         # Warn if JSONL not created after this many seconds
+max_claim_restarts = 1             # Max times to auto-restart a dead session before releasing claim
+show_costs = true                  # Show estimated API costs in TUI and status
+stuck_initial_timeout = 3600       # Seconds since last assistant output before first stuck check
+stuck_confirm_timeout = 1200       # Seconds to wait before confirming kill (after first detection)
+stuck_check_interval = 30          # Seconds between process health checks during stuck detection
+
+# --- Worker Types ---
+# Each [worker_types.<name>] defines a type of agent session.
+# The dispatch strategy chooses among these.
+
+[worker_types.plan]
+prompt = "/plan"
+lock = "planner"                   # Acquire this lock before running
+copy_build_cache = false
+
+[worker_types.work]
+prompt = "/work"
+copy_build_cache = true
+
+# Repair agent: handles unhealthy PRs (merge conflicts, failed CI, stuck CI).
+# Only selected when `coordination list-pr-repair` reports candidates (see
+# `dispatch_queue_balance`). `copy_build_cache` is enabled so repair agents
+# can run the project's verification before pushing.
+[worker_types.repair]
+prompt = "/repair"
+copy_build_cache = true
+
+# Replan agent: triages issues labelled `replan` (from PRs closed
+# unsalvageable, `coordination skip --replan`, or `create-pr --partial`).
+# Shares the planner lock with `/plan` so the two cannot race on issue
+# state. Dispatched by the replan short-circuit in `dispatch_queue_balance`,
+# ordered after `repair` and before `plan`.
+[worker_types.replan]
+prompt = "/replan"
+lock = "planner"
+copy_build_cache = false
+
+# Example additional worker type:
+# [worker_types.review]
+# prompt = "/review"
+# copy_build_cache = true
