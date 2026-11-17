@@ -42,11 +42,11 @@ model = "opus"                     # Claude model to use (back-compat default)
 # wins. Set to ["opus"] to require Opus, ["opus", "sonnet"] to fall
 # through to Sonnet when no account has Opus quota. Absent → [model].
 accepted_models = ["opus"]
-# One subscription token, passed as CLAUDE_CODE_OAUTH_TOKEN by the owner's launcher, and no quota
-# helper; .pod/force-quota (created by the launcher) makes pod launch `claude` without probing
-# accounts.
-quota_check = ""
-quota_check_required = false
+# Quota: `claude-available-model` (on the PATH set by the owner's launcher) prints `opus` while the
+# subscription has used at most 80% of both its 5-hour and its 7-day window, and fails otherwise;
+# pod then waits quota_retry_seconds and checks again.
+quota_check = "claude-available-model"
+quota_check_required = true
 quota_retry_seconds = 60           # Sleep duration when quota unavailable
 # When isolated_config = true, each agent gets its own
 # CLAUDE_CONFIG_DIR under .pod/claude-config/<short_id>/ with its own
