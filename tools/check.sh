@@ -5,7 +5,7 @@
 # $RT/work/<project>-check/, which also gets a ROOTS file listing them and a ROOT with one session
 # named after the task that imports the top-level theorem (and with it every theory of the
 # project). `isabelle build` (without -b, so no heap is kept) runs as a transient systemd unit
-# limited to MINUTES minutes (default 120) and 96 GB, on top of the shared AutoCorrode heap.
+# limited to MINUTES minutes (default 120) and 16 GB, on top of the shared AutoCorrode heap.
 # Prints the sessions built, Isabelle's errors and the exit code; the log stays in the task
 # directory. Nothing is registered in the shared ROOTS file.
 # On the compute server itself (pod agents) it runs there directly; elsewhere it goes over ssh. The
@@ -29,8 +29,8 @@ tar -C "$HERE" -czf - urust spec proof | "${RUN[@]}" "
   printf 'urust\nspec\nproof\n' > ROOTS
   printf 'session \"$U\" in \"check\" = \"AutoCorrode\" +\n  options [document = false]\n  sessions\n    $SESSIONS\n  theories\n    \"${NAME}_Top.${NAME}_Top\"\n' > ROOT
   rm -f check.log
-  systemd-run --user --unit=${P}-check-$TAG --collect -p RuntimeMaxSec=$((M * 60)) -p MemoryMax=96G \
-    bash -c 'HOME=$RT/home $RT/isabelle/Isabelle2026/bin/isabelle build -v -o threads=8 -d $W $U > $W/check.log 2>&1; echo EXIT \$? >> $W/check.log' > /dev/null 2>&1
+  systemd-run --user --unit=${P}-check-$TAG --collect -p RuntimeMaxSec=$((M * 60)) -p MemoryMax=16G \
+    bash -c 'HOME=$RT/home $RT/isabelle/Isabelle2026/bin/isabelle build -v -o threads=4 -d $W $U > $W/check.log 2>&1; echo EXIT \$? >> $W/check.log' > /dev/null 2>&1
   while systemctl --user is-active --quiet ${P}-check-$TAG; do sleep 30; done
   grep -E '^(Building|Finished|Unfinished|\*\*\*|EXIT)' check.log | head -60" 2>&1 \
   | grep --line-buffered -v -i "post-quantum\|store now\|upgraded\|pq.html"
