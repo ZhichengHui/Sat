@@ -44,6 +44,10 @@ of an improvement, not a reason to avoid one; never route a change around the pr
 - The framework supports a subset of Rust, and not yet all of it. Write the code in that subset:
   the translation has no placeholders (`urust/PLACEHOLDERS.txt` reports 0) and no new stubs of
   external functions in `urust/*_Template.thy`.
+- Output is ignored by the verification: the front end translates `print!`, `println!`, `eprint!`
+  and `eprintln!` as doing nothing and lists them as "Ignored output" in `urust/PLACEHOLDERS.txt`,
+  not as placeholders. The code may print (statistics, for example), but the proofs say nothing
+  about what it prints.
 - When a construct you need is not supported, rewrite the code with supported constructs that do
   the same. Stop the task (and say why on its issue) only when no reasonable rewrite exists.
 - Report every gap you meet to the framework, also the ones you worked around: an issue in its
@@ -74,5 +78,6 @@ of an improvement, not a reason to avoid one; never route a change around the pr
 ### Trusted base
 
 Not proved in this repository, and not to be presented as proved: the AutoCorrode translation, the
+output of the verified code (including a print that fails, which panics), the
 assumptions of the locale `Sat_heap` (AutoCorrode's reference model), and the command line `cli/`
 (DIMACS input, output of the answer).
