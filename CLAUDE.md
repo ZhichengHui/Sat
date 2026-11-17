@@ -3,6 +3,10 @@
 A verified SAT solver: the top-level theorem `Sat_heap.solver_correct` is proved against the
 specification in `spec/`.
 
+Before starting a task, read `PROGRESS.md` (where the project stands) and `LESSONS.md` (what has
+gone wrong before). An issue labelled `summarize` is done with `/summarize` (the progress document
+is `PROGRESS.md`); an issue labelled `lessons` with `/lessons`.
+
 ## Build and test
 
 These commands need cargo, z3 and the machine-specific configuration of `tools/check.sh` (see its

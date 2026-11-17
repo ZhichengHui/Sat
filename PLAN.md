@@ -20,6 +20,16 @@ of an improvement, not a reason to avoid one; never route a change around the pr
   measurable on them, ordered so that each builds on merged work. When no owner's issue is waiting
   and no suite is active, planners create no issues and signal `return-to-human`.
 
+## Records
+
+- `progress/`: every session writes its entry, as pod's worker flow says.
+- `PROGRESS.md`: where the repository stands (state and milestones). Planners open a `summarize`
+  issue when 10 or more pull requests have merged since the last one was closed; a summarize session
+  updates `PROGRESS.md`.
+- `LESSONS.md`: guidance distilled from repeated struggles and failed approaches. Planners open a
+  `lessons` issue when 10 or more pull requests have merged since the last one was closed; a lessons
+  session (`/lessons`) updates `LESSONS.md`. Lessons go there, not into skills.
+
 ## Rules
 
 ### The specification

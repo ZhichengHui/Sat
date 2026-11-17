@@ -200,3 +200,14 @@ copy_build_cache = false
 # [worker_types.review]
 # prompt = "/review"
 # copy_build_cache = true
+
+# Records (see PLAN.md): PROGRESS.md by summarize sessions, LESSONS.md by lessons sessions.
+[worker_types.summarize]
+prompt = "/summarize"
+issue_label = "summarize"
+copy_build_cache = false
+
+[worker_types.lessons]
+prompt = "/lessons"
+issue_label = "lessons"
+copy_build_cache = false
