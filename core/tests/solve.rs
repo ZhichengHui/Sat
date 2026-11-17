@@ -83,3 +83,27 @@ fn random_against_brute_force() {
     }
     assert!(nsat > 30 && nunsat > 30, "{nsat} sat, {nunsat} unsat");
 }
+
+/// A repeated literal (`1 1`) means the same as the single literal; a complementary pair
+/// (`1 -1`) makes a tautology, true under every assignment.
+#[test]
+fn repeated_and_complementary_literals() {
+    // Repeated literals, alone and with other clauses.
+    assert!(solver(&formula(1, &[&[1, 1]])));
+    assert!(solver(&formula(1, &[&[-1, -1, -1]])));
+    assert!(solver(&formula(2, &[&[1, 1], &[-1, 2, 2]])));
+    assert!(!solver(&formula(1, &[&[1, 1], &[-1, -1]])));
+    assert!(!solver(&formula(2, &[&[1, 1], &[-1, 2], &[-2, -2]])));
+    // Tautologies, alone and with other clauses: they never change the answer.
+    assert!(solver(&formula(1, &[&[1, -1]])));
+    assert!(solver(&formula(2, &[&[1, -1], &[2, -2]])));
+    assert!(solver(&formula(3, &[&[-2, 1, 3, 2]])));
+    assert!(solver(&formula(2, &[&[1, -1], &[-1, 2]])));
+    assert!(!solver(&formula(1, &[&[1, -1], &[1], &[-1]])));
+    assert!(!solver(&formula(2, &[&[2, -2], &[1, -1], &[]])));
+    // Both together.
+    assert!(solver(&formula(2, &[&[1, 1, -1], &[2, 2]])));
+    assert!(solver(&formula(2, &[&[1, -1, 1, -1], &[-2, -2, 1]])));
+    assert!(!solver(&formula(2, &[&[1, 1, -1], &[2, 2], &[-2, -2]])));
+    assert!(!solver(&formula(2, &[&[1, -1, -1], &[1, 1], &[-1, 2], &[-2, -2, -1]])));
+}
