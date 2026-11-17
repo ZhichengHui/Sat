@@ -54,7 +54,8 @@ follow them. In practice:
   differs from the generated one, update that locale in `spec/Sat_Spec.thy` to match exactly (and
   say so in the pull request). That is the only change of `spec/` you may make.
 - If a task seems to need any other change of `spec/`, do not make it: comment on the issue
-  explaining why, and stop.
+  explaining why, label the issue
+  `needs-owner`, and stop.
 - After three failed attempts with the same approach, change the approach.
 
 ## Tests

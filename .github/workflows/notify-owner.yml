@@ -1,0 +1,23 @@
+# Notifies the owner when an issue or a pull request gets the label needs-owner. The agents act
+# with the owner's own account, and GitHub does not notify anyone of their own actions; a comment
+# by github-actions[bot] that mentions the owner does notify (web, e-mail, mobile, as set in the
+# owner's notification settings).
+name: notify owner
+permissions:
+  issues: write
+  pull-requests: write
+on:
+  issues:
+    types: [ labeled ]
+  pull_request_target:
+    types: [ labeled ]
+jobs:
+  notify:
+    if: github.event.label.name == 'needs-owner'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mention the owner
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+        run: gh issue comment "$NUMBER" -R "$GITHUB_REPOSITORY" --body "@${{ github.repository_owner }} this needs your decision (label needs-owner)."
