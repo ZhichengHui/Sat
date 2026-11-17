@@ -31,6 +31,8 @@ of an improvement, not a reason to avoid one; never route a change around the pr
   implementation uses a new type of mutable local, the generated locale gains a parameter, and
   `Sat_heap` is updated to match it exactly. Nothing else in `spec/` changes unless the owner
   changes it.
+- A task that needs any other change of `spec/` stops there: say why on its issue and label the
+  issue `needs-owner`.
 - `tools/check-spec.sh` enforces this in CI: outside the locale `Sat_heap`, `spec/` must match the
   manifest `tools/spec.sha256`, and the locale must match the generated one. Only the owner
   updates the manifest (`tools/check-spec.sh --update`).
@@ -45,7 +47,8 @@ of an improvement, not a reason to avoid one; never route a change around the pr
   the translation has no placeholders (`urust/PLACEHOLDERS.txt` reports 0) and no new stubs of
   external functions in `urust/*_Template.thy`.
 - When a construct you need is not supported, rewrite the code with supported constructs that do
-  the same. Stop the task (and say why on its issue) only when no reasonable rewrite exists.
+  the same. Stop the task only when no reasonable rewrite exists: say why on its issue
+  and label the issue `needs-owner`.
 - Report every gap you meet to the framework, also the ones you worked around: an issue in its
   repository (the front end for what does not translate, AutoCorrode for what its library or
   automation lacks), labelled `from-agent`, with a minimal Rust example, what the translation
