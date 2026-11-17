@@ -91,7 +91,7 @@ PR 的 CI（spec 校验、cargo test、全部证明）通过后自动 squash 合
   `tools/pod-remote.sh`（监视界面）或 `tools/pod-remote.sh add N`（启动 N 个 agent）；`tools/pod-remote.sh status`、
   `list`、`finish all` 等见 pod 的说明。`tools/pod-remote.sh` 设置 agent 的环境：`HOME=$RT/home`（服务器上的
   Claude Code 配置：auto 权限模式、Isabelle skill、Pool Server MCP），令牌取自 `$RT/secrets/claude_token` 和
-  `$RT/secrets/github_sat_token`，PATH 含 claude、gh、cargo、z3。
+  `$RT/secrets/github_pod_token`，PATH 含 claude、gh、cargo、z3。
 - agent 开发证明时，用 `tools/devcopy.sh` 生成 `dev/`（导入去掉 session 限定的扁平副本），在 Pool Server 上检查
   其中的理论；提交前 `tools/check.sh` 必须通过。
 
