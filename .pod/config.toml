@@ -42,9 +42,9 @@ model = "opus"                     # Claude model to use (back-compat default)
 # wins. Set to ["opus"] to require Opus, ["opus", "sonnet"] to fall
 # through to Sonnet when no account has Opus quota. Absent → [model].
 accepted_models = ["opus"]
-# This deployment (PGR compute server) has one subscription token, passed as
-# CLAUDE_CODE_OAUTH_TOKEN by tools/pod-remote.sh, and no quota helper; .pod/force-quota
-# (created by that script) makes pod launch `claude` without probing accounts.
+# One subscription token, passed as CLAUDE_CODE_OAUTH_TOKEN by the owner's launcher, and no quota
+# helper; .pod/force-quota (created by the launcher) makes pod launch `claude` without probing
+# accounts.
 quota_check = ""
 quota_check_required = false
 quota_retry_seconds = 60           # Sleep duration when quota unavailable
@@ -52,7 +52,7 @@ quota_retry_seconds = 60           # Sleep duration when quota unavailable
 # CLAUDE_CONFIG_DIR under .pod/claude-config/<short_id>/ with its own
 # keychain entry, so different agents can simultaneously run on
 # different Claude accounts.
-# Off: agents use the Claude Code configuration of the server (HOME=$RT/home): auto permission
+# Off: agents use the Claude Code configuration of the launcher's HOME: auto permission
 # mode, the Isabelle skills and the Pool Server MCP.
 isolated_config = false
 
