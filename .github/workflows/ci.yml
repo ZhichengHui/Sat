@@ -104,6 +104,9 @@ jobs:
           echo "Sessions: $SESSIONS"
           $ISABELLE_HOME/bin/isabelle build -v -o threads=4 -o browser_info -P html \
             -d autocorrode -d afp/thys/Word_Lib -d urust -d spec -d proof $SESSIONS
+      - name: Front page with this project's sessions
+        shell: bash
+        run: tools/pages-index.sh html "Sat"
       - name: Upload the HTML
         uses: actions/upload-pages-artifact@v3
         with:
