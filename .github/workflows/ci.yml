@@ -1,0 +1,102 @@
+# Checks of this repository:
+# - spec: the files of spec/ are exactly those listed in tools/spec.sha256, with those contents
+#   (the top-level specification does not change unless the manifest is changed with it);
+# - rust: cargo test;
+# - proofs: every Isabelle session of urust/, spec/ and proof/ on AutoCorrode, with HTML;
+# - pages: on main, the HTML of the proofs is published with GitHub Pages.
+name: CI
+permissions:
+  contents: read
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The AutoCorrode revision the proofs are checked against.
+  AUTOCORRODE_REV: 5366db727a5538b10a4b4a20f2959634ab8f3a42
+
+jobs:
+  spec:
+    name: spec unchanged
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check spec/ against tools/spec.sha256
+        run: |
+          sha256sum -c tools/spec.sha256
+          diff <(find spec -type f | sort) <(awk '{print $2}' tools/spec.sha256 | sort)
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: cargo test
+        run: cargo test --release
+
+  proofs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    container:
+      image: makarius/isabelle:Isabelle2026
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout AutoCorrode
+        uses: actions/checkout@v4
+        with:
+          repository: ZhichengHui/AutoCorrode
+          ref: ${{ env.AUTOCORRODE_REV }}
+          path: autocorrode
+      - name: Checkout AFP
+        uses: actions/checkout@v4
+        with:
+          repository: isabelle-prover/mirror-afp-2026
+          path: afp
+      - name: Isabelle environment
+        shell: bash
+        run: |
+          /home/isabelle/Isabelle/bin/isabelle getenv ISABELLE_HOME >> $GITHUB_ENV
+          /home/isabelle/Isabelle/bin/isabelle getenv ISABELLE_HOME_USER >> $GITHUB_ENV
+      - name: Cache the AutoCorrode heap
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ISABELLE_HOME_USER }}/heaps/
+          key: heaps-${{ env.AUTOCORRODE_REV }}
+      - name: Build AutoCorrode
+        shell: bash
+        run: |
+          $ISABELLE_HOME/bin/isabelle build -b -v -o threads=4 \
+            -d autocorrode -d afp/thys/Word_Lib AutoCorrode
+      - name: Check all proofs and write the HTML
+        shell: bash
+        run: |
+          free -g
+          SESSIONS=$(cat urust/ROOT spec/ROOT proof/ROOT | sed -n 's/^session "\([A-Za-z0-9_]*\)".*/\1/p')
+          echo "Sessions: $SESSIONS"
+          $ISABELLE_HOME/bin/isabelle build -v -o threads=4 -o browser_info -P html \
+            -d autocorrode -d afp/thys/Word_Lib -d urust -d spec -d proof $SESSIONS
+      - name: Upload the HTML
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: html
+
+  pages:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [ spec, rust, proofs ]
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

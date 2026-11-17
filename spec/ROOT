@@ -1,0 +1,5 @@
+session "Sat_Spec" = "Sat" +
+  options [document = false]
+  theories
+    Formula_Types
+    Sat_Spec
