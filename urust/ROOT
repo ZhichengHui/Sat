@@ -1,0 +1,4 @@
+session "Sat" = "AutoCorrode" +
+  options [document = false]
+  theories
+    Sat_Funs
