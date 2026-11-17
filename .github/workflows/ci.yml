@@ -50,14 +50,16 @@ jobs:
           repository: ZhichengHui/AutoCorrodeRustFrontEnd
           ref: master
           path: .urust-frontend
-      - name: Build the front end
-        run: cd .urust-frontend && cargo build --release
+      - name: Build the front end (outside this repository's Cargo workspace)
+        run: |
+          mv .urust-frontend "$RUNNER_TEMP/urust-frontend"
+          cd "$RUNNER_TEMP/urust-frontend" && cargo build --release
       - name: Regenerate urust/ and compare with the committed one
         run: |
           NAME=$(sed -n 's/^session "\([A-Za-z0-9_]*\)".*/\1/p' urust/ROOT | head -1)
-          RUSTUP_HOME=${RUSTUP_HOME:-$HOME/.rustup} .urust-frontend/scripts/urust-frontend.sh \
+          RUSTUP_HOME=${RUSTUP_HOME:-$HOME/.rustup} "$RUNNER_TEMP/urust-frontend/scripts/urust-frontend.sh" \
             --out urust.new --name "$NAME" core/src/lib.rs
-          echo "front end: $(git -C .urust-frontend rev-parse --short HEAD)"
+          echo "front end: $(git -C "$RUNNER_TEMP/urust-frontend" rev-parse --short HEAD)"
           diff -r urust urust.new
 
   proofs:
