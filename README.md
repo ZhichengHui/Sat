@@ -102,6 +102,10 @@ PR 的 CI（spec 校验、cargo test、全部证明）通过后自动 squash 合
 
 ## 重新生成翻译
 
-`core/src/lib.rs` 改动后，在仓库根目录运行 AutoCorrode 前端：
+`core/src/lib.rs` 改动后，或前端更新后（CI 的 `translation up to date` 失败），运行：
 
-    urust-frontend.sh --out urust --name Sat core/src/lib.rs
+    tools/regen.sh
+
+它把前端（ZhichengHui/AutoCorrodeRustFrontEnd）更新到 master 分支最新的提交并编译，再用它重新生成 `urust/`。
+前端不固定版本：翻译始终跟随最新的前端，CI 检查 `urust/` 与最新前端的输出一致。计算服务器上默认使用
+`$RT/AutoCorrodeRustFrontEnd`；其他机器上用环境变量 `URUST_FRONTEND` 指定一个可由脚本更新的前端克隆。

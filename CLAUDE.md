@@ -16,10 +16,11 @@ PATH and HOME), and on the user's machine.
   not collide). CI runs the same check on every pull request.
 - Differential testing: `python3 tools/fuzz.py target/release/sat z3 300 SEED` (random small CNF
   formulas, answers compared with z3).
-- After changing `core/src/lib.rs`: regenerate the translation with
-  `urust-frontend.sh --out urust --name Sat core/src/lib.rs`
-  (on the server: `$RT/AutoCorrodeRustFrontEnd/scripts/urust-frontend.sh` if installed; otherwise
-  stop and ask).
+- After changing `core/src/lib.rs`, and whenever CI reports `translation up to date` failed:
+  regenerate the translation with `tools/regen.sh`. It always uses the newest front end (its
+  master branch); never pin a front end version. If the new translation breaks proofs, repair the
+  proofs; if it breaks `spec/` (a definition there no longer type-checks or no longer means the
+  same), do not change `spec/`: report it on the issue and stop.
 
 ## Developing proofs
 
