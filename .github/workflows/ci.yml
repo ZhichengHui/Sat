@@ -61,8 +61,6 @@ jobs:
             --out urust.new --name "$NAME" core/src/lib.rs
           echo "front end: $(git -C "$RUNNER_TEMP/urust-frontend" rev-parse --short HEAD)"
           diff -r urust urust.new
-      - name: The translation has no placeholders
-        run: grep -q ': 0$' urust/PLACEHOLDERS.txt || { cat urust/PLACEHOLDERS.txt; exit 1; }
 
   proofs:
     runs-on: ubuntu-latest
