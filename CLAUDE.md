@@ -5,12 +5,11 @@ specification in `spec/`.
 
 ## Build and test
 
-These commands need cargo, z3 and the machine-specific configuration of `tools/check.sh` (see its
-header); pod agents get all of it from the environment their launcher sets.
+These commands need cargo, z3 and the commands of the agents' environment (`isabelle-check`,
+`isabelle-devcopy`); pod agents get all of it from their launcher.
 
 - Rust: `cargo build --release`, `cargo test --release`.
-- Proofs: `tools/check.sh` checks every session; CI runs the same check on every pull
-  request.
+- Proofs: `isabelle-check` checks every session; CI runs the same check on every pull request.
 - Differential testing: `python3 tools/fuzz.py target/release/sat z3 300 SEED`.
 - After changing `core/src/lib.rs`, or when CI's `translation up to date` fails: regenerate
   `urust/` with
@@ -24,12 +23,12 @@ header); pod agents get all of it from the environment their launcher sets.
 - Use the Isabelle Pool Server MCP (`isabelle-pool-server`) with the skills
   `isabelle-proof-development` and, for contracts, `autocorrode-contract-proofs`.
 - The Pool Server cannot resolve this project's session-qualified imports. Edit the theories in
-  `urust/`, `spec/`, `proof/`; run `tools/devcopy.sh`, which writes `dev/` (a flat copy with
+  `urust/`, `spec/`, `proof/`; run `isabelle-devcopy`, which writes `dev/` (a flat copy with
   unqualified imports, not committed); check `dev/<Theory>.thy` with the Pool Server, giving its
-  absolute path. Re-run `tools/devcopy.sh` after every edit before checking again.
+  absolute path. Re-run `isabelle-devcopy` after every edit before checking again.
 - Close every file you opened with `isabelle_close` before finishing.
 - Before opening a pull request, every theory you changed checks in the Pool Server without
-  errors. Run `tools/check.sh` (it must end with `EXIT 0`) only when the change can break theories
+  errors. Run `isabelle-check` (it must end with `EXIT 0`) only when the change can break theories
   you did not open: you changed a definition or lemma that other theories use, or regenerated
   `urust/`. Otherwise CI runs the full check. In every case
   `grep -rnwE 'sorry|oops|quick_and_dirty' spec proof` must find nothing, and `tools/check-spec.sh`
