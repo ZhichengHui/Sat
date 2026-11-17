@@ -3,3 +3,4 @@ target/
 dev/
 worktrees/
 sessions/
+.claude/.pod-checksums
