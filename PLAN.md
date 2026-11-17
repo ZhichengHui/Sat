@@ -65,6 +65,14 @@ of an improvement, not a reason to avoid one; never route a change around the pr
   proved lemma that is still used.
 - Every pull request passes CI: the check of `spec/`, `cargo test`, and every proof.
 
+### Tests
+
+- Tests are auxiliary and secondary: the proofs establish correctness. The test infrastructure
+  (`core/tests/`, `tools/fuzz.py` against z3) is a quick way to find a likely bug before the slow
+  proof work.
+- Meaningful tests may be added, such as a case that once exposed a bug. No change requires a
+  test, and a failing test means a bug in the code or in the test.
+
 ### Trusted base
 
 Not proved in this repository, and not to be presented as proved: the AutoCorrode translation, the
