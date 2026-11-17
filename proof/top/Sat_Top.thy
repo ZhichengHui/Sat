@@ -25,7 +25,8 @@ context Sat_ctx
 begin
 
 text \<open>With enough fuel the solver satisfies the contract of the specification. The proof reuses
-  \<open>solve_spec\<close> of \<^verbatim>\<open>Sat_Proof\<close>; the fuel bound \<^const>\<open>fuel_top\<close> and \<^const>\<open>sat_repr_ok\<close>
+  \<open>solve_spec\<close> of \<^verbatim>\<open>Sat_Proof\<close> and turns its answer into the contract's with
+  \<open>sol_start\<close>; the fuel bound \<^const>\<open>fuel_top\<close> and \<^const>\<open>sat_repr_ok\<close>
   give the size conditions of \<open>formula_wf\<close>.\<close>
 lemma solver_spec:
   assumes \<open>fuel_top f \<le> urust_fuel\<close>
@@ -33,8 +34,8 @@ lemma solver_spec:
   apply (crush_boot f: solver_def contract: solver_contract_def)
   apply (crush_base inline: vec_from_elem_def Pasn_mk_def Assignments_mk_def
       specs add: solve_spec contracts add: solve_contract_def
-      simp add: true_def false_def unat_lt2p ext_sat_start formula_wf_def)
-  using assms fuel_top_clause[of _ f] unat_lt2p[of \<open>Formula_num_vars f\<close>]
+      simp add: true_def false_def unat_lt2p formula_wf_def)
+  using assms fuel_top_clause[of _ f] unat_lt2p[of \<open>Formula_num_vars f\<close>] sol_start
   by (fastforce simp: fuel_top_def sat_repr_ok_def formula_invariant_def)+
 
 end

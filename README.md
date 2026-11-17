@@ -1,15 +1,16 @@
 # Sat
 
 一个经过验证的 SAT 求解器。求解器是 CreuSAT 中的 Friday（<https://github.com/sarsko/CreuSAT>，一个
-“完全验证、极其朴素”的求解器：按变量顺序枚举全部赋值），Rust 代码与原版相同（去掉 Creusot 注解，字段改为
-`pub`）。代码经 AutoCorrode 前端翻译到 Isabelle/HOL，并证明它满足 Friday 原有的 Creusot 契约。目录结构、
+“完全验证、极其朴素”的求解器：按变量顺序枚举全部赋值）。Rust 代码在原版基础上去掉 Creusot 注解、字段改为
+`pub`，并按 SAT 竞赛的要求在可满足时返回满足的赋值。代码经 AutoCorrode 前端翻译到 Isabelle/HOL，并证明它满足
+在 Friday 的 Creusot 契约基础上加强的契约（回答可满足时交出模型）。目录结构、
 命名和检查流程与 QF_UF_Smt、QF_BV_Smt 两个项目一一对应。
 
 ## 目录结构
 
 | 路径 | 内容 |
 |---|---|
-| `core/src/lib.rs` | 被验证的部分：Friday 的求解器 `solver(f: &Formula) -> bool` 及其数据类型 |
+| `core/src/lib.rs` | 被验证的部分：求解器 `solver(f: &Formula) -> Answer`（`Answer` 是 `Sat(Assignments)` 或 `Unsat`）及其数据类型 |
 | `cli/src/main.rs` | 可执行程序 `sat`（未验证）：读入 DIMACS CNF，调用 `solver`，按 SAT 竞赛格式输出 |
 | `urust/` | AutoCorrode 前端从 `core/src/lib.rs` 生成的 Isabelle 翻译，session `Sat` |
 | `spec/` | 顶层规约，session `Sat_Spec`。主定理的含义只取决于这个目录：`Formula_Types.thy`（生成的公式类型的形状）、`Sat_Spec.thy`（公式的语义、契约、heap locale 与主定理的陈述） |
@@ -23,9 +24,9 @@
 
     cargo build --release
 
-产物为 `target/release/sat`。用法：`sat FILE.cnf`，或从标准输入读入。输出 `s SATISFIABLE`（退出码 10）或
-`s UNSATISFIABLE`（退出码 20）；输入格式错误时在标准错误上报告，退出码 1。求解器不输出模型（`solver` 只返回
-布尔值）。求解时间随变量数指数增长，几十个变量以上就不实用；性能不是这个项目的目标。
+产物为 `target/release/sat`。用法：`sat FILE.cnf`，或从标准输入读入。按 SAT 竞赛的格式输出：可满足时
+输出 `s SATISFIABLE`，接着是 `v` 行，按 DIMACS 编号给出每个变量的文字（`i` 为真、`-i` 为假），以 `0` 结尾，退出码 10；
+不可满足时输出 `s UNSATISFIABLE`，退出码 20；输入格式错误时在标准错误上报告，退出码 1。求解时间随变量数指数增长，几十个变量以上就不实用；性能不是这个项目的目标。
 
 ## 规约与定理
 
@@ -35,12 +36,13 @@
 
 - `lit_sat`、`clause_sat`、`formula_sat`、`formula_invariant`：Friday 的 Creusot 逻辑函数的转写（赋值是
   `bool list`，`usize` 的数学值是 `unat`）；`sat_repr_ok f`：公式中每个列表少于 `2^63` 个元素（任何 Rust 值都满足）；
-- `solver_contract f`：Friday 的 Creusot 契约。前置条件 `formula_invariant f ∧ sat_repr_ok f`（每个文字的变量小于
-  变量数）；回答 `false` 时，长度等于变量数的任何赋值都不满足 `f`；回答 `true` 时，存在满足 `f` 的赋值；不 panic；
+- `solver_contract f`：前置条件 `formula_invariant f ∧ sat_repr_ok f`（每个文字的变量小于变量数）；回答
+  `Sat(a)` 时，`a` 给每个变量一个值（长度等于变量数）并满足 `f`；回答 `Unsat` 时，长度等于变量数的任何赋值都不
+  满足 `f`；不 panic。它在 Friday 的 Creusot 契约基础上加强：可满足时交出模型，而不只是断言模型存在；
 - `solver_correct Γ`：对每个满足前置条件的 `f`，存在 `N`，使翻译取任意不小于 `N` 的 fuel 时 `solver f` 满足
   `solver_contract f`。fuel 是翻译给每个循环和递归设的次数上限，对它取存在量词。
 
-求解器只回答 `true` 或 `false`，没有 `Unknown`，所以与 QF 两个项目不同，这里没有输入范围：契约对每个满足前置条件
+求解器只回答 `Sat` 或 `Unsat`，没有 `Unknown`，所以与 QF 两个项目不同，这里没有输入范围：契约对每个满足前置条件
 的公式都成立。顶层定理是 `Sat_heap.solver_correct`（`proof/top/Sat_Top.thy`），`N` 取 `fuel_top f`（变量数加 1，
 加子句数，加全部子句长度之和）。
 
@@ -74,8 +76,9 @@ locale `Sat_heap` 的假设（AutoCorrode 引用模型的假设）；未验证�
 ## 测试
 
 - `cargo test --release`：`core/tests/solve.rs` 直接测试 `solver`（空公式、空子句、鸽巢问题，以及与穷举比较的
-  随机公式）；`cli/tests/dimacs.rs` 经命令行端到端测试 DIMACS 输入、回答和退出码。
-- `tools/fuzz.py BIN Z3 N [SEED]`：随机小 CNF 公式，与 `z3 -dimacs` 比较回答。
+  随机公式），每个返回的模型都独立检查；`cli/tests/dimacs.rs` 经命令行端到端测试 DIMACS 输入、回答、`v` 行和
+  退出码，`v` 行的模型用测试自带的解析独立检查。
+- `tools/fuzz.py BIN Z3 N [SEED]`：随机小 CNF 公式，与 `z3 -dimacs` 比较回答，并检查每个 `v` 行模型满足公式。
 
 ## 用 pod 派任务
 

@@ -9,25 +9,12 @@ declare [[urust_ground_body_types]]
 context Sat_ctx
 begin
 
-(* Rust: <Assignments as std::clone::Clone>::clone *)
-definition "Assignments_Clone_clone" :: \<open>Assignments \<Rightarrow> ('s, Assignments, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>Assignments_Clone_clone \<equiv> \<lambda>self. FunctionBody \<lbrakk>
-    Assignments_mk(self.Assignments_v0)
-  \<rbrakk>\<close>
-
-(* Rust: <Pasn as std::clone::Clone>::clone *)
-definition "Pasn_Clone_clone" :: \<open>Pasn \<Rightarrow> ('s, Pasn, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>Pasn_Clone_clone \<equiv> \<lambda>self. FunctionBody \<lbrakk>
-    Pasn_mk { Pasn_assign: Assignments_Clone_clone(self.Pasn_assign), Pasn_ix: self.Pasn_ix }
-  \<rbrakk>\<close>
-
 (* Rust: set_next *)
 definition "set_next" :: \<open>Pasn \<Rightarrow> bool \<Rightarrow> ('s, Pasn, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>set_next \<equiv> \<lambda>pa b. FunctionBody \<lbrakk>
-    let mut new_pa = Pasn_Clone_clone(pa);
-    * (new_pa.Pasn_assign.Assignments_v0[pa.Pasn_ix]) = b;
-    * (new_pa.Pasn_ix) += 1_usize;
-    * new_pa
+    let mut assign = { let init_1 = pa.Pasn_assign.Assignments_v0; \<llangle>init_1 :: bool list\<rrangle> };
+    * (assign[pa.Pasn_ix]) = b;
+    Pasn_mk { Pasn_assign: Assignments_mk(* assign), Pasn_ix: (pa.Pasn_ix) + 1_usize }
   \<rbrakk>\<close>
 
 (* Rust: Clause::eval *)
@@ -59,20 +46,30 @@ definition "Formula_eval" :: \<open>Formula \<Rightarrow> Assignments \<Rightarr
 
 text \<open>Recursive group solve: defined by iterating solve_rec_step \<^term>\<open>urust_fuel\<close> times.\<close>
 
-definition "solve_rec_step" :: \<open>((Formula \<Rightarrow> Pasn \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body)) \<Rightarrow> ((Formula \<Rightarrow> Pasn \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body))\<close> where
+definition "solve_rec_step" :: \<open>((Formula \<Rightarrow> Pasn \<Rightarrow> ('s, Answer, 'abort, 'i prompt, 'o prompt_output) function_body)) \<Rightarrow> ((Formula \<Rightarrow> Pasn \<Rightarrow> ('s, Answer, 'abort, 'i prompt, 'o prompt_output) function_body))\<close> where
   \<open>solve_rec_step \<equiv> \<lambda>rec_solve. (\<lambda>f pa. FunctionBody \<lbrakk>
     if (pa.Pasn_ix) == len(pa.Pasn_assign.Assignments_v0) {
-      return Formula_eval(f, pa.Pasn_assign);
+      if Formula_eval(f, pa.Pasn_assign) {
+        return Answer_Sat_mk(pa.Pasn_assign);
+      };
+      return Answer_Unsat;
     };
-    \<epsilon>\<open>rec_solve\<close>(f, set_next(pa, true)) || \<epsilon>\<open>rec_solve\<close>(f, set_next(pa, false))
+    match \<epsilon>\<open>rec_solve\<close>(f, set_next(pa, true)) {
+      Answer_Sat(a) \<Rightarrow> {
+        Answer_Sat_mk(a)
+      },
+      Answer_Unsat \<Rightarrow> {
+        \<epsilon>\<open>rec_solve\<close>(f, set_next(pa, false))
+      }
+    }
   \<rbrakk>)\<close>
 
 (* Rust: solve *)
-definition "solve" :: \<open>Formula \<Rightarrow> Pasn \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+definition "solve" :: \<open>Formula \<Rightarrow> Pasn \<Rightarrow> ('s, Answer, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>solve \<equiv> ((solve_rec_step ^^ urust_fuel) (\<lambda>f pa. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>))\<close>
 
 (* Rust: solver *)
-definition "solver" :: \<open>Formula \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+definition "solver" :: \<open>Formula \<Rightarrow> ('s, Answer, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>solver \<equiv> \<lambda>f. FunctionBody \<lbrakk>
     solve(f, Pasn_mk { Pasn_assign: Assignments_mk(vec_from_elem(false, f.Formula_num_vars)), Pasn_ix: 0_usize })
   \<rbrakk>\<close>

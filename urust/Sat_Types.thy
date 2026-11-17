@@ -49,4 +49,12 @@ micro_rust_record Formula
 definition "Formula_mk" :: \<open>(Clause list) \<Rightarrow> (64 word) \<Rightarrow> ('s, Formula, 'abort, 'i, 'o) function_body\<close> where
   [crush_inline]: \<open>Formula_mk \<equiv> \<lambda>a0 a1. FunctionBody (literal (make_Formula a0 a1))\<close>
 
+(* Rust: Answer *)
+enum Answer =
+    Answer_Sat \<open>Assignments\<close>
+  | Answer_Unsat
+
+definition "Answer_Sat_mk" :: \<open>Assignments \<Rightarrow> ('s, Answer, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>Answer_Sat_mk \<equiv> \<lambda>a0. FunctionBody (literal (Answer_Sat a0))\<close>
+
 end
