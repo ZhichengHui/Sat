@@ -20,4 +20,11 @@ export PATH=$RT/pod-venv/bin:$RT/claude-code/bin:$RT/local/bin:$RT/rust/cargo/bi
 # never reads a token from that file, so it holds only the label. The token is the environment's.
 [ -f "$HOME/.claude/credentials1.json" ] || (umask 077; echo '{"accountLabel": "pgr-server"}' > "$HOME/.claude/credentials1.json")
 touch .pod/force-quota
+# At most 3 agents per repository.
+if [ "${1:-}" = add ]; then
+  running=$(pod list 2>/dev/null | grep -cE '^ *[0-9]+ +[0-9a-f]{8} ' || true)
+  if [ $((running + ${2:-1})) -gt 3 ]; then
+    echo "at most 3 agents per repository: $running running, ${2:-1} requested" >&2; exit 1
+  fi
+fi
 exec pod "$@"

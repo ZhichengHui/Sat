@@ -16,10 +16,11 @@ PATH and HOME), and on the user's machine.
   not collide). CI runs the same check on every pull request.
 - Differential testing: `python3 tools/fuzz.py target/release/sat z3 300 SEED` (random small CNF
   formulas, answers compared with z3).
-- After changing `core/src/lib.rs`: regenerate the translation with
-  `urust-frontend.sh --out urust --name Sat core/src/lib.rs`
-  (on the server: `$RT/AutoCorrodeRustFrontEnd/scripts/urust-frontend.sh` if installed; otherwise
-  stop and ask).
+- After changing `core/src/lib.rs`, or when CI's `translation up to date` fails: regenerate
+  `urust/` with the newest front end (never pinned): `git -C $RT/AutoCorrodeRustFrontEnd pull -q`,
+  `cargo build --release` there, then
+  `$RT/AutoCorrodeRustFrontEnd/scripts/urust-frontend.sh --out urust --name Sat core/src/lib.rs`.
+  If the new translation breaks `spec/`, do not change `spec/`: report it on the issue and stop.
 
 ## Developing proofs
 

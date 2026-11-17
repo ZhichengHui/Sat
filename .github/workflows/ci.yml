@@ -2,6 +2,7 @@
 # - spec: tools/check-spec.sh (spec/ is unchanged except its heap locale, which matches the
 #   generated locale; see PLAN.md);
 # - rust: cargo test;
+# - translation: urust/ is what the newest front end (master) generates from core/src/lib.rs;
 # - proofs: every Isabelle session of urust/, spec/ and proof/ on AutoCorrode, with HTML;
 # - pages: on main, the HTML of the proofs is published with GitHub Pages.
 name: CI
@@ -37,6 +38,29 @@ jobs:
       - uses: actions/checkout@v4
       - name: cargo test
         run: cargo test --release
+
+  translation:
+    name: translation up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout the front end (newest master, never pinned)
+        uses: actions/checkout@v4
+        with:
+          repository: ZhichengHui/AutoCorrodeRustFrontEnd
+          ref: master
+          path: .urust-frontend
+      - name: Build the front end (outside this repository's Cargo workspace)
+        run: |
+          mv .urust-frontend "$RUNNER_TEMP/urust-frontend"
+          cd "$RUNNER_TEMP/urust-frontend" && cargo build --release
+      - name: Regenerate urust/ and compare with the committed one
+        run: |
+          NAME=$(sed -n 's/^session "\([A-Za-z0-9_]*\)".*/\1/p' urust/ROOT | head -1)
+          RUSTUP_HOME=${RUSTUP_HOME:-$HOME/.rustup} "$RUNNER_TEMP/urust-frontend/scripts/urust-frontend.sh" \
+            --out urust.new --name "$NAME" core/src/lib.rs
+          echo "front end: $(git -C "$RUNNER_TEMP/urust-frontend" rev-parse --short HEAD)"
+          diff -r urust urust.new
 
   proofs:
     runs-on: ubuntu-latest
