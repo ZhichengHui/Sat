@@ -1,2 +1,6 @@
 target/
 .claude/
+dev/
+worktrees/
+sessions/
+.claude/.pod-checksums
