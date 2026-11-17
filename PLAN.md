@@ -4,15 +4,21 @@ Written by the owner of this repository. Agents follow it and never edit it.
 
 ## Direction
 
-Work is directed by the owner through GitHub issues. There is no autonomous roadmap: planners do
-not invent work.
+The solver is verified; that is the start, not the finish. The proofs are a ratchet: they make
+aggressive improvement safe, as long as they hold at every commit. Proof churn is the expected cost
+of an improvement, not a reason to avoid one; never route a change around the proofs.
 
-- An issue labelled `agent-plan` is a work item; a worker claims and does it.
-- An issue labelled `directive` is a larger task from the owner; a planner splits it into
-  `agent-plan` issues (or a worker does it directly when it is small), and closes it when its
-  deliverables are merged.
-- When there is no open `directive` and no unclaimed `agent-plan` issue, planners create no issues
-  and signal `return-to-human`.
+- Make the solver faster while every proof holds. The present solver enumerates all assignments;
+  the way forward is the standard one: unit propagation, then DPLL, then conflict-driven clause
+  learning, each step verified against the unchanged `solver_correct`. A measurement of solving
+  time on a fixed set of CNF formulas is part of the work (it does not exist yet); every
+  optimization reports its effect on it.
+- Issues from the owner come first. An issue labelled `agent-plan` is a work item; a worker claims
+  and does it. An issue labelled `directive` is a larger task; a planner splits it into `agent-plan`
+  issues (or a worker does it directly when it is small), and closes it when its deliverables are
+  merged.
+- When no owner's issue is waiting, planners take the next steps of the goal above: small
+  `agent-plan` issues, each with a measurable aim, ordered so that each builds on merged work.
 
 ## Rules
 
