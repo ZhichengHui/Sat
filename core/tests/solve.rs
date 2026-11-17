@@ -1,7 +1,24 @@
 //! Tests of the verified solver `sat::solver` on formulas built directly: edge cases and random
-//! small formulas, whose answers are compared with an independent brute-force evaluation.
+//! small formulas, whose answers are compared with an independent brute-force evaluation. Every
+//! model returned is checked against the formula.
 
-use sat::{Clause, Formula, Lit, solver};
+use sat::{Answer, Clause, Formula, Lit, solver};
+
+/// The solver's answer as a Boolean; every `Sat` model is checked independently: it gives a value to
+/// each variable and satisfies every clause.
+fn decide(f: &Formula) -> bool {
+    match solver(f) {
+        Answer::Sat(a) => {
+            assert_eq!(a.0.len(), f.num_vars, "the model does not give a value to each variable");
+            assert!(
+                f.clauses.iter().all(|c| c.0.iter().any(|l| a.0[l.var] == l.value)),
+                "the model does not satisfy the formula"
+            );
+            true
+        }
+        Answer::Unsat => false,
+    }
+}
 
 fn lit(x: i64) -> Lit {
     Lit { var: (x.unsigned_abs() - 1) as usize, value: x > 0 }
@@ -20,21 +37,21 @@ fn brute(num_vars: usize, cs: &[Vec<i64>]) -> bool {
 
 #[test]
 fn empty_formula() {
-    assert!(solver(&formula(0, &[])));
-    assert!(solver(&formula(3, &[])));
+    assert!(decide(&formula(0, &[])));
+    assert!(decide(&formula(3, &[])));
 }
 
 #[test]
 fn empty_clause() {
-    assert!(!solver(&formula(0, &[&[]])));
-    assert!(!solver(&formula(2, &[&[1, 2], &[]])));
+    assert!(!decide(&formula(0, &[&[]])));
+    assert!(!decide(&formula(2, &[&[1, 2], &[]])));
 }
 
 #[test]
 fn single_literal() {
-    assert!(solver(&formula(1, &[&[1]])));
-    assert!(solver(&formula(1, &[&[-1]])));
-    assert!(!solver(&formula(1, &[&[1], &[-1]])));
+    assert!(decide(&formula(1, &[&[1]])));
+    assert!(decide(&formula(1, &[&[-1]])));
+    assert!(!decide(&formula(1, &[&[1], &[-1]])));
 }
 
 /// Three pigeons in two holes: variable 2p+h+1 says pigeon p sits in hole h.
@@ -49,7 +66,7 @@ fn pigeonhole_3_2() {
         }
     }
     let refs: Vec<&[i64]> = cs.iter().map(|c| c.as_slice()).collect();
-    assert!(!solver(&formula(6, &refs)));
+    assert!(!decide(&formula(6, &refs)));
 }
 
 /// Random 3-CNF formulas around the satisfiability threshold, from a fixed-seed generator.
@@ -78,7 +95,7 @@ fn random_against_brute_force() {
             .collect();
         let refs: Vec<&[i64]> = cs.iter().map(|c| c.as_slice()).collect();
         let expected = brute(n, &cs);
-        assert_eq!(solver(&formula(n, &refs)), expected, "n={n} clauses={cs:?}");
+        assert_eq!(decide(&formula(n, &refs)), expected, "n={n} clauses={cs:?}");
         if expected { nsat += 1 } else { nunsat += 1 }
     }
     assert!(nsat > 30 && nunsat > 30, "{nsat} sat, {nunsat} unsat");
@@ -89,21 +106,21 @@ fn random_against_brute_force() {
 #[test]
 fn repeated_and_complementary_literals() {
     // Repeated literals, alone and with other clauses.
-    assert!(solver(&formula(1, &[&[1, 1]])));
-    assert!(solver(&formula(1, &[&[-1, -1, -1]])));
-    assert!(solver(&formula(2, &[&[1, 1], &[-1, 2, 2]])));
-    assert!(!solver(&formula(1, &[&[1, 1], &[-1, -1]])));
-    assert!(!solver(&formula(2, &[&[1, 1], &[-1, 2], &[-2, -2]])));
+    assert!(decide(&formula(1, &[&[1, 1]])));
+    assert!(decide(&formula(1, &[&[-1, -1, -1]])));
+    assert!(decide(&formula(2, &[&[1, 1], &[-1, 2, 2]])));
+    assert!(!decide(&formula(1, &[&[1, 1], &[-1, -1]])));
+    assert!(!decide(&formula(2, &[&[1, 1], &[-1, 2], &[-2, -2]])));
     // Tautologies, alone and with other clauses: they never change the answer.
-    assert!(solver(&formula(1, &[&[1, -1]])));
-    assert!(solver(&formula(2, &[&[1, -1], &[2, -2]])));
-    assert!(solver(&formula(3, &[&[-2, 1, 3, 2]])));
-    assert!(solver(&formula(2, &[&[1, -1], &[-1, 2]])));
-    assert!(!solver(&formula(1, &[&[1, -1], &[1], &[-1]])));
-    assert!(!solver(&formula(2, &[&[2, -2], &[1, -1], &[]])));
+    assert!(decide(&formula(1, &[&[1, -1]])));
+    assert!(decide(&formula(2, &[&[1, -1], &[2, -2]])));
+    assert!(decide(&formula(3, &[&[-2, 1, 3, 2]])));
+    assert!(decide(&formula(2, &[&[1, -1], &[-1, 2]])));
+    assert!(!decide(&formula(1, &[&[1, -1], &[1], &[-1]])));
+    assert!(!decide(&formula(2, &[&[2, -2], &[1, -1], &[]])));
     // Both together.
-    assert!(solver(&formula(2, &[&[1, 1, -1], &[2, 2]])));
-    assert!(solver(&formula(2, &[&[1, -1, 1, -1], &[-2, -2, 1]])));
-    assert!(!solver(&formula(2, &[&[1, 1, -1], &[2, 2], &[-2, -2]])));
-    assert!(!solver(&formula(2, &[&[1, -1, -1], &[1, 1], &[-1, 2], &[-2, -2, -1]])));
+    assert!(decide(&formula(2, &[&[1, 1, -1], &[2, 2]])));
+    assert!(decide(&formula(2, &[&[1, -1, 1, -1], &[-2, -2, 1]])));
+    assert!(!decide(&formula(2, &[&[1, 1, -1], &[2, 2], &[-2, -2]])));
+    assert!(!decide(&formula(2, &[&[1, -1, -1], &[1, 1], &[-1, 2], &[-2, -2, -1]])));
 }

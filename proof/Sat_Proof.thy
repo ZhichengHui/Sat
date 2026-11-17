@@ -3,9 +3,8 @@ theory Sat_Proof
 begin
 
 text \<open>The contracts of the functions of \<^verbatim>\<open>core/src/lib.rs\<close> and their proofs: the verification
-  of Friday (CreuSAT) carried over to the AutoCorrode translation. \<open>solver_fuel_spec\<close> at the end
-  states the contract of the specification with the fuel conditions as extra preconditions;
-  \<^verbatim>\<open>Sat_Top\<close> removes them.\<close>
+  of Friday (CreuSAT) carried over to the AutoCorrode translation, with \<^verbatim>\<open>solve\<close> returning
+  a satisfying assignment (\<open>sol\<close>). \<^verbatim>\<open>Sat_Top\<close> derives the contract of the specification.\<close>
 
 section \<open>Pure facts\<close>
 
@@ -59,6 +58,57 @@ qed
 lemma ext_sat_start:
   \<open>ext_sat f (replicate n False) 0 \<longleftrightarrow> (\<exists>a. length a = n \<and> formula_sat a f)\<close>
   unfolding ext_sat_def by simp
+
+text \<open>The answer \<open>r\<close> is right for the subproblem in which the first \<open>i\<close> variables have the
+  values of \<open>a\<close>: \<^verbatim>\<open>Sat(m)\<close> gives a satisfying assignment \<open>m\<close> of the same length that agrees with
+  \<open>a\<close> on them; \<^verbatim>\<open>Unsat\<close> means that there is none.\<close>
+definition sol :: \<open>Formula \<Rightarrow> bool list \<Rightarrow> nat \<Rightarrow> Answer \<Rightarrow> bool\<close> where
+  \<open>sol f a i r \<equiv> case r of
+     Answer_Sat m \<Rightarrow> length (Assignments_v0 m) = length a \<and> take i (Assignments_v0 m) = take i a \<and>
+       formula_sat (Assignments_v0 m) f
+   | Answer_Unsat \<Rightarrow> \<not> ext_sat f a i\<close>
+
+lemma sol_leaf:
+  \<open>sol f a (length a) (if formula_sat a f then Answer_Sat (make_Assignments a) else Answer_Unsat)\<close>
+  by (simp add: sol_def ext_sat_complete)
+
+lemma sol_step:
+  assumes \<open>i < length a\<close> \<open>sol f (a[i := True]) (Suc i) r1\<close>
+    \<open>case r1 of Answer_Sat m \<Rightarrow> r = Answer_Sat m | Answer_Unsat \<Rightarrow> sol f (a[i := False]) (Suc i) r\<close>
+  shows \<open>sol f a i r\<close>
+proof -
+  have tk: \<open>take i m = take i a\<close> if \<open>take (Suc i) m = take (Suc i) (a[i := b])\<close> for m b
+  proof -
+    have \<open>take i m = take i (take (Suc i) m)\<close> by simp
+    also have \<open>\<dots> = take i (a[i := b])\<close> using that by simp
+    also have \<open>\<dots> = take i a\<close> by simp
+    finally show ?thesis .
+  qed
+  show ?thesis
+  proof (cases r1)
+    case (Answer_Sat m)
+    then show ?thesis using assms(2,3) tk by (simp add: sol_def)
+  next
+    case Answer_Unsat
+    then have u: \<open>\<not> ext_sat f (a[i := True]) (Suc i)\<close> and r: \<open>sol f (a[i := False]) (Suc i) r\<close>
+      using assms(2,3) by (simp_all add: sol_def)
+    show ?thesis
+    proof (cases r)
+      case (Answer_Sat m)
+      then show ?thesis using r tk by (simp add: sol_def)
+    next
+      case Answer_Unsat
+      then show ?thesis using r u ext_sat_step[OF assms(1)] by (simp add: sol_def)
+    qed
+  qed
+qed
+
+lemma sol_start:
+  assumes \<open>sol f (replicate n False) 0 r\<close>
+  shows \<open>case r of
+     Answer_Sat a \<Rightarrow> length (Assignments_v0 a) = n \<and> formula_sat (Assignments_v0 a) f
+   | Answer_Unsat \<Rightarrow> (\<forall>a. length a = n \<longrightarrow> \<not> formula_sat a f)\<close>
+  using assms by (cases r) (auto simp add: sol_def ext_sat_start)
 
 lemma unat_word_Suc:
   fixes x :: \<open>64 word\<close>
@@ -173,23 +223,18 @@ definition set_next_contract :: \<open>Pasn \<Rightarrow> bool \<Rightarrow> ('s
 lemma set_next_spec:
   shows \<open>\<Gamma>; set_next pa b \<Turnstile>\<^sub>F set_next_contract pa b\<close>
   apply (crush_boot f: set_next_def contract: set_next_contract_def)
-  apply (crush_base inline: Pasn_Clone_clone_def Assignments_Clone_clone_def Pasn_mk_def Assignments_mk_def
-      simp add: true_def false_def focus_components)
-  apply (intro Pasn.expand)
-   apply (simp_all add: focus_components)
-  apply (rule Assignments.expand)
-  apply (simp add: focus_components)
+  apply (crush_base inline: Pasn_mk_def Assignments_mk_def simp add: true_def false_def focus_components)
   done
 
 text \<open>The \<open>k\<close>-th unfolding of \<^const>\<open>solve\<close>. Its precondition requires fewer than \<open>k\<close>
   variables to remain unassigned, so the innermost function is never called.\<close>
-definition solve_contract :: \<open>nat \<Rightarrow> Formula \<Rightarrow> Pasn \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
+definition solve_contract :: \<open>nat \<Rightarrow> Formula \<Rightarrow> Pasn \<Rightarrow> ('s, Answer, 'abort) function_contract\<close> where
   \<open>solve_contract k f pa \<equiv>
      let a = Assignments_v0 (Pasn_assign pa) in
      let pre = can_alloc_reference \<star>
         \<langle>formula_wf f (length a) \<and> unat (Pasn_ix pa) \<le> length a \<and> length a < 2^64 \<and>
          length a - unat (Pasn_ix pa) < k\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star> \<langle>r = ext_sat f a (unat (Pasn_ix pa))\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>sol f a (unat (Pasn_ix pa)) r\<rangle> in
      make_function_contract pre post\<close>
 
 lemma solve_rec_step_spec:
@@ -198,8 +243,22 @@ lemma solve_rec_step_spec:
   apply (crush_boot f: solve_rec_step_def contract: solve_contract_def)
   apply (crush_base inline: len_def specs add: assms Formula_eval_spec set_next_spec
       contracts add: solve_contract_def Formula_eval_contract_def set_next_contract_def
-      simp add: true_def false_def word_less_nat_alt unat_of_nat_eq unat_word_Suc_simp word64_eq_of_nat_iff
-        ext_sat_complete ext_sat_step)
+      simp add: true_def false_def word_less_nat_alt unat_of_nat_eq unat_word_Suc_simp word64_eq_of_nat_iff)
+  subgoal for x
+    apply (cases x)
+     apply (crush_base inline: Answer_Sat_mk_def)
+     apply (crush_base specs add: assms set_next_spec contracts add: solve_contract_def set_next_contract_def
+        simp add: word_less_nat_alt unat_of_nat_eq unat_word_Suc_simp)
+    subgoal for m
+      using sol_step[of \<open>unat (Pasn_ix pa)\<close> \<open>Assignments_v0 (Pasn_assign pa)\<close> f
+          \<open>Answer_Sat m\<close> \<open>Answer_Sat m\<close>]
+      by (simp add: le_neq_implies_less)
+    subgoal for r
+      using sol_step[of \<open>unat (Pasn_ix pa)\<close> \<open>Assignments_v0 (Pasn_assign pa)\<close> f Answer_Unsat r]
+      by (simp add: le_neq_implies_less)
+    done
+  subgoal by (simp add: sol_def ext_sat_complete)
+  subgoal by (simp add: sol_def ext_sat_complete)
   done
 
 lemma solve_rec_spec:
@@ -220,29 +279,6 @@ qed
 lemma solve_spec:
   shows \<open>\<Gamma>; solve f pa \<Turnstile>\<^sub>F solve_contract urust_fuel f pa\<close>
   unfolding solve_def by (rule solve_rec_spec)
-
-section \<open>The top-level contract with fuel\<close>
-
-text \<open>\<^const>\<open>solver_contract\<close> with two more preconditions on the formula: the translation's
-  bounded loops and recursion have enough fuel (\<^term>\<open>urust_fuel\<close>), and its lists fit in a
-  \<^verbatim>\<open>usize\<close> (true of every Rust \<^verbatim>\<open>Vec\<close>).\<close>
-definition solver_fuel_contract :: \<open>Formula \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
-  \<open>solver_fuel_contract f \<equiv>
-     let pre = can_alloc_reference \<star>
-        \<langle>formula_invariant f \<and> unat (Formula_num_vars f) < urust_fuel \<and>
-         formula_wf f (unat (Formula_num_vars f))\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star>
-        \<langle>(\<not> r \<longrightarrow> (\<forall>a. length a = unat (Formula_num_vars f) \<longrightarrow> \<not> formula_sat a f)) \<and>
-         (r \<longrightarrow> (\<exists>a. formula_sat a f))\<rangle> in
-     make_function_contract pre post\<close>
-
-lemma solver_fuel_spec:
-  shows \<open>\<Gamma>; solver f \<Turnstile>\<^sub>F solver_fuel_contract f\<close>
-  apply (crush_boot f: solver_def contract: solver_fuel_contract_def)
-  apply (crush_base inline: vec_from_elem_def Pasn_mk_def Assignments_mk_def
-      specs add: solve_spec contracts add: solve_contract_def
-      simp add: true_def false_def unat_lt2p ext_sat_start formula_wf_def)
-  using unat_lt2p[of \<open>Formula_num_vars f\<close>] by auto
 
 end
 

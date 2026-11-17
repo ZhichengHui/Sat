@@ -21,16 +21,10 @@ pub struct Formula {
     pub num_vars: usize,
 }
 
-impl Clone for Assignments {
-    fn clone(&self) -> Self {
-        Self(self.0.clone())
-    }
-}
-
-impl Clone for Pasn {
-    fn clone(&self) -> Self {
-        Self { assign: self.assign.clone(), ix: self.ix }
-    }
+/// The answer of the solver: a satisfying assignment of all the formula's variables, or none.
+pub enum Answer {
+    Sat(Assignments),
+    Unsat,
 }
 
 impl Clause {
@@ -61,19 +55,24 @@ impl Formula {
 }
 
 fn set_next(pa: &Pasn, b: bool) -> Pasn {
-    let mut new_pa = pa.clone();
-    new_pa.assign.0[pa.ix] = b;
-    new_pa.ix += 1;
-    new_pa
+    let mut assign = pa.assign.0.clone();
+    assign[pa.ix] = b;
+    Pasn { assign: Assignments(assign), ix: pa.ix + 1 }
 }
 
-fn solve(f: &Formula, pa: Pasn) -> bool {
+fn solve(f: &Formula, pa: Pasn) -> Answer {
     if pa.ix == pa.assign.0.len() {
-        return f.eval(&pa.assign);
+        if f.eval(&pa.assign) {
+            return Answer::Sat(pa.assign);
+        }
+        return Answer::Unsat;
     }
-    solve(f, set_next(&pa, true)) || solve(f, set_next(&pa, false))
+    match solve(f, set_next(&pa, true)) {
+        Answer::Sat(a) => Answer::Sat(a),
+        Answer::Unsat => solve(f, set_next(&pa, false)),
+    }
 }
 
-pub fn solver(f: &Formula) -> bool {
+pub fn solver(f: &Formula) -> Answer {
     solve(f, Pasn { assign: Assignments(vec![false; f.num_vars]), ix: 0 })
 }

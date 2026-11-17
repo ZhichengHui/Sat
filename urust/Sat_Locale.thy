@@ -9,10 +9,10 @@ Loops without an iteration bound and recursive functions use the fuel \<^verbati
 
 locale Sat_ctx =
   reference reference_types
-  + ref_1: reference_allocatable reference_types _ _ _ _ _ _ _ prism_1 \<comment> \<open>Pasn\<close>
+  + ref_1: reference_allocatable reference_types _ _ _ _ _ _ _ prism_1 \<comment> \<open>bool list\<close>
   + ref_2: reference_allocatable reference_types _ _ _ _ _ _ _ prism_2 \<comment> \<open>64 word\<close>
   for reference_types :: \<open>'s::{sepalg} \<Rightarrow> 'addr \<Rightarrow> 'gv \<Rightarrow> 'abort \<Rightarrow> 'i prompt \<Rightarrow> 'o prompt_output \<Rightarrow> unit\<close>
-  and prism_1 :: \<open>('gv, Pasn) prism\<close>
+  and prism_1 :: \<open>('gv, bool list) prism\<close>
   and prism_2 :: \<open>('gv, 64 word) prism\<close>
   + fixes urust_fuel :: nat
 begin

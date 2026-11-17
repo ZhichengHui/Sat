@@ -1,13 +1,14 @@
 //! The command line `sat`: reads a CNF formula in DIMACS format (from the file named by the only
 //! argument, or from standard input), decides it with the verified `sat::solver`, and prints the
-//! answer in the format of the SAT competition: `s SATISFIABLE` (exit code 10) or
+//! answer in the format of the SAT competition: `s SATISFIABLE` followed by `v` lines giving the
+//! value of every variable as a DIMACS literal and ending with `0` (exit code 10), or
 //! `s UNSATISFIABLE` (exit code 20). A malformed input is reported on standard error (exit code 1).
 //!
 //! This file is not verified. It builds a `Formula` that satisfies the precondition of the
 //! contract: DIMACS variable `v` (from 1) is index `v - 1`, a positive literal has value `true`,
 //! and the number of variables is that of the header, which every literal must respect.
 
-use sat::{Clause, Formula, Lit};
+use sat::{Answer, Clause, Formula, Lit};
 use std::io::Read;
 use std::process::ExitCode;
 
@@ -62,6 +63,21 @@ fn parse(src: &str) -> Result<Formula, String> {
     Ok(Formula { clauses, num_vars: n })
 }
 
+/// Prints the assignment as `v` lines: the literal of every variable (`i` if variable `i` is true,
+/// `-i` if false), at most about 80 characters per line, the last line ending with `0`.
+fn print_model(values: &[bool]) {
+    let mut line = String::from("v");
+    for (i, &b) in values.iter().enumerate() {
+        let lit = if b { format!(" {}", i + 1) } else { format!(" -{}", i + 1) };
+        if line.len() + lit.len() > 78 {
+            println!("{line}");
+            line = String::from("v");
+        }
+        line.push_str(&lit);
+    }
+    println!("{line} 0");
+}
+
 fn main() -> ExitCode {
     let mut src = String::new();
     let read = match std::env::args().nth(1) {
@@ -74,12 +90,16 @@ fn main() -> ExitCode {
     }
     match parse(&src) {
         Ok(f) => {
-            if sat::solver(&f) {
-                println!("s SATISFIABLE");
-                ExitCode::from(10)
-            } else {
-                println!("s UNSATISFIABLE");
-                ExitCode::from(20)
+            match sat::solver(&f) {
+                Answer::Sat(a) => {
+                    println!("s SATISFIABLE");
+                    print_model(&a.0);
+                    ExitCode::from(10)
+                }
+                Answer::Unsat => {
+                    println!("s UNSATISFIABLE");
+                    ExitCode::from(20)
+                }
             }
         }
         Err(e) => {
