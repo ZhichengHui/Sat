@@ -1,6 +1,6 @@
 # Sat
 
-一个经过验证的 SAT 求解器。求解器基于 CreuSAT 的 Friday，用 Rust 写成，经 AutoCorrode 翻译到 Isabelle/HOL，
+一个经过验证的 SAT 求解器。求解器用 Rust 写成，经 AutoCorrode 翻译到 Isabelle/HOL，
 并证明它满足 `spec/` 中的规约：可满足时给出满足公式的赋值，不可满足时公式确实不可满足。主定理是
 `Sat_heap.solver_correct`（`proof/top/Sat_Top.thy`）。
 

@@ -1,9 +1,7 @@
 # Sat
 
-A verified SAT solver: Friday of CreuSAT in Rust (`core/src/lib.rs`), translated to Isabelle by the
-AutoCorrode front end (`urust/`), with the top-level theorem `Sat_heap.solver_correct` proved in
-`proof/top/Sat_Top.thy` against the specification in `spec/`. The DIMACS command line `cli/` is not
-verified.
+A verified SAT solver: the top-level theorem `Sat_heap.solver_correct` is proved against the
+specification in `spec/`.
 
 ## Build and test
 
@@ -11,10 +9,9 @@ These commands need cargo, z3 and the machine-specific configuration of `tools/c
 header); pod agents get all of it from the environment their launcher sets.
 
 - Rust: `cargo build --release`, `cargo test --release`.
-- Proofs: `tools/check.sh` checks every session (on the machine its configuration names; its task directory is named after the checkout, so worktrees do
-  not collide). CI runs the same check on every pull request.
-- Differential testing: `python3 tools/fuzz.py target/release/sat z3 300 SEED` (random small CNF
-  formulas, answers compared with z3).
+- Proofs: `tools/check.sh` checks every session; CI runs the same check on every pull
+  request.
+- Differential testing: `python3 tools/fuzz.py target/release/sat z3 300 SEED`.
 - After changing `core/src/lib.rs`, or when CI's `translation up to date` fails: regenerate
   `urust/` with the newest front end (never pinned): `git -C "$URUST_FRONTEND_DIR" pull -q`,
   `cargo build --release` there, then
@@ -43,8 +40,8 @@ header); pod agents get all of it from the environment their launcher sets.
 
 - `spec/` — the specification; the meaning of `solver_correct` depends on nothing else.
 - `urust/` — generated; never edit by hand.
-- `proof/` — the contract proofs (`Sat_Proof.thy`) and the top level (`top/Sat_Top.thy`).
-- `core/`, `cli/` — Rust; `tools/` — checks, fuzzing, the pod launcher.
+- `proof/` — the proofs.
+- `core/`, `cli/` — Rust; `tools/` — checks and tests.
 
 ## Rules
 
