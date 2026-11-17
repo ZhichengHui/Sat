@@ -1,0 +1,3 @@
+# Verification frameworks this repository uses; the launcher brings them to their newest main
+# before starting pod (framework-update NAME).
+autocorrode

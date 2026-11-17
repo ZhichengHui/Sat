@@ -13,11 +13,10 @@ header); pod agents get all of it from the environment their launcher sets.
   request.
 - Differential testing: `python3 tools/fuzz.py target/release/sat z3 300 SEED`.
 - After changing `core/src/lib.rs`, or when CI's `translation up to date` fails: regenerate
-  `urust/` with the newest front end (never pinned): `git -C "$URUST_FRONTEND_DIR" pull -q`,
-  `cargo build --release` there, then
+  `urust/` with
   `"$URUST_FRONTEND_DIR"/scripts/urust-frontend.sh --out urust --name Sat core/src/lib.rs`.
-  (`URUST_FRONTEND_DIR` is the checkout of the AutoCorrode front end, set in the agents' environment;
-  if it is unset, stop and ask.)
+  (`URUST_FRONTEND_DIR` is the front end, kept at its newest commit by the agents' launcher; if it
+  is unset, stop and ask.)
   If the new translation breaks `spec/`, do not change `spec/`: report it on the issue and stop.
 
 ## Developing proofs
@@ -48,6 +47,9 @@ header); pod agents get all of it from the environment their launcher sets.
 The rules of this repository are in `PLAN.md` (the specification, verified code, the trusted base);
 follow them. In practice:
 
+- After regenerating `urust/`: `urust/PLACEHOLDERS.txt` must report 0, and `urust/*_Template.thy`
+  must have no new stubs. If not, rewrite the code in the supported subset; in every case report
+  the gap to the framework as `PLAN.md` says.
 - After regenerating `urust/`, run `tools/check-spec.sh`. If it reports that the locale `Sat_heap`
   differs from the generated one, update that locale in `spec/Sat_Spec.thy` to match exactly (and
   say so in the pull request). That is the only change of `spec/` you may make.
@@ -57,8 +59,8 @@ follow them. In practice:
 
 ## Tests
 
-- A change of behaviour of the Rust code gets a test in `core/tests/` or `cli/tests/`, including
-  edge cases (empty formula, empty clause).
+Their role is in `PLAN.md`. Run `cargo test --release` (`core/tests/`) and
+`python3 tools/fuzz.py target/release/<binary> z3 N SEED` when they help.
 
 ## Commits and pull requests
 
