@@ -1,6 +1,6 @@
 # Checks of this repository:
-# - spec: the files of spec/ are exactly those listed in tools/spec.sha256, with those contents
-#   (the top-level specification does not change unless the manifest is changed with it);
+# - spec: tools/check-spec.sh (spec/ is unchanged except its heap locale, which matches the
+#   generated locale; see PLAN.md);
 # - rust: cargo test;
 # - proofs: every Isabelle session of urust/, spec/ and proof/ on AutoCorrode, with HTML;
 # - pages: on main, the HTML of the proofs is published with GitHub Pages.
@@ -28,10 +28,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check spec/ against tools/spec.sha256
-        run: |
-          sha256sum -c tools/spec.sha256
-          diff <(find spec -type f | sort) <(awk '{print $2}' tools/spec.sha256 | sort)
+      - name: Check spec/ (tools/check-spec.sh)
+        run: tools/check-spec.sh
 
   rust:
     runs-on: ubuntu-latest

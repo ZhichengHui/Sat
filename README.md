@@ -30,7 +30,7 @@
 ## 规约与定理
 
 顶层规约就是 `spec/` 目录：主定理的含义只取决于其中的定义，改动求解器或证明不需要改动它，改动它就是改动规约。
-CI 用 `tools/spec.sha256` 检查它没有改变。`spec/Formula_Types.thy` 写出从 Rust 代码生成的 `Lit`、`Clause`、
+规则写在 `PLAN.md`，CI 用 `tools/check-spec.sh` 检查。`spec/Formula_Types.thy` 写出从 Rust 代码生成的 `Lit`、`Clause`、
 `Formula` 的每个字段及其类型，并由生成的类型证明，Rust 中这些类型一旦改变，构建就失败。`spec/Sat_Spec.thy` 中：
 
 - `lit_sat`、`clause_sat`、`formula_sat`、`formula_invariant`：Friday 的 Creusot 逻辑函数的转写（赋值是
@@ -46,7 +46,8 @@ CI 用 `tools/spec.sha256` 检查它没有改变。`spec/Formula_Types.thy` 写�
 
 例外：`spec/Sat_Spec.thy` 中的 locale `Sat_heap` 是生成的 `Sat_ctx`（`urust/Sat_Locale.thy`）去掉 fuel 后的副本。
 求解器新增一种可变局部变量的类型时，生成的 locale 会多一个参数，`Sat_heap` 要照样更新；这是 `spec/` 中唯一随求解器
-实现改变的部分。
+实现改变的部分。`tools/check-spec.sh` 检查两件事：去掉这个 locale 后 `spec/` 与清单 `tools/spec.sha256` 一致；这个
+locale 与生成的 `Sat_ctx` 去掉 fuel 后一致。只有所有者用 `tools/check-spec.sh --update` 更新清单。
 
 信任基础（不在本仓库中证明）：AutoCorrode 翻译的正确性（fuel 足够时翻译出的函数与 Rust 函数行为一致）；
 locale `Sat_heap` 的假设（AutoCorrode 引用模型的假设）；未验证的命令行（把 DIMACS 文本转成 `Formula`，打印回答）。
@@ -84,9 +85,10 @@ PR 的 CI（spec 校验、cargo test、全部证明）通过后自动 squash 合
 
 - 下达任务：开一个 issue。带标签 `agent-plan` 的 issue 由 worker 直接认领去做；带标签 `directive` 的较大任务
   由 planner 拆成若干 `agent-plan` issue。只有仓库所有者和协作者写的 issue 与评论会被 agent 读到。
-- 规则：agent 遵守 `CLAUDE.md`；`PLAN.md` 说明本仓库没有自主路线图，只做 issue 里的任务。pod 拒绝为改动
-  `spec/`、`tools/spec.sha256`、`CLAUDE.md`、`PLAN.md`、`.github/`、`.pod/` 的分支开 PR（`.pod/config.toml` 的
-  `protected_files`）。
+- 规则：`PLAN.md` 写项目规则和方向（只有所有者能改），`CLAUDE.md` 写 agent 的工作方式；agent 的每个任务在
+  `progress/` 留一份工作记录。pod 拒绝为改动 `tools/spec.sha256`、`tools/check-spec.sh`、`PLAN.md`、`CLAUDE.md`、
+  `.github/`、`.pod/` 的分支开 PR（`.pod/config.toml` 的 `protected_files`）；`spec/` 由 CI 的
+  `tools/check-spec.sh` 把关，agent 只能按规则更新其中的 locale。
 - 启动（在计算服务器上，pod 的工作副本 `$RT/pod/Sat`）：`tmux new -s pod-sat`，然后
   `tools/pod-remote.sh`（监视界面）或 `tools/pod-remote.sh add N`（启动 N 个 agent）；`tools/pod-remote.sh status`、
   `list`、`finish all` 等见 pod 的说明。`tools/pod-remote.sh` 设置 agent 的环境：`HOME=$RT/home`（服务器上的
