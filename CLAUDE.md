@@ -48,6 +48,13 @@ header); pod agents get all of it from the environment their launcher sets.
 The rules of this repository are in `PLAN.md` (the specification, verified code, the trusted base);
 follow them. In practice:
 
+- Before regenerating `urust/`: `git -C "$URUST_FRONTEND_DIR" fetch -q` and compare with
+  `origin/master` (pull and rebuild when behind); compare
+  `gh api repos/ZhichengHui/AutoCorrode/commits/main -q .sha` with `AUTOCORRODE_REV` in
+  `.github/workflows/ci.yml` (open an issue for the owner when they differ).
+- After regenerating `urust/`: `urust/PLACEHOLDERS.txt` must report 0, and `urust/*_Template.thy`
+  must have no new stubs. If not, rewrite the code in the supported subset, or report the gap as
+  `PLAN.md` says.
 - After regenerating `urust/`, run `tools/check-spec.sh`. If it reports that the locale `Sat_heap`
   differs from the generated one, update that locale in `spec/Sat_Spec.thy` to match exactly (and
   say so in the pull request). That is the only change of `spec/` you may make.

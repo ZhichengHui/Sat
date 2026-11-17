@@ -36,6 +36,26 @@ of an improvement, not a reason to avoid one; never route a change around the pr
   updates the manifest (`tools/check-spec.sh --update`).
 - Make the solver fit the specification, never the specification fit the solver.
 
+### The verification framework
+
+- The Rust code is verified with our own AutoCorrode framework: the front end
+  `ZhichengHui/AutoCorrodeRustFrontEnd` (Rust to Isabelle) and the Isabelle library
+  `ZhichengHui/AutoCorrode`. Both are installed in the agents' environment on the compute server.
+- The framework supports a subset of Rust, and not yet all of it. Write the code in that subset:
+  the translation has no placeholders (`urust/PLACEHOLDERS.txt` reports 0) and no new stubs of
+  external functions in `urust/*_Template.thy`.
+- When a construct you need is not supported, first rewrite the code with supported constructs.
+  When that is not reasonable, report the gap to the framework: an issue in its repository (the
+  front end for what does not translate, AutoCorrode for what its library or automation lacks),
+  labelled `from-agent`, with a minimal Rust example, what the translation produced, and the
+  workaround you took; link it from the issue of your task. The owner, or agents working on the
+  framework, improve it from these issues.
+- Before relying on the framework (regenerating `urust/`, or concluding that a construct is not
+  supported), check that it is the newest commit of its main branch: the front end against its
+  `master`, and the AutoCorrode revision of the proofs (`AUTOCORRODE_REV` in CI, which the heap on
+  the server follows) against AutoCorrode's `main`. Update the front end when it is behind. When
+  AutoCorrode is behind, tell the owner in an issue: the shared heap and CI are the owner's.
+
 ### Verified code
 
 - Every change keeps every proof and the statement of `solver_correct`, and leaves no `sorry`,
