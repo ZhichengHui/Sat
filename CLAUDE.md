@@ -7,19 +7,20 @@ verified.
 
 ## Build and test
 
-These commands work on the PGR compute server, where pod agents run (`tools/pod-remote.sh` sets up
-PATH and HOME), and on the user's machine.
+These commands need cargo, z3 and the machine-specific configuration of `tools/check.sh` (see its
+header); pod agents get all of it from the environment their launcher sets.
 
 - Rust: `cargo build --release`, `cargo test --release`.
-- Proofs: `tools/check.sh` checks every session (on the server it runs there directly, in about a
-  minute plus the time of the proofs; its task directory is named after the checkout, so worktrees do
+- Proofs: `tools/check.sh` checks every session (on the machine its configuration names; its task directory is named after the checkout, so worktrees do
   not collide). CI runs the same check on every pull request.
 - Differential testing: `python3 tools/fuzz.py target/release/sat z3 300 SEED` (random small CNF
   formulas, answers compared with z3).
 - After changing `core/src/lib.rs`, or when CI's `translation up to date` fails: regenerate
-  `urust/` with the newest front end (never pinned): `git -C $RT/AutoCorrodeRustFrontEnd pull -q`,
+  `urust/` with the newest front end (never pinned): `git -C "$URUST_FRONTEND_DIR" pull -q`,
   `cargo build --release` there, then
-  `$RT/AutoCorrodeRustFrontEnd/scripts/urust-frontend.sh --out urust --name Sat core/src/lib.rs`.
+  `"$URUST_FRONTEND_DIR"/scripts/urust-frontend.sh --out urust --name Sat core/src/lib.rs`.
+  (`URUST_FRONTEND_DIR` is the checkout of the AutoCorrode front end, set in the agents' environment;
+  if it is unset, stop and ask.)
   If the new translation breaks `spec/`, do not change `spec/`: report it on the issue and stop.
 
 ## Developing proofs

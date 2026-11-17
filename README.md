@@ -66,11 +66,11 @@ locale `Sat_heap` 的假设（AutoCorrode 引用模型的假设）；未验证�
 
     tools/check.sh [MINUTES]
 
-按计算环境的标准流程检查全部证明：把 `urust/`、`spec/`、`proof/` 复制到计算服务器的任务目录
-`$RT/work/sat-check/`，在那里写 `ROOTS` 和一个以任务命名的 session `SatCheck_Task`（导入顶层定理
+检查全部证明：把 `urust/`、`spec/`、`proof/` 复制到检查机器上的任务目录
+`$CHECK_WORK/sat-check-<检出目录名>/`，在那里写 `ROOTS` 和一个以任务命名的 session `SatCheck_Task`（导入顶层定理
 `Sat_Top.Sat_Top`），用 `isabelle build -d`（不加 `-b`，不留 heap）在共享的 AutoCorrode heap 上构建，作为
 限时 MINUTES 分钟（默认 120）、内存 16 GB 的 systemd 单元运行，结束后输出构建的 session、错误和退出码。
-需要 Isabelle2026 和已构建的 AutoCorrode heap。CI 在每次推送和 PR 上做同样的检查，并把证明的 HTML 发布到
+需要 Isabelle2026 和已构建的 AutoCorrode heap。检查机器、任务目录和 Isabelle 的位置是机器相关的配置，不在仓库里，见 `tools/check.sh` 开头的说明。CI 在每次推送和 PR 上做同样的检查，并把证明的 HTML 发布到
 <https://zhichenghui.github.io/Sat/>。
 
 ## 测试
@@ -82,7 +82,7 @@ locale `Sat_heap` 的假设（AutoCorrode 引用模型的假设）；未验证�
 
 ## 用 pod 派任务
 
-仓库按 lean-zip 的做法配置了 pod（<https://github.com/kim-em/pod>，多代理管理器）：在计算服务器上运行一组
+仓库按 lean-zip 的做法配置了 pod（<https://github.com/kim-em/pod>，多代理管理器）：在一台机器上运行一组
 Claude Code agent，每个 agent 在自己的 git worktree 和分支上工作，通过 GitHub issue 接任务、通过 PR 交付，
 PR 的 CI（spec 校验、cargo test、全部证明）通过后自动 squash 合并。
 
@@ -92,11 +92,9 @@ PR 的 CI（spec 校验、cargo test、全部证明）通过后自动 squash 合
   `progress/` 留一份工作记录。pod 拒绝为改动 `tools/spec.sha256`、`tools/check-spec.sh`、`PLAN.md`、`CLAUDE.md`、
   `.github/`、`.pod/` 的分支开 PR（`.pod/config.toml` 的 `protected_files`）；`spec/` 由 CI 的
   `tools/check-spec.sh` 把关，agent 只能按规则更新其中的 locale。
-- 启动（在计算服务器上，pod 的工作副本 `$RT/pod/Sat`）：`tmux new -s pod-sat`，然后
-  `tools/pod-remote.sh`（监视界面）或 `tools/pod-remote.sh add N`（启动 N 个 agent）；`tools/pod-remote.sh status`、
-  `list`、`finish all` 等见 pod 的说明。`tools/pod-remote.sh` 设置 agent 的环境：`HOME=$RT/home`（服务器上的
-  Claude Code 配置：auto 权限模式、Isabelle skill、Pool Server MCP），令牌取自 `$RT/secrets/claude_token` 和
-  `$RT/secrets/github_pod_token`，PATH 含 claude、gh、cargo、z3。
+- 启动：在运行 pod 的机器上进入 pod 的工作副本，用所有者环境中的启动脚本运行 pod（`add N` 启动 N 个 agent，`list`、
+  `status`、`finish all` 等见 pod 的说明）。启动脚本设置 agent 的环境（Claude Code 配置、令牌、PATH、`tools/check.sh`
+  的配置），属于机器相关的配置，不在仓库里。
 - agent 开发证明时，用 `tools/devcopy.sh` 生成 `dev/`（导入去掉 session 限定的扁平副本），在 Pool Server 上检查
   其中的理论；提交前 `tools/check.sh` 必须通过。
 
