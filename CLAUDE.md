@@ -62,6 +62,13 @@ follow them. In practice:
 Their role is in `PLAN.md`. Run `cargo test --release` (`core/tests/`) and
 `python3 tools/fuzz.py target/release/<binary> z3 N SEED` when they help.
 
+## Benchmarks
+
+`bench/run.sh SUITE` runs the release build on a benchmark suite and checks every answer; a suite is
+a directory `bench/SUITE/` with a `suite.sh` (see the header of `bench/run.sh`; `bench/uf20/` is the
+reference). Like the tests, benchmarks are auxiliary: no change requires running them. Add a suite
+when it measures something the existing ones do not.
+
 ## Commits and pull requests
 
 - Prefixes: `feat:`, `fix:`, `refactor:`, `test:`, `doc:`, `chore:`, `perf:`.
