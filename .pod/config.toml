@@ -25,7 +25,7 @@ min_free_disk_gb = 2               # Pause dispatch when free disk drops below t
 # that, PRs go green but never merge.
 #
 # Example: required_checks = ["build-and-test"]
-required_checks = ["spec unchanged", "rust", "proofs"]
+required_checks = ["spec unchanged", "rust", "proofs", "bench approved"]
 
 [agent]
 backend = "claude"                 # "claude", "codex", or "auto"
