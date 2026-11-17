@@ -31,7 +31,8 @@ PATH and HOME), and on the user's machine.
   absolute path. Re-run `tools/devcopy.sh` after every edit before checking again.
 - Close every file you opened with `isabelle_close` before finishing.
 - Before opening a pull request, `tools/check.sh` must end with `EXIT 0`, and
-  `grep -rnwE 'sorry|oops|quick_and_dirty' spec proof` must find nothing.
+  `grep -rnwE 'sorry|oops|quick_and_dirty' spec proof` must find nothing, and `tools/check-spec.sh`
+  must pass.
 
 ## Layout
 
@@ -40,25 +41,16 @@ PATH and HOME), and on the user's machine.
 - `proof/` — the contract proofs (`Sat_Proof.thy`) and the top level (`top/Sat_Top.thy`).
 - `core/`, `cli/` — Rust; `tools/` — checks, fuzzing, the pod launcher.
 
-## The specification is fixed
+## Rules
 
-- Do not edit any file in `spec/` or `tools/spec.sha256`. If a task seems to need such a change,
-  do not make it: comment on the issue explaining why, and stop. CI fails when `spec/` differs from
-  `tools/spec.sha256`, and pod refuses to open a pull request that touches them.
-- The contract `solver_contract` in `spec/Sat_Spec.thy` is the Creusot contract of Friday's
-  `solver`. A change of the solver must keep satisfying it for every formula of the precondition,
-  and keep `solver_correct` proved. Make the solver fit the specification, never the specification
-  fit the solver.
-- One part of `spec/` follows the generated code: the locale `Sat_heap` in `spec/Sat_Spec.thy` is
-  `Sat_ctx` of `urust/Sat_Locale.thy` without its last line (the fuel). A change of the Rust code
-  that changes that locale (a new type of mutable local) needs a change of `spec/`: do not make it;
-  report it on the issue and stop.
+The rules of this repository are in `PLAN.md` (the specification, verified code, the trusted base);
+follow them. In practice:
 
-## Iterate on verified code
-
-- Every change keeps all proofs and the statement of `solver_correct`.
-- Do not weaken a contract or a lemma used by the top level to make a proof easier; do not delete a
-  proved lemma that is still used.
+- After regenerating `urust/`, run `tools/check-spec.sh`. If it reports that the locale `Sat_heap`
+  differs from the generated one, update that locale in `spec/Sat_Spec.thy` to match exactly (and
+  say so in the pull request). That is the only change of `spec/` you may make.
+- If a task seems to need any other change of `spec/`, do not make it: comment on the issue
+  explaining why, and stop.
 - After three failed attempts with the same approach, change the approach.
 
 ## Tests
@@ -70,4 +62,7 @@ PATH and HOME), and on the user's machine.
 
 - Prefixes: `feat:`, `fix:`, `refactor:`, `test:`, `doc:`, `chore:`, `perf:`.
 - One logical change per commit; every commit builds and passes `cargo test`.
-- Do not edit `CLAUDE.md`, `PLAN.md`, `.github/` or `.pod/` (pod refuses such pull requests).
+- Write the progress entry of the session in `progress/` (pod's worker flow) and commit it with
+  the change.
+- Do not edit `CLAUDE.md`, `PLAN.md`, `tools/spec.sha256`, `tools/check-spec.sh`, `.github/` or
+  `.pod/` (pod refuses such pull requests).
