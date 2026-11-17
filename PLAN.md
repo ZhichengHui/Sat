@@ -10,15 +10,15 @@ of an improvement, not a reason to avoid one; never route a change around the pr
 
 - Make the solver faster while every proof holds. The present solver enumerates all assignments;
   the way forward is the standard one: unit propagation, then DPLL, then conflict-driven clause
-  learning, each step verified against the unchanged `solver_correct`. A measurement of solving
-  time on a fixed set of CNF formulas is part of the work (it does not exist yet); every
-  optimization reports its effect on it.
+  learning, each step verified against the unchanged `solver_correct`.
 - Issues from the owner come first. An issue labelled `agent-plan` is a work item; a worker claims
   and does it. An issue labelled `directive` is a larger task; a planner splits it into `agent-plan`
   issues (or a worker does it directly when it is small), and closes it when its deliverables are
   merged.
-- When no owner's issue is waiting, planners take the next steps of the goal above: small
-  `agent-plan` issues, each with a measurable aim, ordered so that each builds on merged work.
+- When no owner's issue is waiting and a benchmark suite is active, planners take the next steps
+  of the goal above, aimed at the active suites: small `agent-plan` issues, each with an aim
+  measurable on them, ordered so that each builds on merged work. When no owner's issue is waiting
+  and no suite is active, planners create no issues and signal `return-to-human`.
 
 ## Rules
 
@@ -70,6 +70,26 @@ of an improvement, not a reason to avoid one; never route a change around the pr
   proof work.
 - Meaningful tests may be added, such as a case that once exposed a bug. No change requires a
   test, and a failing test means a bug in the code or in the test.
+
+### Benchmarks
+
+- Progress of the Direction is judged by the active benchmark suites. A pull request that aims to
+  improve the solver runs the active suites and reports the results against main.
+- A suite is a directory `bench/SUITE/` with a `suite.sh` that `bench/run.sh` reads: what it
+  measures, its instances with their source and known answers, the time and memory limit per
+  instance, and how answers (and, where possible, models) are checked. Instances that are not
+  small are fetched from their public source and checked by hash, not committed. The agent that
+  builds the first suite also writes `bench/run.sh`.
+- `bench/active` lists the active suites, one per line. The owner activates and deactivates them;
+  an inactive suite stays in `bench/` and is not run.
+- Suites are built only for issues of the owner. A suite takes instances with known answers from
+  public collections (SATLIB, or SAT-COMP through GBD), some that the solver solves and some that it does not yet,
+  graded in difficulty where possible. Its pull request states what it measures, why it is at the
+  frontier, and the solver's present result on it.
+- Every change of `bench/` needs the owner's approval: label the pull request `needs-owner`; CI's
+  `bench approved` check fails until the owner adds the label `owner-approved`. Never add
+  `owner-approved` yourself, and do not repair a pull request that only waits for it. A merged
+  suite is not changed to improve results; a harder or different measure is a new suite.
 
 ### Trusted base
 

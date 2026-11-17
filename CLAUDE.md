@@ -62,6 +62,12 @@ follow them. In practice:
 Their role is in `PLAN.md`. Run `cargo test --release` (`core/tests/`) and
 `python3 tools/fuzz.py target/release/<binary> z3 N SEED` when they help.
 
+## Benchmarks
+
+Their rules are in `PLAN.md`. `bench/active` lists the active suites; run one with
+`bench/run.sh SUITE` on the release build. A pull request that changes `bench/` gets the label
+`needs-owner` and waits for the owner's label `owner-approved`.
+
 ## Commits and pull requests
 
 - Prefixes: `feat:`, `fix:`, `refactor:`, `test:`, `doc:`, `chore:`, `perf:`.
