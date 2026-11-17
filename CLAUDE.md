@@ -64,8 +64,11 @@ follow them. In practice:
 
 ## Tests
 
-- A change of behaviour of the Rust code gets a test in `core/tests/` or `cli/tests/`, including
-  edge cases (empty formula, empty clause).
+- The proofs establish correctness, not the tests. Tests are an optional technique: a quick way to
+  find a likely bug before the slow proof work (`cargo test --release` for `core/tests/`,
+  `tools/fuzz.py` against z3). Use them when they help; no change requires new tests.
+- A failing test means a bug in the code or in the test; the proofs decide which.
+- The command line and the front end are fixed and have no tests.
 
 ## Commits and pull requests
 
