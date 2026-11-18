@@ -240,10 +240,16 @@ fn key(v: usize, b: bool) -> usize {
 /// `lim[d]`, `level[v]` is the decision level of `v` and `reason[v]` the clause that propagated
 /// `v` (`NONE` for a decision). Clause `c` watches its literals at positions `wpos[2c]` and
 /// `wpos[2c + 1]`; the watch nodes `2c`, `2c + 1` of the literal `(v, b)` form a list through
-/// `next` that starts at `head[key(v, b)]`. `qhead` is the first trail position not yet
-/// propagated. `phase` is the last value of each variable, `act` its activity, raised by `inc`
+/// `next` that starts at `head[key(v, b)]`, and `wkey[node]` is the key of the literal it watches,
+/// so that a visit sees whether the other watched literal is true without reading the clause.
+/// `qhead` is the first trail position not yet propagated. `phase` is the last value of each variable, `act` its activity, raised by `inc`
 /// whenever it takes part in a conflict; `seen` marks variables during conflict analysis, and
-/// `learnt` collects the literals of the clause it learns.
+/// `learnt` collects the literals of the clause it learns. Learned clause `i` has the literal block
+/// distance `lbd[i]` (the number of decision levels of its literals when it was learned); `reduce`
+/// sets `dead[i]` for about half of them, and a dead clause is dropped from a watch list when the
+/// list is visited, so it no longer takes part in the search (it stays in the clause database).
+/// `stamp[l]` is `tick` if level `l` has been counted by the current `learnt_lbd`; `hist` is the
+/// histogram of the distances in `reduce`.
 struct Search {
     assign: Vec<bool>,
     set: Vec<bool>,
@@ -255,11 +261,17 @@ struct Search {
     head: Vec<usize>,
     next: Vec<usize>,
     wpos: Vec<usize>,
+    wkey: Vec<usize>,
     phase: Vec<bool>,
     act: Vec<usize>,
     inc: usize,
     seen: Vec<bool>,
     learnt: Vec<Lit>,
+    dead: Vec<bool>,
+    lbd: Vec<usize>,
+    stamp: Vec<usize>,
+    tick: usize,
+    hist: Vec<usize>,
 }
 
 impl Search {
@@ -291,13 +303,17 @@ impl Search {
         self.next.push(NONE);
         self.wpos.push(0);
         self.wpos.push(1);
+        self.wkey.push(NONE);
+        self.wkey.push(NONE);
         if c < BIG && clause_len(f, learned, c) >= 2 {
             let n0 = 2 * c;
             let l0 = lit_at(f, learned, c, 0);
             let l1 = lit_at(f, learned, c, 1);
             let k0 = key(l0.var, l0.value);
             let k1 = key(l1.var, l1.value);
-            if k0 < self.head.len() && k1 < self.head.len() && n0 + 1 < self.next.len() {
+            if k0 < self.head.len() && k1 < self.head.len() && n0 + 1 < self.next.len() && n0 + 1 < self.wkey.len() {
+                self.wkey[n0] = k0;
+                self.wkey[n0 + 1] = k1;
                 self.next[n0] = self.head[k0];
                 self.head[k0] = n0;
                 self.next[n0 + 1] = self.head[k1];
@@ -323,28 +339,48 @@ impl Search {
         len
     }
 
-    /// Visits the watch list `k` of a literal that has become false: each clause on it gets a
-    /// new watched literal that is not false, propagates its other watched literal, or is false.
-    /// The index of a false clause, or `NONE`.
+    /// Clause `c` is a dead learned clause.
+    fn is_dead(&self, f: &Formula, c: usize) -> bool {
+        let m = f.clauses.len();
+        c >= m && c - m < self.dead.len() && self.dead[c - m]
+    }
+
+    /// The literal with the key `k` is true.
+    fn key_true(&self, k: usize) -> bool {
+        k != NONE && self.lit_true(k / 2, k % 2 == 1)
+    }
+
+    /// Visits the watch list `k` of a literal that has become false: a dead clause is dropped
+    /// from it; each other clause on it gets a new watched literal that is not false, propagates
+    /// its other watched literal, or is false. The index of a false clause, or `NONE`.
     fn propagate_lit(&mut self, f: &Formula, learned: &Vec<Clause>, k: usize) -> usize {
         let mut prev = NONE;
         let mut node = if k < self.head.len() { self.head[k] } else { NONE };
-        while node < self.next.len() && node < self.wpos.len() {
+        while node < self.next.len() && node < self.wpos.len() && node < self.wkey.len() {
             let nxt = self.next[node];
             let c = node / 2;
             let other = node ^ 1;
-            let my = self.wpos[node];
-            let op = if other < self.wpos.len() { self.wpos[other] } else { NONE };
-            let ol = lit_at(f, learned, c, op);
-            if self.lit_true(ol.var, ol.value) {
+            let okey = if other < self.wkey.len() { self.wkey[other] } else { NONE };
+            if self.is_dead(f, c) {
+                if prev < self.next.len() {
+                    self.next[prev] = nxt;
+                } else if k < self.head.len() {
+                    self.head[k] = nxt;
+                }
+                node = nxt;
+            } else if self.key_true(okey) {
                 prev = node;
                 node = nxt;
             } else {
+                let my = self.wpos[node];
+                let op = if other < self.wpos.len() { self.wpos[other] } else { NONE };
+                let ol = lit_at(f, learned, c, op);
                 let found = self.find_watch(f, learned, c, op, my);
                 let nl = lit_at(f, learned, c, found);
                 let nk = key(nl.var, nl.value);
                 if found < clause_len(f, learned, c) && nk < self.head.len() {
                     self.wpos[node] = found;
+                    self.wkey[node] = nk;
                     if prev < self.next.len() {
                         self.next[prev] = nxt;
                     } else if k < self.head.len() {
@@ -465,6 +501,115 @@ impl Search {
         }
     }
 
+    /// The literal of `v` in the learned clause is implied by the others: `v` has a reason clause
+    /// whose other literals have marked variables or variables of level 0.
+    fn redundant(&self, f: &Formula, learned: &Vec<Clause>, v: usize) -> bool {
+        if v >= self.reason.len() || self.reason[v] == NONE {
+            return false;
+        }
+        let r = self.reason[v];
+        let len = clause_len(f, learned, r);
+        let mut j: usize = 0;
+        while j < len {
+            let q = lit_at(f, learned, r, j).var;
+            if q != v && !(q < self.seen.len() && q < self.level.len() && (self.seen[q] || self.level[q] == 0)) {
+                return false;
+            }
+            j += 1;
+        }
+        true
+    }
+
+    /// Removes from `learnt` the literals after the first that are `redundant`, and clears the
+    /// marks of their variables.
+    fn minimize(&mut self, f: &Formula, learned: &Vec<Clause>) {
+        let mut i: usize = 1;
+        let mut j: usize = 1;
+        while j < self.learnt.len() {
+            if !self.redundant(f, learned, self.learnt[j].var) {
+                if i < j {
+                    self.learnt.swap(i, j);
+                }
+                i += 1;
+            }
+            j += 1;
+        }
+        let mut k = i;
+        while k < self.learnt.len() {
+            let v = self.learnt[k].var;
+            if v < self.seen.len() {
+                self.seen[v] = false;
+            }
+            k += 1;
+        }
+        self.learnt.truncate(i);
+    }
+
+    /// The number of decision levels of the literals of `learnt`.
+    fn learnt_lbd(&mut self) -> usize {
+        if self.tick < NONE {
+            self.tick += 1;
+        }
+        let mut n: usize = 0;
+        let mut j: usize = 0;
+        while j < self.learnt.len() {
+            let v = self.learnt[j].var;
+            if v < self.level.len() {
+                let lv = self.level[v];
+                if lv < self.stamp.len() && self.stamp[lv] != self.tick {
+                    self.stamp[lv] = self.tick;
+                    if n < NONE {
+                        n += 1;
+                    }
+                }
+            }
+            j += 1;
+        }
+        n
+    }
+
+    /// Marks about half of the live learned clauses dead: those of the highest literal block
+    /// distances, the oldest first among equal ones; clauses of distance 2 or less stay.
+    fn reduce(&mut self) {
+        let size = self.stamp.len();
+        self.hist = vec![0; size];
+        let mut live: usize = 0;
+        let mut i: usize = 0;
+        while i < self.lbd.len() && i < self.dead.len() {
+            let d = self.lbd[i];
+            if !self.dead[i] && d < size && d < self.hist.len() && self.hist[d] < NONE && live < NONE {
+                self.hist[d] += 1;
+                live += 1;
+            }
+            i += 1;
+        }
+        // The distance `t` from which on clauses die, and how many of distance `t` die.
+        let mut left = live / 2;
+        let mut t = size;
+        while t > 3 && t - 1 < self.hist.len() && self.hist[t - 1] <= left {
+            t -= 1;
+            left -= self.hist[t];
+        }
+        if t > 3 {
+            t -= 1;
+        } else {
+            left = 0;
+        }
+        i = 0;
+        while i < self.lbd.len() && i < self.dead.len() {
+            let d = self.lbd[i];
+            if !self.dead[i] && d >= t {
+                if d > t {
+                    self.dead[i] = true;
+                } else if left > 0 {
+                    self.dead[i] = true;
+                    left -= 1;
+                }
+            }
+            i += 1;
+        }
+    }
+
     /// A copy of `learnt`, of at most `BIG` literals.
     fn copy_learnt(&self) -> Vec<Lit> {
         let mut out: Vec<Lit> = Vec::new();
@@ -514,8 +659,9 @@ impl Search {
         }
         self.learnt[0] = Lit { var: p, value: !self.assign[p] };
         if self.inc < BIG {
-            self.inc += self.inc / 16 + 1;
+            self.inc += self.inc / 32 + 1;
         }
+        self.minimize(f, learned);
         self.finish_learnt();
         self.copy_learnt()
     }
@@ -567,11 +713,17 @@ fn new_search(n: usize) -> Search {
         head: vec![NONE; 2 * n],
         next: Vec::new(),
         wpos: Vec::new(),
+        wkey: Vec::new(),
         phase: vec![false; n],
         act: vec![0; n],
         inc: 1,
         seen: vec![false; n],
         learnt: Vec::new(),
+        dead: Vec::new(),
+        lbd: Vec::new(),
+        stamp: vec![0; n + 1],
+        tick: 0,
+        hist: Vec::new(),
     }
 }
 
@@ -758,9 +910,12 @@ fn on_conflict(s: &mut Search, f: &Formula, learned: &mut Vec<Clause>, confl: us
     let v = learnt[0].var;
     let b = learnt[0].value;
     let bj = if learnt.len() > 1 && learnt[1].var < s.level.len() { s.level[learnt[1].var] } else { 0 };
+    let lbd = s.learnt_lbd();
     s.backtrack(bj);
     let c = f.clauses.len() + learned.len();
     learned.push(Clause(learnt));
+    s.lbd.push(lbd);
+    s.dead.push(false);
     s.attach(f, learned, c);
     s.enqueue(v, b, c);
     0
@@ -777,6 +932,8 @@ fn cdcl(f: &Formula) -> Option<Answer> {
     let mut confl = init(&mut s, f, &learned);
     let mut conflicts: usize = 0;
     let mut restart_at: usize = 100;
+    let mut since_reduce: usize = 0;
+    let mut reduce_at: usize = 1000;
     let mut steps: usize = 0;
     while steps < NONE {
         steps += 1;
@@ -792,6 +949,16 @@ fn cdcl(f: &Formula) -> Option<Answer> {
                 return None;
             }
             confl = NONE;
+            if since_reduce < reduce_at {
+                since_reduce += 1;
+            }
+            if since_reduce >= reduce_at {
+                since_reduce = 0;
+                if reduce_at < BIG {
+                    reduce_at += 500;
+                }
+                s.reduce();
+            }
             if conflicts < restart_at {
                 conflicts += 1;
             }
