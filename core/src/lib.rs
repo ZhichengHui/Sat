@@ -434,7 +434,7 @@ impl Search {
                     if count < NONE {
                         count += 1;
                     }
-                } else {
+                } else if learnt.len() < BIG {
                     learnt.push(q);
                 }
             }
@@ -626,12 +626,13 @@ fn mark(learnt: &Vec<Lit>, n: usize) -> Vec<bool> {
     forced
 }
 
-/// Clause `c` exists, and each of its literals other than `(v, b)` has a marked variable and is
-/// false under `assign`.
+/// Clause `c` exists, and each of its literals (other than `(v, b)` if `skip`) has a marked
+/// variable and is false under `assign`.
 fn reason_ok(
     f: &Formula,
     learned: &Vec<Clause>,
     c: usize,
+    skip: bool,
     v: usize,
     b: bool,
     assign: &Vec<bool>,
@@ -644,7 +645,7 @@ fn reason_ok(
     let mut j: usize = 0;
     while j < len {
         let l = lit_at(f, learned, c, j);
-        if !(l.var == v && l.value == b)
+        if !(skip && l.var == v && l.value == b)
             && !(l.var < forced.len() && l.var < assign.len() && forced[l.var] && assign[l.var] != l.value)
         {
             return false;
@@ -669,7 +670,7 @@ fn force_trail(
     while j < trail.len() {
         let v = trail[j];
         if v < forced.len() && v < assign.len() && v < reason.len() {
-            if reason_ok(f, learned, reason[v], v, assign[v], assign, &forced) {
+            if reason_ok(f, learned, reason[v], true, v, assign[v], assign, &forced) {
                 forced[v] = true;
             }
         }
@@ -680,7 +681,9 @@ fn force_trail(
 
 /// The clause `learnt` follows from the formula and the clauses `learned`: its literals are false
 /// under `assign`, and the reasons of the trail, from the negation of `learnt`, force the values
-/// of `assign` that falsify clause `confl`.
+/// of `assign` that falsify clause `confl`. Every assignment that satisfies the clauses and
+/// falsifies `learnt` agrees with `assign` on the marked variables, so it falsifies clause `confl`:
+/// there is none.
 fn certify(
     f: &Formula,
     learned: &Vec<Clause>,
@@ -690,27 +693,43 @@ fn certify(
     confl: usize,
     learnt: &Vec<Lit>,
 ) -> bool {
-    if assign.len() != f.num_vars || !all_false(learnt, assign) {
+    if !all_false(learnt, assign) {
         return false;
     }
     let forced = force_trail(f, learned, assign, trail, reason, mark(learnt, assign.len()));
-    reason_ok(f, learned, confl, NONE, false, assign, &forced)
+    reason_ok(f, learned, confl, false, 0, false, assign, &forced)
+}
+
+/// The values of the variables below `n` in `assign` (`false` where `assign` has none).
+fn model(assign: &Vec<bool>, n: usize) -> Vec<bool> {
+    let mut m = vec![false; n];
+    let mut v: usize = 0;
+    while v < n {
+        if v < assign.len() {
+            m[v] = assign[v];
+        }
+        v += 1;
+    }
+    m
+}
+
+/// Some literal of `c` is satisfied by `a`.
+fn clause_holds(c: &Clause, a: &Vec<bool>) -> bool {
+    let mut j: usize = 0;
+    while j < c.0.len() {
+        if c.0[j].var < a.len() && a[c.0[j].var] == c.0[j].value {
+            return true;
+        }
+        j += 1;
+    }
+    false
 }
 
 /// Every clause of `f` has a literal that `a` satisfies.
 fn satisfies(f: &Formula, a: &Vec<bool>) -> bool {
     let mut i: usize = 0;
     while i < f.clauses.len() {
-        let mut j: usize = 0;
-        let mut ok = false;
-        while j < f.clauses[i].0.len() {
-            if f.clauses[i].0[j].var < a.len() && a[f.clauses[i].0[j].var] == f.clauses[i].0[j].value {
-                ok = true;
-                break;
-            }
-            j += 1;
-        }
-        if !ok {
+        if !clause_holds(&f.clauses[i], a) {
             return false;
         }
         i += 1;
@@ -770,8 +789,9 @@ fn cdcl(f: &Formula) -> Option<Answer> {
         } else {
             let v = s.pick();
             if v == NONE {
-                if s.assign.len() == n && satisfies(f, &s.assign) {
-                    return Some(Answer::Sat(Assignments(s.assign.clone())));
+                let m = model(&s.assign, n);
+                if satisfies(f, &m) {
+                    return Some(Answer::Sat(Assignments(m)));
                 }
                 return None;
             }

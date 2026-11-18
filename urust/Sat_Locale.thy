@@ -11,17 +11,15 @@ locale Sat_ctx =
   reference reference_types
   + ref_1: reference_allocatable reference_types _ _ _ _ _ _ _ prism_1 \<comment> \<open>bool list\<close>
   + ref_2: reference_allocatable reference_types _ _ _ _ _ _ _ prism_2 \<comment> \<open>64 word\<close>
-  + ref_3: reference_allocatable reference_types _ _ _ _ _ _ _ prism_3 \<comment> \<open>bool\<close>
-  + ref_4: reference_allocatable reference_types _ _ _ _ _ _ _ prism_4 \<comment> \<open>Search\<close>
-  + ref_5: reference_allocatable reference_types _ _ _ _ _ _ _ prism_5 \<comment> \<open>Clause list\<close>
-  + ref_6: reference_allocatable reference_types _ _ _ _ _ _ _ prism_6 \<comment> \<open>Lit list\<close>
+  + ref_3: reference_allocatable reference_types _ _ _ _ _ _ _ prism_3 \<comment> \<open>Search\<close>
+  + ref_4: reference_allocatable reference_types _ _ _ _ _ _ _ prism_4 \<comment> \<open>Clause list\<close>
+  + ref_5: reference_allocatable reference_types _ _ _ _ _ _ _ prism_5 \<comment> \<open>Lit list\<close>
   for reference_types :: \<open>'s::{sepalg} \<Rightarrow> 'addr \<Rightarrow> 'gv \<Rightarrow> 'abort \<Rightarrow> 'i prompt \<Rightarrow> 'o prompt_output \<Rightarrow> unit\<close>
   and prism_1 :: \<open>('gv, bool list) prism\<close>
   and prism_2 :: \<open>('gv, 64 word) prism\<close>
-  and prism_3 :: \<open>('gv, bool) prism\<close>
-  and prism_4 :: \<open>('gv, Search) prism\<close>
-  and prism_5 :: \<open>('gv, Clause list) prism\<close>
-  and prism_6 :: \<open>('gv, Lit list) prism\<close>
+  and prism_3 :: \<open>('gv, Search) prism\<close>
+  and prism_4 :: \<open>('gv, Clause list) prism\<close>
+  and prism_5 :: \<open>('gv, Lit list) prism\<close>
   + fixes urust_fuel :: nat
 begin
 
@@ -30,7 +28,6 @@ adhoc_overloading store_reference_const \<rightleftharpoons> ref_2.new
 adhoc_overloading store_reference_const \<rightleftharpoons> ref_3.new
 adhoc_overloading store_reference_const \<rightleftharpoons> ref_4.new
 adhoc_overloading store_reference_const \<rightleftharpoons> ref_5.new
-adhoc_overloading store_reference_const \<rightleftharpoons> ref_6.new
 adhoc_overloading store_update_const \<rightleftharpoons> update_fun
 
 end

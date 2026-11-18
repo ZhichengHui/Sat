@@ -354,8 +354,8 @@ definition "mark" :: \<open>(Lit list) \<Rightarrow> (64 word) \<Rightarrow> ('s
   \<rbrakk>\<close>
 
 (* Rust: reason_ok *)
-definition "reason_ok" :: \<open>Formula \<Rightarrow> (Clause list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> bool \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>reason_ok \<equiv> \<lambda>f learned c v b assign forced. FunctionBody \<lbrakk>
+definition "reason_ok" :: \<open>Formula \<Rightarrow> (Clause list) \<Rightarrow> (64 word) \<Rightarrow> bool \<Rightarrow> (64 word) \<Rightarrow> bool \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>reason_ok \<equiv> \<lambda>f learned c skip_v v b assign forced. FunctionBody \<lbrakk>
     if !clause_exists(f, learned, c) {
       return false;
     };
@@ -363,7 +363,7 @@ definition "reason_ok" :: \<open>Formula \<Rightarrow> (Clause list) \<Rightarro
     let mut j = 0_usize;
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* j) < len_v {
       let l = lit_at(f, learned, c, * j);
-      if (!(((l.Lit_var) == v) && ((l.Lit_value) == b))) && (!(((((l.Lit_var) < len(forced)) && ((l.Lit_var) < len(assign))) && (forced[l.Lit_var])) && ((assign[l.Lit_var]) != (l.Lit_value)))) {
+      if (!((skip_v && ((l.Lit_var) == v)) && ((l.Lit_value) == b))) && (!(((((l.Lit_var) < len(forced)) && ((l.Lit_var) < len(assign))) && (forced[l.Lit_var])) && ((assign[l.Lit_var]) != (l.Lit_value)))) {
         return false;
       };
       * j += 1_usize;
@@ -379,7 +379,7 @@ definition "force_trail" :: \<open>Formula \<Rightarrow> (Clause list) \<Rightar
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* j) < len(trail) {
       let v = trail[* j];
       if ((v < len(* forced)) && (v < len(assign))) && (v < len(reason)) {
-        if reason_ok(f, learned, reason[v], v, assign[v], assign, * forced) {
+        if reason_ok(f, learned, reason[v], true, v, assign[v], assign, * forced) {
           * (forced[v]) = true;
         }
       };
@@ -391,11 +391,38 @@ definition "force_trail" :: \<open>Formula \<Rightarrow> (Clause list) \<Rightar
 (* Rust: certify *)
 definition "certify" :: \<open>Formula \<Rightarrow> (Clause list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (Lit list) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>certify \<equiv> \<lambda>f learned assign trail reason confl learnt. FunctionBody \<lbrakk>
-    if (len(assign) != (f.Formula_num_vars)) || (!all_false(learnt, assign)) {
+    if !all_false(learnt, assign) {
       return false;
     };
     let forced = force_trail(f, learned, assign, trail, reason, mark(learnt, len(assign)));
-    reason_ok(f, learned, confl, NONE(), false, assign, forced)
+    reason_ok(f, learned, confl, false, 0_usize, false, assign, forced)
+  \<rbrakk>\<close>
+
+(* Rust: model *)
+definition "model" :: \<open>(bool list) \<Rightarrow> (64 word) \<Rightarrow> ('s, bool list, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>model \<equiv> \<lambda>assign n. FunctionBody \<lbrakk>
+    let mut m = { let init_1 = vec_from_elem(false, n); \<llangle>init_1 :: bool list\<rrangle> };
+    let mut v = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* v) < n {
+      if (* v) < len(assign) {
+        * (m[* v]) = assign[* v];
+      };
+      * v += 1_usize;
+    };
+    * m
+  \<rbrakk>\<close>
+
+(* Rust: clause_holds *)
+definition "clause_holds" :: \<open>Clause \<Rightarrow> (bool list) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>clause_holds \<equiv> \<lambda>c a. FunctionBody \<lbrakk>
+    let mut j = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* j) < len(c.Clause_v0) {
+      if ((c.Clause_v0[* j].Lit_var) < len(a)) && ((a[c.Clause_v0[* j].Lit_var]) == (c.Clause_v0[* j].Lit_value)) {
+        return true;
+      };
+      * j += 1_usize;
+    };
+    false
   \<rbrakk>\<close>
 
 (* Rust: satisfies *)
@@ -403,16 +430,7 @@ definition "satisfies" :: \<open>Formula \<Rightarrow> (bool list) \<Rightarrow>
   \<open>satisfies \<equiv> \<lambda>f a. FunctionBody \<lbrakk>
     let mut i = 0_usize;
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(f.Formula_clauses) {
-      let mut j = 0_usize;
-      let mut ok_v = false;
-      #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* j) < len(f.Formula_clauses[* i].Clause_v0) {
-        if ((f.Formula_clauses[* i].Clause_v0[* j].Lit_var) < len(a)) && ((a[f.Formula_clauses[* i].Clause_v0[* j].Lit_var]) == (f.Formula_clauses[* i].Clause_v0[* j].Lit_value)) {
-          * ok_v = true;
-          break;
-        };
-        * j += 1_usize;
-      };
-      if !(* ok_v) {
+      if !clause_holds(f.Formula_clauses[* i], a) {
         return false;
       };
       * i += 1_usize;
@@ -549,7 +567,9 @@ definition "Search_analyze_clause" :: \<open>(('addr, 'gv, Search) Global_Store.
             * count_v += 1_usize;
           }
         } else {
-          vec_push(learnt, q);
+          if len(* learnt) < BIG() {
+            vec_push(learnt, q);
+          }
         }
       };
       * j += 1_usize;
@@ -725,8 +745,9 @@ definition "cdcl" :: \<open>Formula \<Rightarrow> ('s, Answer option, 'abort, 'i
       } else {
         let v = Search_pick(* s);
         if v == NONE() {
-          if (len(* (s.Search_assign)) == n) && satisfies(f, * (s.Search_assign)) {
-            return Some(Answer_Sat_mk(Assignments_mk(* (s.Search_assign))));
+          let m = model(* (s.Search_assign), n);
+          if satisfies(f, m) {
+            return Some(Answer_Sat_mk(Assignments_mk(m)));
           };
           return None;
         };

@@ -49,7 +49,7 @@ text \<open>\<^verbatim>\<open>Sat_heap\<close> has the assumptions of \<^locale
   form an instance of \<^locale>\<open>Sat_ctx\<close>, and the contract lemmas of \<^locale>\<open>Sat_ctx\<close> apply.\<close>
 lemma Sat_ctxI:
   \<open>Sat_ctx update_raw_fun dereference_raw_fun reference_raw_fun points_to_raw' gref_can_store
-     new_gref_can_store can_alloc_reference prism_1 prism_2 prism_3 prism_4 prism_5 prism_6\<close>
+     new_gref_can_store can_alloc_reference prism_1 prism_2 prism_3 prism_4 prism_5\<close>
   by intro_locales
 
 theorem solver_correct:
