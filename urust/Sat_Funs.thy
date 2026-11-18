@@ -9,13 +9,100 @@ declare [[urust_ground_body_types]]
 context Sat_ctx
 begin
 
-(* Rust: set_next *)
-definition "set_next" :: \<open>Pasn \<Rightarrow> bool \<Rightarrow> ('s, Pasn, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>set_next \<equiv> \<lambda>pa b. FunctionBody \<lbrakk>
-    let mut assign = { let init_1 = pa.Pasn_assign.Assignments_v0; \<llangle>init_1 :: bool list\<rrangle> };
-    * (assign[pa.Pasn_ix]) = b;
-    Pasn_mk { Pasn_assign: Assignments_mk(* assign), Pasn_ix: (pa.Pasn_ix) + 1_usize }
+(* Rust: updated *)
+definition "updated" :: \<open>(bool list) \<Rightarrow> (64 word) \<Rightarrow> bool \<Rightarrow> ('s, bool list, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>updated \<equiv> \<lambda>xs i x. FunctionBody \<lbrakk>
+    let mut ys = { let init_1 = xs; \<llangle>init_1 :: bool list\<rrangle> };
+    * (ys[i]) = x;
+    * ys
   \<rbrakk>\<close>
+
+(* Rust: set_var *)
+definition "set_var" :: \<open>Pasn \<Rightarrow> (64 word) \<Rightarrow> bool \<Rightarrow> ('s, Pasn, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>set_var \<equiv> \<lambda>pa v b. FunctionBody \<lbrakk>
+    Pasn_mk { Pasn_assign: Assignments_mk(updated(pa.Pasn_assign.Assignments_v0, v, b)), Pasn_set: updated(pa.Pasn_set, v, true) }
+  \<rbrakk>\<close>
+
+(* Rust: Clause::has_true *)
+definition "Clause_has_true" :: \<open>Clause \<Rightarrow> Pasn \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Clause_has_true \<equiv> \<lambda>self pa. FunctionBody \<lbrakk>
+    let mut i = 0_usize;
+    let clause_len = len(self.Clause_v0);
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < clause_len {
+      if (pa.Pasn_set[self.Clause_v0[* i].Lit_var]) && ((pa.Pasn_assign.Assignments_v0[self.Clause_v0[* i].Lit_var]) == (self.Clause_v0[* i].Lit_value)) {
+        return true;
+      };
+      * i += 1_usize;
+    };
+    false
+  \<rbrakk>\<close>
+
+(* Rust: Clause::unset_from *)
+definition "Clause_unset_from" :: \<open>Clause \<Rightarrow> Pasn \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Clause_unset_from \<equiv> \<lambda>self pa start. FunctionBody \<lbrakk>
+    let mut i = start;
+    let clause_len = len(self.Clause_v0);
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < clause_len {
+      if !(pa.Pasn_set[self.Clause_v0[* i].Lit_var]) {
+        return * i;
+      };
+      * i += 1_usize;
+    };
+    clause_len
+  \<rbrakk>\<close>
+
+(* Rust: Clause::unit_lit *)
+definition "Clause_unit_lit" :: \<open>Clause \<Rightarrow> Pasn \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Clause_unit_lit \<equiv> \<lambda>self pa. FunctionBody \<lbrakk>
+    let clause_len = len(self.Clause_v0);
+    if Clause_has_true(self, pa) {
+      return clause_len;
+    };
+    let k = Clause_unset_from(self, pa, 0_usize);
+    if k == clause_len {
+      return clause_len + 1_usize;
+    };
+    if Clause_unset_from(self, pa, k + 1_usize) < clause_len {
+      return clause_len;
+    };
+    k
+  \<rbrakk>\<close>
+
+(* Rust: Formula::unit_clause *)
+definition "Formula_unit_clause" :: \<open>Formula \<Rightarrow> Pasn \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Formula_unit_clause \<equiv> \<lambda>self pa start. FunctionBody \<lbrakk>
+    let mut i = start;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(self.Formula_clauses) {
+      if Clause_unit_lit(self.Formula_clauses[* i], pa) != len(self.Formula_clauses[* i].Clause_v0) {
+        return * i;
+      };
+      * i += 1_usize;
+    };
+    len(self.Formula_clauses)
+  \<rbrakk>\<close>
+
+text \<open>Recursive group propagate: defined by iterating propagate_rec_step \<^term>\<open>urust_fuel\<close> times.\<close>
+
+definition "propagate_rec_step" :: \<open>((Formula \<Rightarrow> Pasn \<Rightarrow> (64 word) \<Rightarrow> ('s, Pasn, 'abort, 'i prompt, 'o prompt_output) function_body)) \<Rightarrow> ((Formula \<Rightarrow> Pasn \<Rightarrow> (64 word) \<Rightarrow> ('s, Pasn, 'abort, 'i prompt, 'o prompt_output) function_body))\<close> where
+  \<open>propagate_rec_step \<equiv> \<lambda>rec_propagate. (\<lambda>f pa start. FunctionBody \<lbrakk>
+    let c = Formula_unit_clause(f, pa, start);
+    if c == len(f.Formula_clauses) {
+      if start == 0_usize {
+        return pa;
+      };
+      return \<epsilon>\<open>rec_propagate\<close>(f, pa, 0_usize);
+    };
+    let k = Clause_unit_lit(f.Formula_clauses[c], pa);
+    if k >= len(f.Formula_clauses[c].Clause_v0) {
+      return pa;
+    };
+    let pb = set_var(pa, f.Formula_clauses[c].Clause_v0[k].Lit_var, f.Formula_clauses[c].Clause_v0[k].Lit_value);
+    \<epsilon>\<open>rec_propagate\<close>(f, pb, c + 1_usize)
+  \<rbrakk>)\<close>
+
+(* Rust: propagate *)
+definition "propagate" :: \<open>Formula \<Rightarrow> Pasn \<Rightarrow> (64 word) \<Rightarrow> ('s, Pasn, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>propagate \<equiv> ((propagate_rec_step ^^ urust_fuel) (\<lambda>f pa start. FunctionBody \<lbrakk> panic!("out of fuel") \<rbrakk>))\<close>
 
 (* Rust: Clause::falsified *)
 definition "Clause_falsified" :: \<open>Clause \<Rightarrow> Pasn \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
@@ -23,7 +110,7 @@ definition "Clause_falsified" :: \<open>Clause \<Rightarrow> Pasn \<Rightarrow> 
     let mut i = 0_usize;
     let clause_len = len(self.Clause_v0);
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < clause_len {
-      if (self.Clause_v0[* i].Lit_var) >= (pa.Pasn_ix) {
+      if !(pa.Pasn_set[self.Clause_v0[* i].Lit_var]) {
         return false;
       };
       if (pa.Pasn_assign.Assignments_v0[self.Clause_v0[* i].Lit_var]) == (self.Clause_v0[* i].Lit_value) {
@@ -47,22 +134,40 @@ definition "Formula_conflict" :: \<open>Formula \<Rightarrow> Pasn \<Rightarrow>
     false
   \<rbrakk>\<close>
 
+(* Rust: Formula::open_clause *)
+definition "Formula_open_clause" :: \<open>Formula \<Rightarrow> Pasn \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Formula_open_clause \<equiv> \<lambda>self pa. FunctionBody \<lbrakk>
+    let mut i = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(self.Formula_clauses) {
+      if !Clause_has_true(self.Formula_clauses[* i], pa) {
+        return * i;
+      };
+      * i += 1_usize;
+    };
+    len(self.Formula_clauses)
+  \<rbrakk>\<close>
+
 text \<open>Recursive group solve: defined by iterating solve_rec_step \<^term>\<open>urust_fuel\<close> times.\<close>
 
 definition "solve_rec_step" :: \<open>((Formula \<Rightarrow> Pasn \<Rightarrow> ('s, Answer, 'abort, 'i prompt, 'o prompt_output) function_body)) \<Rightarrow> ((Formula \<Rightarrow> Pasn \<Rightarrow> ('s, Answer, 'abort, 'i prompt, 'o prompt_output) function_body))\<close> where
   \<open>solve_rec_step \<equiv> \<lambda>rec_solve. (\<lambda>f pa. FunctionBody \<lbrakk>
-    if Formula_conflict(f, pa) {
+    let pb = propagate(f, pa, 0_usize);
+    if Formula_conflict(f, pb) {
       return Answer_Unsat;
     };
-    if (pa.Pasn_ix) == len(pa.Pasn_assign.Assignments_v0) {
-      return Answer_Sat_mk(pa.Pasn_assign);
+    let c = Formula_open_clause(f, pb);
+    if c == len(f.Formula_clauses) {
+      return Answer_Sat_mk(pb.Pasn_assign);
     };
-    match \<epsilon>\<open>rec_solve\<close>(f, set_next(pa, true)) {
+    let k = Clause_unset_from(f.Formula_clauses[c], pb, 0_usize);
+    let v = f.Formula_clauses[c].Clause_v0[k].Lit_var;
+    let b = f.Formula_clauses[c].Clause_v0[k].Lit_value;
+    match \<epsilon>\<open>rec_solve\<close>(f, set_var(pb, v, b)) {
       Answer_Sat(a) \<Rightarrow> {
         Answer_Sat_mk(a)
       },
       Answer_Unsat \<Rightarrow> {
-        \<epsilon>\<open>rec_solve\<close>(f, set_next(pa, false))
+        \<epsilon>\<open>rec_solve\<close>(f, set_var(pb, v, !b))
       }
     }
   \<rbrakk>)\<close>
@@ -74,7 +179,7 @@ definition "solve" :: \<open>Formula \<Rightarrow> Pasn \<Rightarrow> ('s, Answe
 (* Rust: solver *)
 definition "solver" :: \<open>Formula \<Rightarrow> ('s, Answer, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>solver \<equiv> \<lambda>f. FunctionBody \<lbrakk>
-    solve(f, Pasn_mk { Pasn_assign: Assignments_mk(vec_from_elem(false, f.Formula_num_vars)), Pasn_ix: 0_usize })
+    solve(f, Pasn_mk { Pasn_assign: Assignments_mk(vec_from_elem(false, f.Formula_num_vars)), Pasn_set: vec_from_elem(false, f.Formula_num_vars) })
   \<rbrakk>\<close>
 
 end

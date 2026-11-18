@@ -4,12 +4,13 @@ begin
 
 section \<open>The top-level theorem\<close>
 
-text \<open>The fuel that suffices for a formula: more than the number of variables (the depth of the
-  recursion of \<^verbatim>\<open>solve\<close>), and at least the number of clauses and the length of every clause
-  (the iterations of the loops of \<^verbatim>\<open>Formula::conflict\<close> and \<^verbatim>\<open>Clause::falsified\<close>).\<close>
+text \<open>The fuel that suffices for a formula: more than twice the number of variables (bounding the
+  depth of the recursions of \<^verbatim>\<open>solve\<close> and \<^verbatim>\<open>propagate\<close>), and at least the number of clauses and the
+  length of every clause (the iterations of the loops over the clauses and over a clause's
+  literals).\<close>
 definition fuel_top :: \<open>Formula \<Rightarrow> nat\<close> where
   \<open>fuel_top f \<equiv>
-     Suc (unat (Formula_num_vars f)) + length (Formula_clauses f) +
+     Suc (2 * unat (Formula_num_vars f)) + length (Formula_clauses f) +
      sum_list (List.map (\<lambda>c. length (Clause_v0 c)) (Formula_clauses f))\<close>
 
 lemma fuel_top_clause:
@@ -36,6 +37,7 @@ lemma solver_spec:
       specs add: solve_spec contracts add: solve_contract_def
       simp add: true_def false_def unat_lt2p formula_wf_def)
   using assms fuel_top_clause[of _ f] unat_lt2p[of \<open>Formula_num_vars f\<close>] sol_start
+    unset_le_length[of \<open>replicate (unat (Formula_num_vars f)) False\<close>]
   by (fastforce simp: fuel_top_def sat_repr_ok_def formula_invariant_def)+
 
 end

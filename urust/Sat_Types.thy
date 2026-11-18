@@ -34,10 +34,10 @@ definition "Clause_mk" :: \<open>(Lit list) \<Rightarrow> ('s, Clause, 'abort, '
 (* Rust: Pasn *)
 scalable_datatype_record Pasn =
   Pasn_assign :: \<open>Assignments\<close>
-  Pasn_ix :: \<open>64 word\<close>
+  Pasn_set :: \<open>bool list\<close>
 micro_rust_record Pasn
 
-definition "Pasn_mk" :: \<open>Assignments \<Rightarrow> (64 word) \<Rightarrow> ('s, Pasn, 'abort, 'i, 'o) function_body\<close> where
+definition "Pasn_mk" :: \<open>Assignments \<Rightarrow> (bool list) \<Rightarrow> ('s, Pasn, 'abort, 'i, 'o) function_body\<close> where
   [crush_inline]: \<open>Pasn_mk \<equiv> \<lambda>a0 a1. FunctionBody (literal (make_Pasn a0 a1))\<close>
 
 (* Rust: Formula *)
