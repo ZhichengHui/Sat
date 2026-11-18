@@ -57,6 +57,14 @@ enum Answer =
 definition "Answer_Sat_mk" :: \<open>Assignments \<Rightarrow> ('s, Answer, 'abort, 'i, 'o) function_body\<close> where
   [crush_inline]: \<open>Answer_Sat_mk \<equiv> \<lambda>a0. FunctionBody (literal (Answer_Sat a0))\<close>
 
+(* Rust: Propagated *)
+enum Propagated =
+    Propagated_Conflict
+  | Propagated_Fixpoint \<open>Pasn\<close>
+
+definition "Propagated_Fixpoint_mk" :: \<open>Pasn \<Rightarrow> ('s, Propagated, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>Propagated_Fixpoint_mk \<equiv> \<lambda>a0. FunctionBody (literal (Propagated_Fixpoint a0))\<close>
+
 (* Rust: Search *)
 scalable_datatype_record Search =
   Search_assign :: \<open>bool list\<close>

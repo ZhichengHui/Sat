@@ -32,23 +32,6 @@ pub enum Answer {
 }
 
 impl Clause {
-    /// The clause is false under the partial assignment: every literal's variable is assigned
-    /// and has the other value.
-    fn falsified(&self, pa: &Pasn) -> bool {
-        let mut i: usize = 0;
-        let clause_len = self.0.len();
-        while i < clause_len {
-            if !pa.set[self.0[i].var] {
-                return false;
-            }
-            if pa.assign.0[self.0[i].var] == self.0[i].value {
-                return false;
-            }
-            i += 1;
-        }
-        true
-    }
-
     /// Some literal is assigned its value.
     fn has_true(&self, pa: &Pasn) -> bool {
         let mut i: usize = 0;
@@ -81,33 +64,29 @@ impl Clause {
     /// the clause is false; otherwise the clause's length.
     fn unit_lit(&self, pa: &Pasn) -> usize {
         let clause_len = self.0.len();
-        if self.has_true(pa) {
-            return clause_len;
+        let mut k: usize = clause_len;
+        let mut i: usize = 0;
+        while i < clause_len {
+            if pa.set[self.0[i].var] {
+                if pa.assign.0[self.0[i].var] == self.0[i].value {
+                    return clause_len;
+                }
+            } else {
+                if k < clause_len {
+                    return clause_len;
+                }
+                k = i;
+            }
+            i += 1;
         }
-        let k = self.unset_from(pa, 0);
         if k == clause_len {
             return clause_len + 1;
-        }
-        if self.unset_from(pa, k + 1) < clause_len {
-            return clause_len;
         }
         k
     }
 }
 
 impl Formula {
-    /// Some clause is false under the partial assignment.
-    fn conflict(&self, pa: &Pasn) -> bool {
-        let mut i: usize = 0;
-        while i < self.clauses.len() {
-            if self.clauses[i].falsified(pa) {
-                return true;
-            }
-            i += 1;
-        }
-        false
-    }
-
     /// The index of the first clause without a true literal under the partial assignment; the
     /// number of clauses if every clause has one.
     fn open_clause(&self, pa: &Pasn) -> usize {
@@ -121,66 +100,80 @@ impl Formula {
         self.clauses.len()
     }
 
-    /// The index of the first clause at or after `start` that is unit or false under the partial
-    /// assignment; the number of clauses if there is none.
-    fn unit_clause(&self, pa: &Pasn, start: usize) -> usize {
+    /// The index of the first clause in `start..end` that is unit or false under the partial
+    /// assignment; `end` if there is none.
+    fn unit_clause(&self, pa: &Pasn, start: usize, end: usize) -> usize {
         let mut i: usize = start;
-        while i < self.clauses.len() {
+        while i < end {
             if self.clauses[i].unit_lit(pa) != self.clauses[i].0.len() {
                 return i;
             }
             i += 1;
         }
-        self.clauses.len()
+        end
     }
 }
 
 /// The list `xs` with the element at `i` replaced by `x`.
-fn updated(xs: &Vec<bool>, i: usize, x: bool) -> Vec<bool> {
-    let mut ys = xs.clone();
+fn updated(xs: Vec<bool>, i: usize, x: bool) -> Vec<bool> {
+    let mut ys = xs;
     ys[i] = x;
     ys
 }
 
+/// A copy of the partial assignment `pa`.
+fn copy(pa: &Pasn) -> Pasn {
+    Pasn { assign: Assignments(pa.assign.0.clone()), set: pa.set.clone() }
+}
+
 /// The partial assignment `pa` with the variable `v` assigned the value `b`.
-fn set_var(pa: &Pasn, v: usize, b: bool) -> Pasn {
-    Pasn { assign: Assignments(updated(&pa.assign.0, v, b)), set: updated(&pa.set, v, true) }
+fn set_var(pa: Pasn, v: usize, b: bool) -> Pasn {
+    Pasn { assign: Assignments(updated(pa.assign.0, v, b)), set: updated(pa.set, v, true) }
+}
+
+/// The result of unit propagation: a clause is false, or the partial assignment has no unit or
+/// false clause.
+enum Propagated {
+    Conflict,
+    Fixpoint(Pasn),
 }
 
 /// Unit propagation: assigns the remaining literal of a unit clause until there is none or a
-/// clause is false. It looks for the next unit clause from `start` on, after the last one, and
-/// stops after a pass from the first clause finds none.
-fn propagate(f: &Formula, pa: Pasn, start: usize) -> Pasn {
-    let c = f.unit_clause(&pa, start);
-    if c == f.clauses.len() {
-        if start == 0 {
-            return pa;
+/// clause is false. It scans the clauses `start..end`; after a unit clause it goes on from the
+/// next clause to the last one, then from the first clause up to the next one after the unit
+/// clause, so it stops after a whole round of the clauses that finds none.
+fn propagate(f: &Formula, pa: Pasn, start: usize, end: usize) -> Propagated {
+    let c = f.unit_clause(&pa, start, end);
+    if c == end {
+        if end == f.clauses.len() && start != 0 {
+            return propagate(f, pa, 0, start);
         }
-        return propagate(f, pa, 0);
+        return Propagated::Fixpoint(pa);
     }
     let k = f.clauses[c].unit_lit(&pa);
     if k >= f.clauses[c].0.len() {
-        return pa;
+        return Propagated::Conflict;
     }
-    let pb = set_var(&pa, f.clauses[c].0[k].var, f.clauses[c].0[k].value);
-    propagate(f, pb, c + 1)
+    let pb = set_var(pa, f.clauses[c].0[k].var, f.clauses[c].0[k].value);
+    propagate(f, pb, c + 1, f.clauses.len())
 }
 
 fn solve(f: &Formula, pa: Pasn) -> Answer {
-    let pb = propagate(f, pa, 0);
-    if f.conflict(&pb) {
-        return Answer::Unsat;
-    }
-    let c = f.open_clause(&pb);
-    if c == f.clauses.len() {
-        return Answer::Sat(pb.assign);
-    }
-    let k = f.clauses[c].unset_from(&pb, 0);
-    let v = f.clauses[c].0[k].var;
-    let b = f.clauses[c].0[k].value;
-    match solve(f, set_var(&pb, v, b)) {
-        Answer::Sat(a) => Answer::Sat(a),
-        Answer::Unsat => solve(f, set_var(&pb, v, !b)),
+    match propagate(f, pa, 0, f.clauses.len()) {
+        Propagated::Conflict => Answer::Unsat,
+        Propagated::Fixpoint(pb) => {
+            let c = f.open_clause(&pb);
+            if c == f.clauses.len() {
+                return Answer::Sat(pb.assign);
+            }
+            let k = f.clauses[c].unset_from(&pb, 0);
+            let v = f.clauses[c].0[k].var;
+            let b = f.clauses[c].0[k].value;
+            match solve(f, set_var(copy(&pb), v, b)) {
+                Answer::Sat(a) => Answer::Sat(a),
+                Answer::Unsat => solve(f, set_var(pb, v, !b)),
+            }
+        }
     }
 }
 
