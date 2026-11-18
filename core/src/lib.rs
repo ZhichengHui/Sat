@@ -1,9 +1,9 @@
 #![allow(non_snake_case)]
 
-// This is a very naive, but verified SAT solver.
+// A naive, but verified SAT solver: backtracking over the variables in a fixed order, which
+// abandons a branch as soon as the partial assignment falsifies a clause.
 // It is a port of a verified WhyML solver, and is therefore
-// an imperative implementation of a functional prgram.
-// In other words: very naive, very slow.
+// an imperative implementation of a functional program.
 
 pub struct Assignments(pub Vec<bool>);
 pub struct Lit {
@@ -28,29 +28,35 @@ pub enum Answer {
 }
 
 impl Clause {
-    fn eval(&self, a: &Assignments) -> bool {
+    /// The clause is false under the partial assignment: every literal's variable is assigned
+    /// (below `pa.ix`) and has the other value.
+    fn falsified(&self, pa: &Pasn) -> bool {
         let mut i: usize = 0;
         let clause_len = self.0.len();
         while i < clause_len {
-            if a.0[self.0[i].var] == self.0[i].value {
-                return true;
+            if self.0[i].var >= pa.ix {
+                return false;
             }
-            i += 1;
-        }
-        false
-    }
-}
-
-impl Formula {
-    fn eval(&self, a: &Assignments) -> bool {
-        let mut i: usize = 0;
-        while i < self.clauses.len() {
-            if !self.clauses[i].eval(a) {
+            if pa.assign.0[self.0[i].var] == self.0[i].value {
                 return false;
             }
             i += 1;
         }
         true
+    }
+}
+
+impl Formula {
+    /// Some clause is false under the partial assignment.
+    fn conflict(&self, pa: &Pasn) -> bool {
+        let mut i: usize = 0;
+        while i < self.clauses.len() {
+            if self.clauses[i].falsified(pa) {
+                return true;
+            }
+            i += 1;
+        }
+        false
     }
 }
 
@@ -61,11 +67,11 @@ fn set_next(pa: &Pasn, b: bool) -> Pasn {
 }
 
 fn solve(f: &Formula, pa: Pasn) -> Answer {
-    if pa.ix == pa.assign.0.len() {
-        if f.eval(&pa.assign) {
-            return Answer::Sat(pa.assign);
-        }
+    if f.conflict(&pa) {
         return Answer::Unsat;
+    }
+    if pa.ix == pa.assign.0.len() {
+        return Answer::Sat(pa.assign);
     }
     match solve(f, set_next(&pa, true)) {
         Answer::Sat(a) => Answer::Sat(a),

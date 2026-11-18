@@ -68,10 +68,6 @@ definition sol :: \<open>Formula \<Rightarrow> bool list \<Rightarrow> nat \<Rig
        formula_sat (Assignments_v0 m) f
    | Answer_Unsat \<Rightarrow> \<not> ext_sat f a i\<close>
 
-lemma sol_leaf:
-  \<open>sol f a (length a) (if formula_sat a f then Answer_Sat (make_Assignments a) else Answer_Unsat)\<close>
-  by (simp add: sol_def ext_sat_complete)
-
 lemma sol_step:
   assumes \<open>i < length a\<close> \<open>sol f (a[i := True]) (Suc i) r1\<close>
     \<open>case r1 of Answer_Sat m \<Rightarrow> r = Answer_Sat m | Answer_Unsat \<Rightarrow> sol f (a[i := False]) (Suc i) r\<close>
@@ -109,6 +105,50 @@ lemma sol_start:
      Answer_Sat a \<Rightarrow> length (Assignments_v0 a) = n \<and> formula_sat (Assignments_v0 a) f
    | Answer_Unsat \<Rightarrow> (\<forall>a. length a = n \<longrightarrow> \<not> formula_sat a f)\<close>
   using assms by (cases r) (auto simp add: sol_def ext_sat_start)
+
+text \<open>The clause is false under the partial assignment whose first \<open>i\<close> variables have the
+  values of \<open>a\<close>: every literal's variable is among them and has the other value.\<close>
+definition clause_false :: \<open>bool list \<Rightarrow> nat \<Rightarrow> Clause \<Rightarrow> bool\<close> where
+  \<open>clause_false a i c \<equiv> \<forall>l \<in> set (Clause_v0 c). unat (Lit_var l) < i \<and> \<not> lit_sat a l\<close>
+
+text \<open>Some clause of the formula is false under that partial assignment.\<close>
+definition conflict :: \<open>bool list \<Rightarrow> nat \<Rightarrow> Formula \<Rightarrow> bool\<close> where
+  \<open>conflict a i f \<equiv> \<exists>c \<in> set (Formula_clauses f). clause_false a i c\<close>
+
+lemma clause_false_iff_nth:
+  \<open>clause_false a i c \<longleftrightarrow>
+     (\<forall>j < length (Clause_v0 c). unat (Lit_var (Clause_v0 c ! j)) < i \<and>
+        a ! unat (Lit_var (Clause_v0 c ! j)) \<noteq> Lit_value (Clause_v0 c ! j))\<close>
+  unfolding clause_false_def lit_sat_def by (simp add: all_set_conv_all_nth)
+
+lemma conflict_iff_nth:
+  \<open>conflict a i f \<longleftrightarrow> (\<exists>j < length (Formula_clauses f). clause_false a i (Formula_clauses f ! j))\<close>
+  unfolding conflict_def by (simp add: Bex_def in_set_conv_nth) blast
+
+text \<open>A conflict of the partial assignment excludes all its extensions.\<close>
+lemma conflict_not_ext_sat:
+  assumes \<open>conflict a i f\<close>
+  shows \<open>\<not> ext_sat f a i\<close>
+proof
+  assume \<open>ext_sat f a i\<close>
+  then obtain a' where a': \<open>take i a' = take i a\<close> \<open>formula_sat a' f\<close>
+    unfolding ext_sat_def by blast
+  obtain c where c: \<open>c \<in> set (Formula_clauses f)\<close> \<open>clause_false a i c\<close>
+    using assms unfolding conflict_def by blast
+  have \<open>a' ! v = a ! v\<close> if \<open>v < i\<close> for v
+    using a'(1) that by (metis nth_take)
+  then have \<open>\<not> clause_sat a' c\<close>
+    using c(2) unfolding clause_false_def clause_sat_def lit_sat_def by auto
+  then show False
+    using a'(2) c(1) unfolding formula_sat_def by blast
+qed
+
+text \<open>Without a conflict, a complete assignment satisfies the formula.\<close>
+lemma no_conflict_formula_sat:
+  assumes \<open>\<not> conflict a (length a) f\<close>
+    \<open>\<forall>c \<in> set (Formula_clauses f). \<forall>l \<in> set (Clause_v0 c). unat (Lit_var l) < length a\<close>
+  shows \<open>formula_sat a f\<close>
+  using assms unfolding conflict_def clause_false_def formula_sat_def clause_sat_def by blast
 
 lemma unat_word_Suc:
   fixes x :: \<open>64 word\<close>
@@ -150,65 +190,71 @@ definition formula_wf :: \<open>Formula \<Rightarrow> nat \<Rightarrow> bool\<cl
         length (Clause_v0 c) \<le> urust_fuel \<and> length (Clause_v0 c) < 2^64 \<and>
         (\<forall>l \<in> set (Clause_v0 c). unat (Lit_var l) < n))\<close>
 
-definition Clause_eval_contract :: \<open>Clause \<Rightarrow> Assignments \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
-  \<open>Clause_eval_contract c a \<equiv>
+definition Clause_falsified_contract :: \<open>Clause \<Rightarrow> Pasn \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
+  \<open>Clause_falsified_contract c pa \<equiv>
+     let a = Assignments_v0 (Pasn_assign pa) in
      let pre = can_alloc_reference \<star>
-        \<langle>(\<forall>l \<in> set (Clause_v0 c). unat (Lit_var l) < length (Assignments_v0 a)) \<and>
+        \<langle>(\<forall>l \<in> set (Clause_v0 c). unat (Lit_var l) < length a) \<and>
          length (Clause_v0 c) \<le> urust_fuel \<and> length (Clause_v0 c) < 2^64\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star> \<langle>r = clause_sat (Assignments_v0 a) c\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>r = clause_false a (unat (Pasn_ix pa)) c\<rangle> in
      make_function_contract pre post\<close>
 
-lemma Clause_eval_spec:
-  shows \<open>\<Gamma>; Clause_eval c a \<Turnstile>\<^sub>F Clause_eval_contract c a\<close>
-  apply (crush_boot f: Clause_eval_def contract: Clause_eval_contract_def)
+lemma Clause_falsified_spec:
+  shows \<open>\<Gamma>; Clause_falsified c pa \<Turnstile>\<^sub>F Clause_falsified_contract c pa\<close>
+  apply (crush_boot f: Clause_falsified_def contract: Clause_falsified_contract_def)
   apply (crush_base inline: len_def simp add: true_def false_def)
   subgoal for i_ref
     apply (ucincl_discharge\<open>
       rule_tac
         INV=\<open>\<lambda>k. \<Squnion>g i. i_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>i \<star> can_alloc_reference \<star>
                \<langle>unat i \<le> length (Clause_v0 c) \<and>
-                (\<forall>j < unat i. \<not> lit_sat (Assignments_v0 a) (Clause_v0 c ! j)) \<and>
+                (\<forall>j < unat i. unat (Lit_var (Clause_v0 c ! j)) < unat (Pasn_ix pa) \<and>
+                   \<not> lit_sat (Assignments_v0 (Pasn_assign pa)) (Clause_v0 c ! j)) \<and>
                 length (Clause_v0 c) - unat i \<le> k\<rangle>\<close> and
         INV'=\<open>\<lambda>k. \<Squnion>g i. i_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>i \<star> can_alloc_reference \<star>
                \<langle>unat i < length (Clause_v0 c) \<and>
-                (\<forall>j < unat i. \<not> lit_sat (Assignments_v0 a) (Clause_v0 c ! j)) \<and>
+                (\<forall>j < unat i. unat (Lit_var (Clause_v0 c ! j)) < unat (Pasn_ix pa) \<and>
+                   \<not> lit_sat (Assignments_v0 (Pasn_assign pa)) (Clause_v0 c ! j)) \<and>
                 length (Clause_v0 c) - unat i \<le> Suc k\<rangle>\<close> and
-        \<tau>=\<open>\<lambda>r. can_alloc_reference \<star> \<langle>r = clause_sat (Assignments_v0 a) c\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>r. can_alloc_reference \<star> \<langle>r = clause_false (Assignments_v0 (Pasn_assign pa)) (unat (Pasn_ix pa)) c\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base simp add: true_def false_def lit_sat_def clause_sat_iff_nth word_less_nat_alt unat_of_nat_eq
-        unat_word_Suc_simp)
-    apply (auto simp add: less_Suc_eq clause_sat_iff_nth)
+    apply (crush_base simp add: true_def false_def lit_sat_def clause_false_iff_nth word_less_nat_alt
+        word_le_nat_alt unat_of_nat_eq unat_word_Suc_simp)
+    apply (auto simp add: less_Suc_eq clause_false_iff_nth lit_sat_def)
     done
   done
 
-definition Formula_eval_contract :: \<open>Formula \<Rightarrow> Assignments \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
-  \<open>Formula_eval_contract f a \<equiv>
-     let pre = can_alloc_reference \<star> \<langle>formula_wf f (length (Assignments_v0 a))\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star> \<langle>r = formula_sat (Assignments_v0 a) f\<rangle> in
+definition Formula_conflict_contract :: \<open>Formula \<Rightarrow> Pasn \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
+  \<open>Formula_conflict_contract f pa \<equiv>
+     let a = Assignments_v0 (Pasn_assign pa) in
+     let pre = can_alloc_reference \<star> \<langle>formula_wf f (length a)\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>r = conflict a (unat (Pasn_ix pa)) f\<rangle> in
      make_function_contract pre post\<close>
 
-lemma Formula_eval_spec:
-  shows \<open>\<Gamma>; Formula_eval f a \<Turnstile>\<^sub>F Formula_eval_contract f a\<close>
-  apply (crush_boot f: Formula_eval_def contract: Formula_eval_contract_def)
+lemma Formula_conflict_spec:
+  shows \<open>\<Gamma>; Formula_conflict f pa \<Turnstile>\<^sub>F Formula_conflict_contract f pa\<close>
+  apply (crush_boot f: Formula_conflict_def contract: Formula_conflict_contract_def)
   apply (crush_base inline: len_def simp add: true_def false_def)
   subgoal for i_ref
     apply (ucincl_discharge\<open>
       rule_tac
         INV=\<open>\<lambda>k. \<Squnion>g i. i_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>i \<star> can_alloc_reference \<star>
                \<langle>unat i \<le> length (Formula_clauses f) \<and>
-                (\<forall>j < unat i. clause_sat (Assignments_v0 a) (Formula_clauses f ! j)) \<and>
+                (\<forall>j < unat i. \<not> clause_false (Assignments_v0 (Pasn_assign pa)) (unat (Pasn_ix pa))
+                   (Formula_clauses f ! j)) \<and>
                 length (Formula_clauses f) - unat i \<le> k\<rangle>\<close> and
         INV'=\<open>\<lambda>k. \<Squnion>g i. i_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>i \<star> can_alloc_reference \<star>
                \<langle>unat i < length (Formula_clauses f) \<and>
-                (\<forall>j < unat i. clause_sat (Assignments_v0 a) (Formula_clauses f ! j)) \<and>
+                (\<forall>j < unat i. \<not> clause_false (Assignments_v0 (Pasn_assign pa)) (unat (Pasn_ix pa))
+                   (Formula_clauses f ! j)) \<and>
                 length (Formula_clauses f) - unat i \<le> Suc k\<rangle>\<close> and
-        \<tau>=\<open>\<lambda>r. can_alloc_reference \<star> \<langle>r = formula_sat (Assignments_v0 a) f\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>r. can_alloc_reference \<star> \<langle>r = conflict (Assignments_v0 (Pasn_assign pa)) (unat (Pasn_ix pa)) f\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base inline: len_def specs add: Clause_eval_spec contracts add: Clause_eval_contract_def
-        simp add: true_def false_def formula_sat_iff_nth formula_wf_def word_less_nat_alt unat_of_nat_eq unat_word_Suc_simp)
-    apply (auto simp add: less_Suc_eq formula_sat_iff_nth)
+    apply (crush_base inline: len_def specs add: Clause_falsified_spec contracts add: Clause_falsified_contract_def
+        simp add: true_def false_def conflict_iff_nth formula_wf_def word_less_nat_alt unat_of_nat_eq unat_word_Suc_simp)
+    apply (auto simp add: less_Suc_eq conflict_iff_nth)
     done
   done
 
@@ -241,8 +287,8 @@ lemma solve_rec_step_spec:
   assumes \<open>\<And>pa. \<Gamma>; R f pa \<Turnstile>\<^sub>F solve_contract k f pa\<close>
   shows \<open>\<Gamma>; solve_rec_step R f pa \<Turnstile>\<^sub>F solve_contract (Suc k) f pa\<close>
   apply (crush_boot f: solve_rec_step_def contract: solve_contract_def)
-  apply (crush_base inline: len_def specs add: assms Formula_eval_spec set_next_spec
-      contracts add: solve_contract_def Formula_eval_contract_def set_next_contract_def
+  apply (crush_base inline: len_def specs add: assms Formula_conflict_spec set_next_spec
+      contracts add: solve_contract_def Formula_conflict_contract_def set_next_contract_def
       simp add: true_def false_def word_less_nat_alt unat_of_nat_eq unat_word_Suc_simp word64_eq_of_nat_iff)
   subgoal for x
     apply (cases x)
@@ -257,8 +303,8 @@ lemma solve_rec_step_spec:
       using sol_step[of \<open>unat (Pasn_ix pa)\<close> \<open>Assignments_v0 (Pasn_assign pa)\<close> f Answer_Unsat r]
       by (simp add: le_neq_implies_less)
     done
-  subgoal by (simp add: sol_def ext_sat_complete)
-  subgoal by (simp add: sol_def ext_sat_complete)
+  subgoal by (simp add: sol_def no_conflict_formula_sat formula_wf_def conflict_not_ext_sat)
+  subgoal by (simp add: sol_def no_conflict_formula_sat formula_wf_def conflict_not_ext_sat)
   done
 
 lemma solve_rec_spec:

@@ -6,7 +6,7 @@ section \<open>The top-level theorem\<close>
 
 text \<open>The fuel that suffices for a formula: more than the number of variables (the depth of the
   recursion of \<^verbatim>\<open>solve\<close>), and at least the number of clauses and the length of every clause
-  (the iterations of the loops of \<^verbatim>\<open>Formula::eval\<close> and \<^verbatim>\<open>Clause::eval\<close>).\<close>
+  (the iterations of the loops of \<^verbatim>\<open>Formula::conflict\<close> and \<^verbatim>\<open>Clause::falsified\<close>).\<close>
 definition fuel_top :: \<open>Formula \<Rightarrow> nat\<close> where
   \<open>fuel_top f \<equiv>
      Suc (unat (Formula_num_vars f)) + length (Formula_clauses f) +
