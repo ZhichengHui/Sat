@@ -1,4 +1,4 @@
-# Suite satlib: small standard instances from SATLIB, graded from what the present solver decides
+# Suite Sat-2026-11-18: small standard instances from SATLIB, graded from what the present solver decides
 # to what needs unit propagation, DPLL and clause learning. A state-of-the-art solver decides every
 # instance in well under a second (hole9: a few seconds); read by bench/run.sh (PLAN.md, Benchmarks).
 #
