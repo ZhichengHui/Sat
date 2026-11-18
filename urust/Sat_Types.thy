@@ -65,4 +65,26 @@ enum Propagated =
 definition "Propagated_Fixpoint_mk" :: \<open>Pasn \<Rightarrow> ('s, Propagated, 'abort, 'i, 'o) function_body\<close> where
   [crush_inline]: \<open>Propagated_Fixpoint_mk \<equiv> \<lambda>a0. FunctionBody (literal (Propagated_Fixpoint a0))\<close>
 
+(* Rust: Search *)
+scalable_datatype_record Search =
+  Search_assign :: \<open>bool list\<close>
+  Search_set :: \<open>bool list\<close>
+  Search_level :: \<open>(64 word) list\<close>
+  Search_reason :: \<open>(64 word) list\<close>
+  Search_trail :: \<open>(64 word) list\<close>
+  Search_lim :: \<open>(64 word) list\<close>
+  Search_qhead :: \<open>64 word\<close>
+  Search_head :: \<open>(64 word) list\<close>
+  Search_next :: \<open>(64 word) list\<close>
+  Search_wpos :: \<open>(64 word) list\<close>
+  Search_phase :: \<open>bool list\<close>
+  Search_act :: \<open>(64 word) list\<close>
+  Search_inc :: \<open>64 word\<close>
+  Search_seen :: \<open>bool list\<close>
+  Search_learnt :: \<open>Lit list\<close>
+micro_rust_record Search
+
+definition "Search_mk" :: \<open>(bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (bool list) \<Rightarrow> (Lit list) \<Rightarrow> ('s, Search, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>Search_mk \<equiv> \<lambda>a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14. FunctionBody (literal (make_Search a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14))\<close>
+
 end

@@ -1,5 +1,5 @@
 theory Sat_Top
-  imports Sat_Proof.Sat_Proof
+  imports Sat_Proof.Sat_Proof Sat_Proof.Sat_CDCL
 begin
 
 section \<open>The top-level theorem\<close>
@@ -25,20 +25,40 @@ qed
 context Sat_ctx
 begin
 
-text \<open>With enough fuel the solver satisfies the contract of the specification. The proof reuses
-  \<open>solve_spec\<close> of \<^verbatim>\<open>Sat_Proof\<close> and turns its answer into the contract's with
-  \<open>sol_start\<close>; the fuel bound \<^const>\<open>fuel_top\<close> and \<^const>\<open>sat_repr_ok\<close>
-  give the size conditions of \<open>formula_wf\<close>.\<close>
+text \<open>With enough fuel the solver satisfies the contract of the specification. The answer of
+  \<open>cdcl_spec\<close> (\<^verbatim>\<open>Sat_CDCL\<close>) is the contract's when it is one; otherwise the proof reuses
+  \<open>solve_spec\<close> of \<^verbatim>\<open>Sat_Proof\<close> and turns its answer into the contract's with \<open>sol_start\<close>;
+  the fuel bound \<^const>\<open>fuel_top\<close> and \<^const>\<open>sat_repr_ok\<close> give the size conditions of
+  \<open>formula_wf\<close>.\<close>
 lemma solver_spec:
   assumes \<open>fuel_top f \<le> urust_fuel\<close>
   shows \<open>\<Gamma>; solver f \<Turnstile>\<^sub>F solver_contract f\<close>
   apply (crush_boot f: solver_def contract: solver_contract_def)
-  apply (crush_base inline: vec_from_elem_def Pasn_mk_def Assignments_mk_def
-      specs add: solve_spec contracts add: solve_contract_def
-      simp add: true_def false_def unat_lt2p formula_wf_def)
-  using assms fuel_top_clause[of _ f] unat_lt2p[of \<open>Formula_num_vars f\<close>] sol_start
-    unset_le_length[of \<open>replicate (unat (Formula_num_vars f)) False\<close>]
-  by (fastforce simp: fuel_top_def sat_repr_ok_def formula_invariant_def)+
+  apply (crush_base specs add: cdcl_spec contracts add: cdcl_contract_def simp add: true_def false_def)
+  subgoal premises prems for x
+  proof (cases x)
+    case None
+    show ?thesis
+      unfolding None
+      apply (simp only: option.case)
+      apply (crush_base inline: vec_from_elem_def Pasn_mk_def Assignments_mk_def
+          specs add: solve_spec contracts add: solve_contract_def
+          simp add: true_def false_def unat_lt2p formula_wf_def)
+      using assms prems fuel_top_clause[of _ f] unat_lt2p[of \<open>Formula_num_vars f\<close>] sol_start
+        unset_le_length[of \<open>replicate (unat (Formula_num_vars f)) False\<close>]
+      by (fastforce simp: fuel_top_def sat_repr_ok_def formula_invariant_def)+
+  next
+    case (Some a)
+    have \<open>cdcl_post f (Some a)\<close>
+      using prems Some by simp
+    then show ?thesis
+      unfolding Some
+      apply (simp only: option.case)
+      apply crush_base
+      apply (auto simp: cdcl_post_def split: Answer.splits)
+      done
+  qed
+  done
 
 end
 
@@ -49,7 +69,7 @@ text \<open>\<^verbatim>\<open>Sat_heap\<close> has the assumptions of \<^locale
   form an instance of \<^locale>\<open>Sat_ctx\<close>, and the contract lemmas of \<^locale>\<open>Sat_ctx\<close> apply.\<close>
 lemma Sat_ctxI:
   \<open>Sat_ctx update_raw_fun dereference_raw_fun reference_raw_fun points_to_raw' gref_can_store
-     new_gref_can_store can_alloc_reference prism_1 prism_2\<close>
+     new_gref_can_store can_alloc_reference prism_1 prism_2 prism_3 prism_4 prism_5\<close>
   by intro_locales
 
 theorem solver_correct:
