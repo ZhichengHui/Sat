@@ -233,21 +233,22 @@ definition "key" :: \<open>(64 word) \<Rightarrow> bool \<Rightarrow> ('s, 64 wo
 definition "new_search" :: \<open>(64 word) \<Rightarrow> ('s, Search, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>new_search \<equiv> \<lambda>n. FunctionBody \<lbrakk>
     {
-      let fld_5 = vec_from_elem(false, n);
       let fld_6 = vec_from_elem(false, n);
-      let fld_7 = vec_from_elem(0_usize, n);
-      let fld_8 = vec_from_elem(NONE(), n);
-      let fld_9 = { let res_1 = []; \<llangle>res_1 :: (64 word) list\<rrangle> };
-      let fld_10 = { let res_2 = []; \<llangle>res_2 :: (64 word) list\<rrangle> };
-      let fld_11 = 0_usize;
-      let fld_12 = vec_from_elem(NONE(), 2_usize * n);
-      let fld_13 = { let res_3 = []; \<llangle>res_3 :: (64 word) list\<rrangle> };
-      let fld_14 = { let res_4 = []; \<llangle>res_4 :: (64 word) list\<rrangle> };
-      let fld_15 = vec_from_elem(false, n);
-      let fld_16 = vec_from_elem(0_usize, n);
-      let fld_17 = 1_usize;
-      let fld_18 = vec_from_elem(false, n);
-      \<llangle>make_Search fld_5 fld_6 fld_7 fld_8 fld_9 fld_10 fld_11 fld_12 fld_13 fld_14 fld_15 fld_16 fld_17 fld_18\<rrangle>
+      let fld_7 = vec_from_elem(false, n);
+      let fld_8 = vec_from_elem(0_usize, n);
+      let fld_9 = vec_from_elem(NONE(), n);
+      let fld_10 = { let res_1 = []; \<llangle>res_1 :: (64 word) list\<rrangle> };
+      let fld_11 = { let res_2 = []; \<llangle>res_2 :: (64 word) list\<rrangle> };
+      let fld_12 = 0_usize;
+      let fld_13 = vec_from_elem(NONE(), 2_usize * n);
+      let fld_14 = { let res_3 = []; \<llangle>res_3 :: (64 word) list\<rrangle> };
+      let fld_15 = { let res_4 = []; \<llangle>res_4 :: (64 word) list\<rrangle> };
+      let fld_16 = vec_from_elem(false, n);
+      let fld_17 = vec_from_elem(0_usize, n);
+      let fld_18 = 1_usize;
+      let fld_19 = vec_from_elem(false, n);
+      let fld_20 = { let res_5 = []; \<llangle>res_5 :: Lit list\<rrangle> };
+      \<llangle>make_Search fld_6 fld_7 fld_8 fld_9 fld_10 fld_11 fld_12 fld_13 fld_14 fld_15 fld_16 fld_17 fld_18 fld_19 fld_20\<rrangle>
     }
   \<rbrakk>\<close>
 
@@ -463,8 +464,8 @@ definition "Search_bump" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rig
   \<rbrakk>\<close>
 
 (* Rust: Search::analyze_clause *)
-definition "Search_analyze_clause" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> Formula \<Rightarrow> (Clause list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (('addr, 'gv, Lit list) Global_Store.ref) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>Search_analyze_clause \<equiv> \<lambda>self f learned c p cur learnt. FunctionBody \<lbrakk>
+definition "Search_analyze_clause" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> Formula \<Rightarrow> (Clause list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_analyze_clause \<equiv> \<lambda>self f learned c p cur. FunctionBody \<lbrakk>
     let len_v = clause_len(f, learned, c);
     let mut count_v = 0_usize;
     let mut j = 0_usize;
@@ -480,9 +481,7 @@ definition "Search_analyze_clause" :: \<open>(('addr, 'gv, Search) Global_Store.
             * count_v += 1_usize;
           }
         } else {
-          if len(* learnt) < BIG() {
-            vec_push(learnt, q);
-          }
+          vec_push(self.Search_learnt, q);
         }
       };
       * j += 1_usize;
@@ -504,13 +503,13 @@ definition "Search_prev_seen" :: \<open>Search \<Rightarrow> (64 word) \<Rightar
   \<rbrakk>\<close>
 
 (* Rust: Search::finish_learnt *)
-definition "Search_finish_learnt" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (('addr, 'gv, Lit list) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>Search_finish_learnt \<equiv> \<lambda>self learnt. FunctionBody \<lbrakk>
+definition "Search_finish_learnt" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_finish_learnt \<equiv> \<lambda>self. FunctionBody \<lbrakk>
     let mut best = 1_usize;
     let mut best_level = 0_usize;
     let mut j = 1_usize;
-    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* j) < len(* learnt) {
-      let v = (* learnt)[* j].Lit_var;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* j) < len(* (self.Search_learnt)) {
+      let v = (* (self.Search_learnt))[* j].Lit_var;
       if v < len(* (self.Search_seen)) {
         * (self.Search_seen[v]) = false;
       };
@@ -520,35 +519,47 @@ definition "Search_finish_learnt" :: \<open>(('addr, 'gv, Search) Global_Store.r
       };
       * j += 1_usize;
     };
-    if ((* best) < len(* learnt)) && (len(* learnt) > 2_usize) {
-      slice_swap(learnt, 1_usize, * best);
+    if ((* best) < len(* (self.Search_learnt))) && (len(* (self.Search_learnt)) > 2_usize) {
+      slice_swap(self.Search_learnt, 1_usize, * best);
     }
+  \<rbrakk>\<close>
+
+(* Rust: Search::copy_learnt *)
+definition "Search_copy_learnt" :: \<open>Search \<Rightarrow> ('s, Lit list, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_copy_learnt \<equiv> \<lambda>self. FunctionBody \<lbrakk>
+    let mut out = { let init_2 = { let res_1 = []; \<llangle>res_1 :: Lit list\<rrangle> }; \<llangle>init_2 :: Lit list\<rrangle> };
+    let mut i = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while ((* i) < len(self.Search_learnt)) && ((* i) < BIG()) {
+      vec_push(out, Lit_mk { Lit_var: self.Search_learnt[* i].Lit_var, Lit_value: self.Search_learnt[* i].Lit_value });
+      * i += 1_usize;
+    };
+    * out
   \<rbrakk>\<close>
 
 (* Rust: Search::analyze *)
 definition "Search_analyze" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> Formula \<Rightarrow> (Clause list) \<Rightarrow> (64 word) \<Rightarrow> ('s, Lit list, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_analyze \<equiv> \<lambda>self f learned confl. FunctionBody \<lbrakk>
     let cur = len(* (self.Search_lim));
-    let mut learnt = { let init_2 = { let res_1 = []; \<llangle>res_1 :: Lit list\<rrangle> }; \<llangle>init_2 :: Lit list\<rrangle> };
-    vec_push(learnt, Lit_mk { Lit_var: NONE(), Lit_value: false });
+    vec_clear(self.Search_learnt);
+    vec_push(self.Search_learnt, Lit_mk { Lit_var: NONE(), Lit_value: false });
     let mut counter = 0_usize;
     let mut p = NONE();
     let mut idx = len(* (self.Search_trail));
     let mut c = confl;
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] loop {
-      let added = Search_analyze_clause(self, f, learned, * c, * p, cur, learnt);
+      let added = Search_analyze_clause(self, f, learned, * c, * p, cur);
       if added > (NONE() - (* counter)) {
-        return { let res_3 = []; \<llangle>res_3 :: Lit list\<rrangle> };
+        return { let res_1 = []; \<llangle>res_1 :: Lit list\<rrangle> };
       };
       * counter += added;
       let i = Search_prev_seen(* self, * idx);
       if (i >= len(* (self.Search_trail))) || ((* counter) == 0_usize) {
-        return { let res_4 = []; \<llangle>res_4 :: Lit list\<rrangle> };
+        return { let res_2 = []; \<llangle>res_2 :: Lit list\<rrangle> };
       };
       * idx = i;
       * p = (* (self.Search_trail))[i];
       if (((* p) >= len(* (self.Search_seen))) || ((* p) >= len(* (self.Search_reason)))) || ((* p) >= len(* (self.Search_assign))) {
-        return { let res_5 = []; \<llangle>res_5 :: Lit list\<rrangle> };
+        return { let res_3 = []; \<llangle>res_3 :: Lit list\<rrangle> };
       };
       * (self.Search_seen[* p]) = false;
       * counter -= 1_usize;
@@ -557,15 +568,15 @@ definition "Search_analyze" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<
       };
       * c = (* (self.Search_reason))[* p];
     };
-    if (((* counter) != 0_usize) || ((* p) >= len(* (self.Search_assign)))) || (len(* learnt) == 0_usize) {
-      return { let res_6 = []; \<llangle>res_6 :: Lit list\<rrangle> };
+    if (((* counter) != 0_usize) || ((* p) >= len(* (self.Search_assign)))) || (len(* (self.Search_learnt)) == 0_usize) {
+      return { let res_4 = []; \<llangle>res_4 :: Lit list\<rrangle> };
     };
-    * (learnt[0_usize]) = Lit_mk { Lit_var: * p, Lit_value: !((* (self.Search_assign))[* p]) };
+    * (self.Search_learnt[0_usize]) = Lit_mk { Lit_var: * p, Lit_value: !((* (self.Search_assign))[* p]) };
     if (* (self.Search_inc)) < BIG() {
       * (self.Search_inc) += ((* (self.Search_inc)) / 16_usize) + 1_usize;
     };
-    Search_finish_learnt(self, learnt);
-    * learnt
+    Search_finish_learnt(self);
+    Search_copy_learnt(* self)
   \<rbrakk>\<close>
 
 (* Rust: Search::backtrack *)

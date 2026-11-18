@@ -249,7 +249,8 @@ fn key(v: usize, b: bool) -> usize {
 /// `wpos[2c + 1]`; the watch nodes `2c`, `2c + 1` of the literal `(v, b)` form a list through
 /// `next` that starts at `head[key(v, b)]`. `qhead` is the first trail position not yet
 /// propagated. `phase` is the last value of each variable, `act` its activity, raised by `inc`
-/// whenever it takes part in a conflict; `seen` marks variables during conflict analysis.
+/// whenever it takes part in a conflict; `seen` marks variables during conflict analysis, and
+/// `learnt` collects the literals of the clause it learns.
 struct Search {
     assign: Vec<bool>,
     set: Vec<bool>,
@@ -265,6 +266,7 @@ struct Search {
     act: Vec<usize>,
     inc: usize,
     seen: Vec<bool>,
+    learnt: Vec<Lit>,
 }
 
 impl Search {
@@ -412,15 +414,7 @@ impl Search {
     /// The literals of clause `c` in conflict analysis: each variable other than `p`, not yet
     /// seen and above level 0 is marked; the literal is added to `learnt` if its level is below
     /// `cur`. The number of the marked variables at level `cur` or above.
-    fn analyze_clause(
-        &mut self,
-        f: &Formula,
-        learned: &Vec<Clause>,
-        c: usize,
-        p: usize,
-        cur: usize,
-        learnt: &mut Vec<Lit>,
-    ) -> usize {
+    fn analyze_clause(&mut self, f: &Formula, learned: &Vec<Clause>, c: usize, p: usize, cur: usize) -> usize {
         let len = clause_len(f, learned, c);
         let mut count: usize = 0;
         let mut j: usize = 0;
@@ -435,8 +429,8 @@ impl Search {
                     if count < NONE {
                         count += 1;
                     }
-                } else if learnt.len() < BIG {
-                    learnt.push(q);
+                } else {
+                    self.learnt.push(q);
                 }
             }
             j += 1;
@@ -458,12 +452,12 @@ impl Search {
 
     /// Clears the marks of the literals of `learnt` after the first, and moves one of the highest
     /// level among them to the second position.
-    fn finish_learnt(&mut self, learnt: &mut Vec<Lit>) {
+    fn finish_learnt(&mut self) {
         let mut best: usize = 1;
         let mut best_level: usize = 0;
         let mut j: usize = 1;
-        while j < learnt.len() {
-            let v = learnt[j].var;
+        while j < self.learnt.len() {
+            let v = self.learnt[j].var;
             if v < self.seen.len() {
                 self.seen[v] = false;
             }
@@ -473,9 +467,20 @@ impl Search {
             }
             j += 1;
         }
-        if best < learnt.len() && learnt.len() > 2 {
-            learnt.swap(1, best);
+        if best < self.learnt.len() && self.learnt.len() > 2 {
+            self.learnt.swap(1, best);
         }
+    }
+
+    /// A copy of `learnt`, of at most `BIG` literals.
+    fn copy_learnt(&self) -> Vec<Lit> {
+        let mut out: Vec<Lit> = Vec::new();
+        let mut i: usize = 0;
+        while i < self.learnt.len() && i < BIG {
+            out.push(Lit { var: self.learnt[i].var, value: self.learnt[i].value });
+            i += 1;
+        }
+        out
     }
 
     /// First-UIP conflict analysis of the false clause `confl` at a decision level above 0: the
@@ -483,14 +488,14 @@ impl Search {
     /// empty if the analysis fails.
     fn analyze(&mut self, f: &Formula, learned: &Vec<Clause>, confl: usize) -> Vec<Lit> {
         let cur = self.lim.len();
-        let mut learnt: Vec<Lit> = Vec::new();
-        learnt.push(Lit { var: NONE, value: false });
+        self.learnt.clear();
+        self.learnt.push(Lit { var: NONE, value: false });
         let mut counter: usize = 0;
         let mut p = NONE;
         let mut idx = self.trail.len();
         let mut c = confl;
         loop {
-            let added = self.analyze_clause(f, learned, c, p, cur, &mut learnt);
+            let added = self.analyze_clause(f, learned, c, p, cur);
             if added > NONE - counter {
                 return Vec::new();
             }
@@ -511,15 +516,15 @@ impl Search {
             }
             c = self.reason[p];
         }
-        if counter != 0 || p >= self.assign.len() || learnt.len() == 0 {
+        if counter != 0 || p >= self.assign.len() || self.learnt.len() == 0 {
             return Vec::new();
         }
-        learnt[0] = Lit { var: p, value: !self.assign[p] };
+        self.learnt[0] = Lit { var: p, value: !self.assign[p] };
         if self.inc < BIG {
             self.inc += self.inc / 16 + 1;
         }
-        self.finish_learnt(&mut learnt);
-        learnt
+        self.finish_learnt();
+        self.copy_learnt()
     }
 
     /// Undoes every assignment above decision level `lvl`.
@@ -573,6 +578,7 @@ fn new_search(n: usize) -> Search {
         act: vec![0; n],
         inc: 1,
         seen: vec![false; n],
+        learnt: Vec::new(),
     }
 }
 
