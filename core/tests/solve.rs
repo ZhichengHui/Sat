@@ -124,3 +124,112 @@ fn repeated_and_complementary_literals() {
     assert!(!decide(&formula(2, &[&[1, 1, -1], &[2, 2], &[-2, -2]])));
     assert!(!decide(&formula(2, &[&[1, -1, -1], &[1, 1], &[-1, 2], &[-2, -2, -1]])));
 }
+
+/// Empty clauses next to unit clauses and clauses that propagation would make unit.
+#[test]
+fn empty_clause_with_units() {
+    assert!(!decide(&formula(1, &[&[1], &[]])));
+    assert!(!decide(&formula(2, &[&[1], &[-1, 2], &[]])));
+    assert!(!decide(&formula(2, &[&[], &[1], &[-1, 2]])));
+}
+
+/// The implications `x1 -> x2 -> ... -> xn`, in forward and reverse clause order, started by the
+/// unit clause `x1` placed first or last: propagation must resume after the last unit clause and
+/// restart from the first clause to reach every variable.
+fn chain(n: i64, reverse: bool, unit_last: bool) -> Vec<Vec<i64>> {
+    let mut cs: Vec<Vec<i64>> = (1..n).map(|i| vec![-i, i + 1]).collect();
+    if reverse {
+        cs.reverse();
+    }
+    if unit_last { cs.push(vec![1]) } else { cs.insert(0, vec![1]) }
+    cs
+}
+
+fn decide_vec(num_vars: usize, cs: &[Vec<i64>]) -> bool {
+    let refs: Vec<&[i64]> = cs.iter().map(|c| c.as_slice()).collect();
+    decide(&formula(num_vars, &refs))
+}
+
+#[test]
+fn unit_chains() {
+    for reverse in [false, true] {
+        for unit_last in [false, true] {
+            for n in [2, 3, 10, 200] {
+                let cs = chain(n, reverse, unit_last);
+                assert!(decide_vec(n as usize, &cs));
+                // The chain forces every variable true; `-xn` makes it unsatisfiable.
+                let mut neg = cs.clone();
+                neg.push(vec![-n]);
+                assert!(!decide_vec(n as usize, &neg), "n={n} reverse={reverse} unit_last={unit_last}");
+                neg.rotate_right(1);
+                assert!(!decide_vec(n as usize, &neg), "n={n} reverse={reverse} unit_last={unit_last}");
+            }
+        }
+    }
+}
+
+/// Conflicts that only propagation finds: no clause is false before propagation, and both
+/// branches on the first open clause fail by propagation alone.
+#[test]
+fn conflict_by_propagation() {
+    assert!(!decide(&formula(2, &[&[1], &[-1, 2], &[-1, -2]])));
+    assert!(!decide(&formula(2, &[&[-1, -2], &[-1, 2], &[1]])));
+    assert!(!decide(&formula(3, &[&[-2, 3], &[-3, -1], &[1], &[-1, 2]])));
+    // Every assignment of `x1` propagates to a conflict.
+    assert!(!decide(&formula(3, &[&[1, 2], &[1, -2], &[-1, 3], &[-1, -3]])));
+    assert!(!decide(&formula(3, &[&[-1, 3], &[1, 2], &[-1, -3], &[1, -2]])));
+}
+
+/// A clause whose unassigned literals all have the same variable (`1 1`, `1 -1`) is not unit;
+/// the solver must still find the forced value, or the tautology, by a decision.
+#[test]
+fn repeated_literals_in_unit_position() {
+    assert!(!decide(&formula(1, &[&[1, 1], &[-1]])));
+    assert!(!decide(&formula(1, &[&[-1], &[1, 1]])));
+    assert!(!decide(&formula(2, &[&[2], &[1, 1, -2], &[-1]])));
+    assert!(decide(&formula(2, &[&[2], &[1, -1, -2], &[-1]])));
+    assert!(decide(&formula(2, &[&[2], &[-2, 1, 1], &[-1, -1, 2]])));
+    assert!(!decide(&formula(2, &[&[2], &[-2, 1, 1], &[-1, -1, -2]])));
+    assert!(decide(&formula(3, &[&[1, -1], &[3, 3, -2], &[2], &[-1, 3]])));
+}
+
+/// Variables that no clause mentions still get a value in the model.
+#[test]
+fn unused_variables() {
+    assert!(decide(&formula(5, &[&[3]])));
+    assert!(decide(&formula(5, &[&[-5, 1], &[5]])));
+    assert!(!decide(&formula(5, &[&[2], &[-2]])));
+}
+
+/// Random formulas with many unit and binary clauses, so that most of the work is propagation,
+/// compared with brute force.
+#[test]
+fn random_propagation_heavy() {
+    let mut s: u64 = 0x9e37_79b9_7f4a_7c15;
+    let mut next = |m: u64| {
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        s % m
+    };
+    let (mut nsat, mut nunsat) = (0, 0);
+    for _ in 0..500 {
+        let n = 1 + next(14) as usize;
+        let m = next(3 * n as u64 + 1) as usize;
+        let cs: Vec<Vec<i64>> = (0..m)
+            .map(|_| {
+                let len = [0, 1, 1, 2, 2, 2, 3, 4][next(8) as usize];
+                (0..len)
+                    .map(|_| {
+                        let v = 1 + next(n as u64) as i64;
+                        if next(2) == 0 { v } else { -v }
+                    })
+                    .collect()
+            })
+            .collect();
+        let expected = brute(n, &cs);
+        assert_eq!(decide_vec(n, &cs), expected, "n={n} clauses={cs:?}");
+        if expected { nsat += 1 } else { nunsat += 1 }
+    }
+    assert!(nsat > 50 && nunsat > 50, "{nsat} sat, {nunsat} unsat");
+}
