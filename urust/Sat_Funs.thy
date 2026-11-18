@@ -182,15 +182,6 @@ urust_const_data "NONE" :: \<open>('s, 64 word, 'abort, 'i prompt, 'o prompt_out
 (* Rust: MAX_VARS *)
 urust_const_data "MAX_VARS" :: \<open>('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> = \<open>4611686018427387904\<close>
 
-(* Rust: MAX_CLAUSES *)
-urust_const_data "MAX_CLAUSES" :: \<open>('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> = \<open>4611686018427387904\<close>
-
-(* Rust: MAX_ACTIVITY *)
-urust_const_data "MAX_ACTIVITY" :: \<open>('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> = \<open>1152921504606846976\<close>
-
-(* Rust: RESTART_UNIT *)
-urust_const_data "RESTART_UNIT" :: \<open>('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> = \<open>100\<close>
-
 (* Rust: lit_idx *)
 definition "lit_idx" :: \<open>Lit \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>lit_idx \<equiv> \<lambda>l. FunctionBody \<lbrakk>
@@ -251,24 +242,6 @@ definition "resolve" :: \<open>(Lit list) \<Rightarrow> (Lit list) \<Rightarrow>
       * j += 1_usize;
     };
     * out
-  \<rbrakk>\<close>
-
-(* Rust: luby *)
-definition "luby" :: \<open>(64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>luby \<equiv> \<lambda>i. FunctionBody \<lbrakk>
-    let mut size_v = 1_u64;
-    let mut seq = 0_u64;
-    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while ((* size_v) < (i + 1_u64)) && ((* seq) < 62_u64) {
-      * seq += 1_u64;
-      * size_v = (2_u64 * (* size_v)) + 1_u64;
-    };
-    let mut x = i;
-    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (((* size_v) - 1_u64) != (* x)) && ((* size_v) > 1_u64) {
-      * size_v = ((* size_v) - 1_u64) / 2_u64;
-      * seq -= 1_u64;
-      * x = (* x) % (* size_v);
-    };
-    1_u64 << (* seq)
   \<rbrakk>\<close>
 
 (* Rust: Cdcl::enqueue *)
@@ -389,7 +362,7 @@ definition "Cdcl_analyze" :: \<open>Cdcl \<Rightarrow> (64 word) \<Rightarrow> (
       1_usize
     };
     let mut t = len(self.Cdcl_trail);
-    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while ((* t) > 0_usize) && (Cdcl_count_level(self, * cl, self.Cdcl_dl) > stop) {
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (((* t) > 0_usize) && (len(* cl) <= len(self.Cdcl_pa.Pasn_set))) && (Cdcl_count_level(self, * cl, self.Cdcl_dl) > stop) {
       * t -= 1_usize;
       let v = self.Cdcl_trail[* t];
       let r = self.Cdcl_reason[v];
@@ -401,25 +374,6 @@ definition "Cdcl_analyze" :: \<open>Cdcl \<Rightarrow> (64 word) \<Rightarrow> (
     * cl
   \<rbrakk>\<close>
 
-(* Rust: Cdcl::bump *)
-definition "Cdcl_bump" :: \<open>(('addr, 'gv, Cdcl) Global_Store.ref) \<Rightarrow> (Lit list) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>Cdcl_bump \<equiv> \<lambda>self c. FunctionBody \<lbrakk>
-    let mut i = 0_usize;
-    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(c) {
-      * (self.Cdcl_activity[c[* i].Lit_var]) += * (self.Cdcl_inc);
-      if ((* (self.Cdcl_activity))[c[* i].Lit_var]) > MAX_ACTIVITY() {
-        let mut v = 0_usize;
-        #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* v) < len(* (self.Cdcl_activity)) {
-          * (self.Cdcl_activity[* v]) = ((* (self.Cdcl_activity))[* v]) >> 32_u64;
-          * v += 1_usize;
-        };
-        * (self.Cdcl_inc) = ((* (self.Cdcl_inc)) >> 32_u64) + 1_u64;
-      };
-      * i += 1_usize;
-    };
-    * (self.Cdcl_inc) = ((* (self.Cdcl_inc)) + ((* (self.Cdcl_inc)) / 16_u64)) + 1_u64;
-  \<rbrakk>\<close>
-
 (* Rust: Cdcl::backjump *)
 definition "Cdcl_backjump" :: \<open>(('addr, 'gv, Cdcl) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Cdcl_backjump \<equiv> \<lambda>self lv. FunctionBody \<lbrakk>
@@ -427,7 +381,6 @@ definition "Cdcl_backjump" :: \<open>(('addr, 'gv, Cdcl) Global_Store.ref) \<Rig
       let v = (* (self.Cdcl_trail))[len(* (self.Cdcl_trail)) - 1_usize];
       let _ = vec_pop(self.Cdcl_trail);
       * (self.Cdcl_pa.Pasn_set[v]) = false;
-      * (self.Cdcl_phase[v]) = (* (self.Cdcl_pa.Pasn_assign.Assignments_v0))[v];
       * (self.Cdcl_reason[v]) = NONE();
     };
     * (self.Cdcl_qhead) = len(* (self.Cdcl_trail));
@@ -439,13 +392,13 @@ definition "Cdcl_learn" :: \<open>(('addr, 'gv, Cdcl) Global_Store.ref) \<Righta
   \<open>Cdcl_learn \<equiv> \<lambda>self cl. FunctionBody \<lbrakk>
     let mut c = { let init_1 = cl; \<llangle>init_1 :: Lit list\<rrangle> };
     let mut i = 0_usize;
-    let mut bj = 0_usize;
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(* c) {
       if ((* (self.Cdcl_level))[(* c)[* i].Lit_var]) == (* (self.Cdcl_dl)) {
         slice_swap(c, 0_usize, * i);
       };
       * i += 1_usize;
     };
+    let mut bj = 0_usize;
     let mut j = 1_usize;
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* j) < len(* c) {
       if ((* (self.Cdcl_level))[(* c)[* j].Lit_var]) > (* bj) {
@@ -454,38 +407,31 @@ definition "Cdcl_learn" :: \<open>(('addr, 'gv, Cdcl) Global_Store.ref) \<Righta
       };
       * j += 1_usize;
     };
-    Cdcl_bump(self, * c);
     Cdcl_backjump(self, * bj);
     let l = (* c)[0_usize];
-    if len(* (self.Cdcl_db)) >= MAX_CLAUSES() {
-      return;
-    };
-    if len(* c) == 1_usize {
+    let r = if len(* c) == 1_usize {
       let r = len(* (self.Cdcl_db));
       vec_push(self.Cdcl_db, Clause_mk(* c));
-      if !((* (self.Cdcl_pa.Pasn_set))[l.Lit_var]) {
-        Cdcl_enqueue(self, l, r);
-      }
+      r
     } else {
-      let r = Cdcl_add_clause(self, Clause_mk(* c));
-      if !((* (self.Cdcl_pa.Pasn_set))[l.Lit_var]) {
-        Cdcl_enqueue(self, l, r);
-      }
+      Cdcl_add_clause(self, Clause_mk(* c))
+    };
+    if !((* (self.Cdcl_pa.Pasn_set))[l.Lit_var]) {
+      Cdcl_enqueue(self, l, r);
     }
   \<rbrakk>\<close>
 
 (* Rust: Cdcl::pick *)
 definition "Cdcl_pick" :: \<open>Cdcl \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Cdcl_pick \<equiv> \<lambda>self. FunctionBody \<lbrakk>
-    let mut best = NONE();
     let mut v = 0_usize;
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* v) < len(self.Cdcl_pa.Pasn_set) {
-      if (!(self.Cdcl_pa.Pasn_set[* v])) && (((* best) == NONE()) || ((self.Cdcl_activity[* v]) > (self.Cdcl_activity[* best]))) {
-        * best = * v;
+      if !(self.Cdcl_pa.Pasn_set[* v]) {
+        return * v;
       };
       * v += 1_usize;
     };
-    * best
+    NONE()
   \<rbrakk>\<close>
 
 (* Rust: cdcl *)
@@ -495,20 +441,7 @@ definition "cdcl" :: \<open>Formula \<Rightarrow> ('s, Answer option, 'abort, 'i
     if n >= MAX_VARS() {
       return None;
     };
-    let mut s = {
-      let fld_4 = Pasn_mk { Pasn_assign: Assignments_mk(vec_from_elem(false, n)), Pasn_set: vec_from_elem(false, n) };
-      let fld_5 = vec_from_elem(0_usize, n);
-      let fld_6 = vec_from_elem(NONE(), n);
-      let fld_7 = { let res_1 = []; \<llangle>res_1 :: (64 word) list\<rrangle> };
-      let fld_8 = 0_usize;
-      let fld_9 = { let res_2 = []; \<llangle>res_2 :: Clause list\<rrangle> };
-      let fld_10 = vec_from_elem({ let res_3 = []; \<llangle>res_3 :: (64 word) list\<rrangle> }, 2_usize * n);
-      let fld_11 = 0_usize;
-      let fld_12 = vec_from_elem(0_u64, n);
-      let fld_13 = 1_u64;
-      let fld_14 = vec_from_elem(false, n);
-      \<llangle>make_Cdcl fld_4 fld_5 fld_6 fld_7 fld_8 fld_9 fld_10 fld_11 fld_12 fld_13 fld_14\<rrangle>
-    };
+    let mut s = Cdcl_mk { Cdcl_pa: Pasn_mk { Pasn_assign: Assignments_mk(vec_from_elem(false, n)), Pasn_set: vec_from_elem(false, n) }, Cdcl_level: vec_from_elem(0_usize, n), Cdcl_reason: vec_from_elem(NONE(), n), Cdcl_trail: { let res_1 = []; \<llangle>res_1 :: (64 word) list\<rrangle> }, Cdcl_qhead: 0_usize, Cdcl_db: { let res_2 = []; \<llangle>res_2 :: Clause list\<rrangle> }, Cdcl_watches: vec_from_elem({ let res_3 = []; \<llangle>res_3 :: (64 word) list\<rrangle> }, 2_usize * n), Cdcl_dl: 0_usize };
     let mut confl = NONE();
     let mut i = 0_usize;
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(f.Formula_clauses) {
@@ -539,9 +472,6 @@ definition "cdcl" :: \<open>Formula \<Rightarrow> ('s, Answer option, 'abort, 'i
       };
       * i += 1_usize;
     };
-    let mut conflicts = 0_u64;
-    let mut restarts = 0_u64;
-    let mut budget = RESTART_UNIT();
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] loop {
       if (* confl) == NONE() {
         * confl = Cdcl_propagate(s);
@@ -552,17 +482,10 @@ definition "cdcl" :: \<open>Formula \<Rightarrow> ('s, Answer option, 'abort, 'i
         if len(cl) == 0_usize {
           return Some(Answer_Unsat);
         };
-        if (* (s.Cdcl_dl)) == 0_usize {
+        if ((* (s.Cdcl_dl)) == 0_usize) || (len(cl) > n) {
           return None;
         };
         Cdcl_learn(s, cl);
-        * conflicts += 1_u64;
-        if (* conflicts) >= (* budget) {
-          * restarts += 1_u64;
-          * conflicts = 0_u64;
-          * budget = RESTART_UNIT() * luby(* restarts);
-          Cdcl_backjump(s, 0_usize);
-        };
         continue;
       };
       let v = Cdcl_pick(* s);
@@ -572,9 +495,11 @@ definition "cdcl" :: \<open>Formula \<Rightarrow> ('s, Answer option, 'abort, 'i
         };
         return Some(Answer_Sat_mk(* (s.Cdcl_pa.Pasn_assign)));
       };
+      if (* (s.Cdcl_dl)) >= n {
+        return None;
+      };
       * (s.Cdcl_dl) += 1_usize;
-      let b = (* (s.Cdcl_phase))[v];
-      Cdcl_enqueue(s, Lit_mk { Lit_var: v, Lit_value: b }, NONE());
+      Cdcl_enqueue(s, Lit_mk { Lit_var: v, Lit_value: false }, NONE());
     };
     panic!("unreachable: diverging expression completed")
   \<rbrakk>\<close>

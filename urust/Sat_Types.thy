@@ -67,12 +67,9 @@ scalable_datatype_record Cdcl =
   Cdcl_db :: \<open>Clause list\<close>
   Cdcl_watches :: \<open>((64 word) list) list\<close>
   Cdcl_dl :: \<open>64 word\<close>
-  Cdcl_activity :: \<open>(64 word) list\<close>
-  Cdcl_inc :: \<open>64 word\<close>
-  Cdcl_phase :: \<open>bool list\<close>
 micro_rust_record Cdcl
 
-definition "Cdcl_mk" :: \<open>Pasn \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (Clause list) \<Rightarrow> (((64 word) list) list) \<Rightarrow> (64 word) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (bool list) \<Rightarrow> ('s, Cdcl, 'abort, 'i, 'o) function_body\<close> where
-  [crush_inline]: \<open>Cdcl_mk \<equiv> \<lambda>a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10. FunctionBody (literal (make_Cdcl a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10))\<close>
+definition "Cdcl_mk" :: \<open>Pasn \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (Clause list) \<Rightarrow> (((64 word) list) list) \<Rightarrow> (64 word) \<Rightarrow> ('s, Cdcl, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>Cdcl_mk \<equiv> \<lambda>a0 a1 a2 a3 a4 a5 a6 a7. FunctionBody (literal (make_Cdcl a0 a1 a2 a3 a4 a5 a6 a7))\<close>
 
 end
