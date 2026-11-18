@@ -151,7 +151,8 @@ minimum_expiry_days = 7
 # membership caveat for `MEMBER`.
 trust_only_collaborators = true
 trusted_author_associations = ["OWNER", "MEMBER", "COLLABORATOR"]
-trusted_users = []                 # bot allowlist
+trusted_users = ["github-actions"]  # bot allowlist: the workflow "wake on active suite" opens
+                                   # a directive when the owner activates a suite (GraphQL login)
                                    # e.g. ["dependabot[bot]", "github-actions[bot]"]
 provenance_cache_seconds = 60      # applies to list/orient; claim/read are always fresh
 

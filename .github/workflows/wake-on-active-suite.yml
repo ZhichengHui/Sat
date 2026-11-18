@@ -1,0 +1,39 @@
+# Wakes the agents when the owner activates a benchmark suite. When planners find no work, pod
+# stops the agents (return-to-human) and resumes them only when an unclaimed agent-plan or
+# directive issue appears. A push to main that adds suites to bench/active opens such a directive;
+# its author github-actions is trusted in .pod/config.toml ([security] trusted_users). Changes of
+# bench/ reach main only with the owner's label owner-approved (workflow bench approval).
+name: wake on active suite
+permissions:
+  contents: read
+  issues: write
+on:
+  push:
+    branches: [ main ]
+    paths: [ bench/active ]
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Open a directive for the suites added to bench/active
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          suites() { git show "$1:bench/active" 2>/dev/null | sed 's/#.*//; s/[[:space:]]//g' | grep . | sort -u || true; }
+          if git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then suites "$BEFORE" > old; else : > old; fi
+          suites "$AFTER" > new
+          added=$(comm -13 old new | sed 's/.*/`&`/' | paste -sd, - | sed 's/,/, /g')
+          if [ -z "$added" ]; then echo "No suite added to bench/active."; exit 0; fi
+          body="The owner activated the benchmark suite(s) $added in \`bench/active\` (commit $AFTER).
+
+          Following PLAN.md (Direction), plan the next steps of the goal aimed at the active suites: small \`agent-plan\` issues, each with an aim measurable on them, ordered so that each builds on merged work. Close this directive once those issues are open.
+
+          Opened by the workflow \`wake on active suite\`, so that pod resumes the agents."
+          gh issue create -R "$GITHUB_REPOSITORY" --label directive \
+            --title "Plan the next steps for the active suite(s) $added" \
+            --body "$(printf '%s\n' "$body" | sed 's/^          //')"

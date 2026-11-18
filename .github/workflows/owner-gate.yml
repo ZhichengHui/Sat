@@ -1,0 +1,38 @@
+# Lets the agents stop while an issue waits for the owner, and resume when the owner approves it
+# (PLAN.md, Direction). A task that stops for the owner labels its issue needs-owner: this
+# workflow parks the issue (agent-plan becomes parked:agent-plan, directive parked:directive),
+# so pod no longer sees it and stops when nothing else is left. When the owner has answered and
+# adds owner-approved, the workflow puts the issue back in the queue as unclaimed; pod resumes on
+# an unclaimed issue. Pull requests are not affected (they get pull_request events).
+name: owner gate
+permissions:
+  issues: write
+on:
+  issues:
+    types: [ labeled ]
+jobs:
+  gate:
+    if: github.event.label.name == 'needs-owner' || github.event.label.name == 'owner-approved'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Park or resume the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+          LABEL: ${{ github.event.label.name }}
+        run: |
+          labels=$(gh issue view "$NUMBER" -R "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name')
+          has() { printf '%s\n' "$labels" | grep -qx "$1"; }
+          args=()
+          for l in claimed replan; do has "$l" && args+=(--remove-label "$l"); done
+          if [ "$LABEL" = needs-owner ]; then
+            for l in agent-plan directive; do has "$l" && args+=(--remove-label "$l" --add-label "parked:$l"); done
+            msg="Parked until the owner adds the label owner-approved."
+          else
+            for l in agent-plan directive; do has "parked:$l" && args+=(--remove-label "parked:$l" --add-label "$l"); done
+            for l in needs-owner owner-approved; do has "$l" && args+=(--remove-label "$l"); done
+            msg="Approved by the owner: back in the queue."
+          fi
+          if [ ${#args[@]} -eq 0 ]; then echo "Nothing to change."; exit 0; fi
+          gh issue edit "$NUMBER" -R "$GITHUB_REPOSITORY" "${args[@]}"
+          gh issue comment "$NUMBER" -R "$GITHUB_REPOSITORY" --body "$msg"
