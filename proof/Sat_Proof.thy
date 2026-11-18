@@ -120,11 +120,6 @@ lemma Clause_unset_from_spec:
     done
   done
 
-text \<open>The clause is neither false nor unit under the partial assignment: unit propagation has
-  nothing to do with it.\<close>
-definition settled :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> Clause \<Rightarrow> bool\<close> where
-  \<open>settled a d c \<equiv> \<not> clause_false a d c \<and> (\<forall>k. \<not> unit_at a d c k)\<close>
-
 text \<open>The result of \<^verbatim>\<open>Clause::unit_lit\<close>: the index of the only unassigned literal if the
   clause is unit, otherwise not below the clause's length, and equal to it iff the clause is
   settled.\<close>
@@ -770,12 +765,6 @@ definition solve_contract :: \<open>nat \<Rightarrow> Formula \<Rightarrow> Pasn
         \<langle>formula_wf f (length a) \<and> length d = length a \<and> 2 * length a < urust_fuel \<and> unset d < k\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star> \<langle>sol f a d r\<rangle> in
      make_function_contract pre post\<close>
-
-text \<open>If every clause is settled, there is no conflict.\<close>
-lemma settled_no_conflict:
-  assumes \<open>\<forall>j < length (Formula_clauses f). settled a d (Formula_clauses f ! j)\<close>
-  shows \<open>\<not> conflict a d f\<close>
-  using assms unfolding conflict_iff_nth settled_def by blast
 
 text \<open>The facts about the partial assignment \<open>pb\<close> after unit propagation, at the first clause
   \<open>xa\<close> without a true literal and its first unassigned literal \<open>xb\<close>.\<close>
