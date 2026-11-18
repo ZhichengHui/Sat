@@ -65,6 +65,15 @@ enum Propagated =
 definition "Propagated_Fixpoint_mk" :: \<open>Pasn \<Rightarrow> ('s, Propagated, 'abort, 'i, 'o) function_body\<close> where
   [crush_inline]: \<open>Propagated_Fixpoint_mk \<equiv> \<lambda>a0. FunctionBody (literal (Propagated_Fixpoint a0))\<close>
 
+(* Rust: Cut *)
+scalable_datatype_record Cut =
+  Cut_t :: \<open>64 word\<close>
+  Cut_left :: \<open>64 word\<close>
+micro_rust_record Cut
+
+definition "Cut_mk" :: \<open>(64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, Cut, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>Cut_mk \<equiv> \<lambda>a0 a1. FunctionBody (literal (make_Cut a0 a1))\<close>
+
 (* Rust: Search *)
 scalable_datatype_record Search =
   Search_assign :: \<open>bool list\<close>

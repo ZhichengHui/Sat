@@ -235,6 +235,13 @@ fn key(v: usize, b: bool) -> usize {
     NONE
 }
 
+/// The cut of `reduce`: the learned clauses of a literal block distance above `t` die, and `left`
+/// of those of the distance `t`.
+struct Cut {
+    t: usize,
+    left: usize,
+}
+
 /// The state of the CDCL search. The partial assignment is `assign`/`set` as in `Pasn`; `trail`
 /// lists the assigned variables in order, decision level `d + 1` starts at trail position
 /// `lim[d]`, `level[v]` is the decision level of `v` and `reason[v]` the clause that propagated
@@ -350,6 +357,16 @@ impl Search {
         k != NONE && self.lit_true(k / 2, k % 2 == 1)
     }
 
+    /// Makes `nxt` the successor of the node `prev` of watch list `k`, or the head of the list if
+    /// `prev` is `NONE`: removes the node between them.
+    fn unlink(&mut self, k: usize, prev: usize, nxt: usize) {
+        if prev < self.next.len() {
+            self.next[prev] = nxt;
+        } else if k < self.head.len() {
+            self.head[k] = nxt;
+        }
+    }
+
     /// Visits the watch list `k` of a literal that has become false: a dead clause is dropped
     /// from it; each other clause on it gets a new watched literal that is not false, propagates
     /// its other watched literal, or is false. The index of a false clause, or `NONE`.
@@ -362,11 +379,7 @@ impl Search {
             let other = node ^ 1;
             let okey = if other < self.wkey.len() { self.wkey[other] } else { NONE };
             if self.is_dead(f, c) {
-                if prev < self.next.len() {
-                    self.next[prev] = nxt;
-                } else if k < self.head.len() {
-                    self.head[k] = nxt;
-                }
+                self.unlink(k, prev, nxt);
                 node = nxt;
             } else if self.key_true(okey) {
                 prev = node;
@@ -381,13 +394,9 @@ impl Search {
                 if found < clause_len(f, learned, c) && nk < self.head.len() {
                     self.wpos[node] = found;
                     self.wkey[node] = nk;
-                    if prev < self.next.len() {
-                        self.next[prev] = nxt;
-                    } else if k < self.head.len() {
-                        self.head[k] = nxt;
-                    }
                     self.next[node] = self.head[nk];
                     self.head[nk] = node;
+                    self.unlink(k, prev, nxt);
                     node = nxt;
                 } else if self.lit_false(ol.var, ol.value) {
                     return c;
@@ -520,13 +529,13 @@ impl Search {
         true
     }
 
-    /// Removes from `learnt` the literals after the first that are `redundant`, and clears the
-    /// marks of their variables.
-    fn minimize(&mut self, f: &Formula, learned: &Vec<Clause>) {
+    /// Moves the literals of `learnt` after the first that are not `redundant` to the front, in
+    /// order; the number of literals moved, plus one.
+    fn compact(&mut self, f: &Formula, learned: &Vec<Clause>) -> usize {
         let mut i: usize = 1;
         let mut j: usize = 1;
         while j < self.learnt.len() {
-            if !self.redundant(f, learned, self.learnt[j].var) {
+            if !self.redundant(f, learned, self.learnt[j].var) && i < self.learnt.len() {
                 if i < j {
                     self.learnt.swap(i, j);
                 }
@@ -534,6 +543,11 @@ impl Search {
             }
             j += 1;
         }
+        i
+    }
+
+    /// Clears the marks of the variables of the literals of `learnt` from position `i` on.
+    fn unmark_from(&mut self, i: usize) {
         let mut k = i;
         while k < self.learnt.len() {
             let v = self.learnt[k].var;
@@ -542,6 +556,13 @@ impl Search {
             }
             k += 1;
         }
+    }
+
+    /// Removes from `learnt` the literals after the first that are `redundant`, and clears the
+    /// marks of their variables.
+    fn minimize(&mut self, f: &Formula, learned: &Vec<Clause>) {
+        let i = self.compact(f, learned);
+        self.unmark_from(i);
         self.learnt.truncate(i);
     }
 
@@ -568,34 +589,44 @@ impl Search {
         n
     }
 
-    /// Marks about half of the live learned clauses dead: those of the highest literal block
-    /// distances, the oldest first among equal ones; clauses of distance 2 or less stay.
-    fn reduce(&mut self) {
+    /// Sets `hist` to the histogram of the literal block distances of the live learned clauses
+    /// (below the length of `stamp`); their number.
+    fn count_live(&mut self) -> usize {
         let size = self.stamp.len();
         self.hist = vec![0; size];
         let mut live: usize = 0;
         let mut i: usize = 0;
         while i < self.lbd.len() && i < self.dead.len() {
             let d = self.lbd[i];
-            if !self.dead[i] && d < size && d < self.hist.len() && self.hist[d] < NONE && live < NONE {
+            if !self.dead[i] && d < self.hist.len() && self.hist[d] < NONE && live < NONE {
                 self.hist[d] += 1;
                 live += 1;
             }
             i += 1;
         }
-        // The distance `t` from which on clauses die, and how many of distance `t` die.
+        live
+    }
+
+    /// The cut of `reduce` from the histogram `hist` of `live` clauses: about half of them have a
+    /// distance above `t`, or `left` of the distance `t`; `t` is at least 3.
+    fn cut(&self, live: usize) -> Cut {
         let mut left = live / 2;
-        let mut t = size;
+        let mut t = self.hist.len();
         while t > 3 && t - 1 < self.hist.len() && self.hist[t - 1] <= left {
+            left -= self.hist[t - 1];
             t -= 1;
-            left -= self.hist[t];
         }
         if t > 3 {
-            t -= 1;
-        } else {
-            left = 0;
+            return Cut { t: t - 1, left: left };
         }
-        i = 0;
+        Cut { t: t, left: 0 }
+    }
+
+    /// Marks dead every live learned clause of a distance above `t`, and the first `left` of the
+    /// distance `t`.
+    fn kill(&mut self, t: usize, left: usize) {
+        let mut left = left;
+        let mut i: usize = 0;
         while i < self.lbd.len() && i < self.dead.len() {
             let d = self.lbd[i];
             if !self.dead[i] && d >= t {
@@ -608,6 +639,14 @@ impl Search {
             }
             i += 1;
         }
+    }
+
+    /// Marks about half of the live learned clauses dead: those of the highest literal block
+    /// distances, the oldest first among equal ones; clauses of distance 2 or less stay.
+    fn reduce(&mut self) {
+        let live = self.count_live();
+        let c = self.cut(live);
+        self.kill(c.t, c.left);
     }
 
     /// A copy of `learnt`, of at most `BIG` literals.
