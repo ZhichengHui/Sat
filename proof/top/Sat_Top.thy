@@ -34,13 +34,31 @@ lemma solver_spec:
   assumes \<open>fuel_top f \<le> urust_fuel\<close>
   shows \<open>\<Gamma>; solver f \<Turnstile>\<^sub>F solver_contract f\<close>
   apply (crush_boot f: solver_def contract: solver_contract_def)
-  apply (crush_base inline: vec_from_elem_def Pasn_mk_def Assignments_mk_def
-      specs add: cdcl_spec solve_spec contracts add: cdcl_contract_def solve_contract_def
-      simp add: true_def false_def unat_lt2p formula_wf_def)
-  using assms fuel_top_clause[of _ f] unat_lt2p[of \<open>Formula_num_vars f\<close>] sol_start
-    unset_le_length[of \<open>replicate (unat (Formula_num_vars f)) False\<close>]
-  by (fastforce simp: fuel_top_def sat_repr_ok_def formula_invariant_def cdcl_post_def
-      split: option.splits Answer.splits)+
+  apply (crush_base specs add: cdcl_spec contracts add: cdcl_contract_def simp add: true_def false_def)
+  subgoal premises prems for x
+  proof (cases x)
+    case None
+    show ?thesis
+      unfolding None
+      apply (simp only: option.case)
+      apply (crush_base inline: vec_from_elem_def Pasn_mk_def Assignments_mk_def
+          specs add: solve_spec contracts add: solve_contract_def
+          simp add: true_def false_def unat_lt2p formula_wf_def)
+      using assms prems fuel_top_clause[of _ f] unat_lt2p[of \<open>Formula_num_vars f\<close>] sol_start
+        unset_le_length[of \<open>replicate (unat (Formula_num_vars f)) False\<close>]
+      by (fastforce simp: fuel_top_def sat_repr_ok_def formula_invariant_def)+
+  next
+    case (Some a)
+    have \<open>cdcl_post f (Some a)\<close>
+      using prems Some by simp
+    then show ?thesis
+      unfolding Some
+      apply (simp only: option.case)
+      apply crush_base
+      apply (auto simp: cdcl_post_def split: Answer.splits)
+      done
+  qed
+  done
 
 end
 
