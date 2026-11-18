@@ -49,40 +49,6 @@ lemma formula_wf_idx:
   shows \<open>unat x < length (Formula_clauses f)\<close>
   using assms word_ne_length[of x \<open>length (Formula_clauses f)\<close>] unfolding formula_wf_def by simp
 
-definition Clause_falsified_contract :: \<open>Clause \<Rightarrow> Pasn \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
-  \<open>Clause_falsified_contract c pa \<equiv>
-     let pre = can_alloc_reference \<star> \<langle>clause_pre c pa\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star>
-        \<langle>r = clause_false (Assignments_v0 (Pasn_assign pa)) (Pasn_set pa) c\<rangle> in
-     make_function_contract pre post\<close>
-
-lemma Clause_falsified_spec:
-  shows \<open>\<Gamma>; Clause_falsified c pa \<Turnstile>\<^sub>F Clause_falsified_contract c pa\<close>
-  apply (crush_boot f: Clause_falsified_def contract: Clause_falsified_contract_def)
-  apply (crush_base inline: len_def simp add: true_def false_def)
-  subgoal for i_ref
-    apply (ucincl_discharge\<open>
-      rule_tac
-        INV=\<open>\<lambda>k. \<Squnion>g i. i_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>i \<star> can_alloc_reference \<star>
-               \<langle>unat i \<le> length (Clause_v0 c) \<and>
-                (\<forall>j < unat i. Pasn_set pa ! unat (Lit_var (Clause_v0 c ! j)) \<and>
-                   \<not> lit_sat (Assignments_v0 (Pasn_assign pa)) (Clause_v0 c ! j)) \<and>
-                length (Clause_v0 c) - unat i \<le> k\<rangle>\<close> and
-        INV'=\<open>\<lambda>k. \<Squnion>g i. i_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>i \<star> can_alloc_reference \<star>
-               \<langle>unat i < length (Clause_v0 c) \<and>
-                (\<forall>j < unat i. Pasn_set pa ! unat (Lit_var (Clause_v0 c ! j)) \<and>
-                   \<not> lit_sat (Assignments_v0 (Pasn_assign pa)) (Clause_v0 c ! j)) \<and>
-                length (Clause_v0 c) - unat i \<le> Suc k\<rangle>\<close> and
-        \<tau>=\<open>\<lambda>r. can_alloc_reference \<star>
-               \<langle>r = clause_false (Assignments_v0 (Pasn_assign pa)) (Pasn_set pa) c\<rangle>\<close> and
-        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
-      in wp_bounded_while_framedI\<close>)
-    apply (crush_base simp add: true_def false_def lit_sat_def clause_false_iff_nth word_less_nat_alt
-        word_le_nat_alt unat_of_nat_eq unat_word_Suc_simp clause_pre_def)
-    apply (auto simp add: less_Suc_eq clause_false_iff_nth lit_sat_def clause_pre_def)
-    done
-  done
-
 definition Clause_has_true_contract :: \<open>Clause \<Rightarrow> Pasn \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
   \<open>Clause_has_true_contract c pa \<equiv>
      let pre = can_alloc_reference \<star> \<langle>clause_pre c pa\<rangle> in
@@ -154,39 +120,102 @@ lemma Clause_unset_from_spec:
     done
   done
 
+text \<open>The clause is neither false nor unit under the partial assignment: unit propagation has
+  nothing to do with it.\<close>
+definition settled :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> Clause \<Rightarrow> bool\<close> where
+  \<open>settled a d c \<equiv> \<not> clause_false a d c \<and> (\<forall>k. \<not> unit_at a d c k)\<close>
+
 text \<open>The result of \<^verbatim>\<open>Clause::unit_lit\<close>: the index of the only unassigned literal if the
-  clause is unit, otherwise not below the clause's length.\<close>
+  clause is unit, otherwise not below the clause's length, and equal to it iff the clause is
+  settled.\<close>
 definition unit_lit_post :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> Clause \<Rightarrow> nat \<Rightarrow> bool\<close> where
   \<open>unit_lit_post a d c r \<equiv>
      (r < length (Clause_v0 c) \<longrightarrow> unit_at a d c r) \<and>
-     ((\<exists>k. unit_at a d c k) \<longrightarrow> r < length (Clause_v0 c))\<close>
+     ((\<exists>k. unit_at a d c k) \<longrightarrow> r < length (Clause_v0 c)) \<and>
+     (r = length (Clause_v0 c) \<longleftrightarrow> settled a d c)\<close>
+
+text \<open>The state of the loop of \<^verbatim>\<open>Clause::unit_lit\<close> after the literals below \<open>i\<close>: none of them
+  is true, and \<open>k\<close> is the clause's length if all are assigned, otherwise the index of the only
+  unassigned one.\<close>
+definition unit_scan :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> Clause \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool\<close> where
+  \<open>unit_scan a d c i k \<equiv>
+     i \<le> length (Clause_v0 c) \<and>
+     (\<forall>j < i. \<not> (d ! unat (Lit_var (Clause_v0 c ! j)) \<and> lit_sat a (Clause_v0 c ! j))) \<and>
+     (k = length (Clause_v0 c) \<and> (\<forall>j < i. d ! unat (Lit_var (Clause_v0 c ! j))) \<or>
+      k < i \<and> \<not> d ! unat (Lit_var (Clause_v0 c ! k)) \<and>
+      (\<forall>j < i. j \<noteq> k \<longrightarrow> d ! unat (Lit_var (Clause_v0 c ! j))))\<close>
+
+lemma unit_scan_start:
+  \<open>unit_scan a d c 0 (length (Clause_v0 c))\<close>
+  unfolding unit_scan_def by simp
+
+lemma unit_scan_bound:
+  assumes \<open>unit_scan a d c i k\<close>
+  shows \<open>i \<le> length (Clause_v0 c)\<close> \<open>k \<le> length (Clause_v0 c)\<close>
+  using assms unfolding unit_scan_def by auto
+
+lemma unit_scan_false:
+  assumes \<open>unit_scan a d c i k\<close> \<open>i < length (Clause_v0 c)\<close> \<open>d ! unat (Lit_var (Clause_v0 c ! i))\<close>
+    \<open>\<not> lit_sat a (Clause_v0 c ! i)\<close>
+  shows \<open>unit_scan a d c (Suc i) k\<close>
+  using assms unfolding unit_scan_def by (auto simp add: less_Suc_eq)
+
+lemma unit_scan_first_unset:
+  assumes \<open>unit_scan a d c i (length (Clause_v0 c))\<close> \<open>i < length (Clause_v0 c)\<close>
+    \<open>\<not> d ! unat (Lit_var (Clause_v0 c ! i))\<close>
+  shows \<open>unit_scan a d c (Suc i) i\<close>
+  using assms unfolding unit_scan_def by (auto simp add: less_Suc_eq)
 
 lemma unit_lit_post_true:
-  \<open>clause_true a d c \<Longrightarrow> unit_lit_post a d c (length (Clause_v0 c))\<close>
-  unfolding unit_lit_post_def using clause_true_not_unit by blast
-
-lemma unit_lit_post_all_set:
-  assumes \<open>unset_from_post d c 0 (length (Clause_v0 c))\<close>
-  shows \<open>unit_lit_post a d c (Suc (length (Clause_v0 c)))\<close>
+  assumes \<open>i < length (Clause_v0 c)\<close> \<open>d ! unat (Lit_var (Clause_v0 c ! i))\<close> \<open>lit_sat a (Clause_v0 c ! i)\<close>
+  shows \<open>unit_lit_post a d c (length (Clause_v0 c))\<close>
 proof -
-  have \<open>\<forall>j < length (Clause_v0 c). d ! unat (Lit_var (Clause_v0 c ! j))\<close>
-    using assms unfolding unset_from_post_def by simp
-  then have \<open>\<forall>k. \<not> unit_at a d c k\<close>
-    using all_set_not_unit by blast
+  have t: \<open>clause_true a d c\<close>
+    using assms unfolding clause_true_def by blast
+  have \<open>\<not> clause_false a d c\<close>
+    using assms nth_mem[OF assms(1)] unfolding clause_false_def by blast
   then show ?thesis
-    unfolding unit_lit_post_def by simp
+    using clause_true_not_unit[OF t] unfolding unit_lit_post_def settled_def by blast
 qed
 
 lemma unit_lit_post_two:
-  \<open>unset_from_post d c 0 k \<Longrightarrow> k < length (Clause_v0 c) \<Longrightarrow> unset_from_post d c (Suc k) k2 \<Longrightarrow>
-    k2 < length (Clause_v0 c) \<Longrightarrow> unit_lit_post a d c (length (Clause_v0 c))\<close>
-  unfolding unit_lit_post_def unset_from_post_def using two_unset_not_unit[of k k2 c d a]
-  by auto
+  assumes \<open>unit_scan a d c i k\<close> \<open>k < length (Clause_v0 c)\<close> \<open>i < length (Clause_v0 c)\<close>
+    \<open>\<not> d ! unat (Lit_var (Clause_v0 c ! i))\<close>
+  shows \<open>unit_lit_post a d c (length (Clause_v0 c))\<close>
+proof -
+  have k: \<open>k < i\<close> \<open>\<not> d ! unat (Lit_var (Clause_v0 c ! k))\<close>
+    using assms(1,2) unfolding unit_scan_def by auto
+  have nu: \<open>\<forall>k'. \<not> unit_at a d c k'\<close>
+    using two_unset_not_unit[OF k(1) assms(3) k(2) assms(4)] by blast
+  have \<open>\<not> clause_false a d c\<close>
+    using assms(3,4) nth_mem[OF assms(3)] unfolding clause_false_def by blast
+  then show ?thesis
+    using nu unfolding unit_lit_post_def settled_def by blast
+qed
 
-lemma unit_lit_post_one:
-  \<open>\<not> clause_true a d c \<Longrightarrow> unset_from_post d c 0 k \<Longrightarrow> k < length (Clause_v0 c) \<Longrightarrow>
-    unset_from_post d c (Suc k) (length (Clause_v0 c)) \<Longrightarrow> unit_lit_post a d c k\<close>
-  unfolding unit_lit_post_def unset_from_post_def using one_unset_unit[of a d c k] by auto
+lemma unit_lit_post_end:
+  assumes \<open>unit_scan a d c (length (Clause_v0 c)) k\<close>
+  shows \<open>unit_lit_post a d c (if k = length (Clause_v0 c) then Suc k else k)\<close>
+proof (cases \<open>k = length (Clause_v0 c)\<close>)
+  case True
+  then have s: \<open>\<forall>j < length (Clause_v0 c). d ! unat (Lit_var (Clause_v0 c ! j))\<close>
+    \<open>\<forall>j < length (Clause_v0 c). \<not> lit_sat a (Clause_v0 c ! j)\<close>
+    using assms unfolding unit_scan_def by auto
+  then have \<open>clause_false a d c\<close>
+    unfolding clause_false_iff_nth lit_sat_def by blast
+  then show ?thesis
+    using True all_set_not_unit[OF s(1)] unfolding unit_lit_post_def settled_def by auto
+next
+  case False
+  then have k: \<open>k < length (Clause_v0 c)\<close> \<open>\<not> d ! unat (Lit_var (Clause_v0 c ! k))\<close>
+    \<open>\<forall>j < length (Clause_v0 c). j \<noteq> k \<longrightarrow> d ! unat (Lit_var (Clause_v0 c ! j)) \<and>
+       \<not> lit_sat a (Clause_v0 c ! j)\<close>
+    using assms unfolding unit_scan_def by auto
+  then have u: \<open>unit_at a d c k\<close>
+    unfolding unit_at_def by blast
+  then show ?thesis
+    using False k(1) unfolding unit_lit_post_def settled_def by auto
+qed
 
 definition Clause_unit_lit_contract :: \<open>Clause \<Rightarrow> Pasn \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
   \<open>Clause_unit_lit_contract c pa \<equiv>
@@ -198,115 +227,162 @@ definition Clause_unit_lit_contract :: \<open>Clause \<Rightarrow> Pasn \<Righta
 lemma Clause_unit_lit_spec:
   shows \<open>\<Gamma>; Clause_unit_lit c pa \<Turnstile>\<^sub>F Clause_unit_lit_contract c pa\<close>
   apply (crush_boot f: Clause_unit_lit_def contract: Clause_unit_lit_contract_def)
-  apply (crush_base inline: len_def
-      specs add: Clause_has_true_spec Clause_unset_from_spec
-      contracts add: Clause_has_true_contract_def Clause_unset_from_contract_def
-      simp add: true_def false_def word_less_nat_alt unat_of_nat_eq unat_word_Suc_simp
-        word64_eq_of_nat_iff clause_pre_def)
-  subgoal premises prems for x xa
-  proof -
-    have x: \<open>unat x < length (Clause_v0 c)\<close>
-      using prems(5,6) unfolding unset_from_post_def by simp
-    have s: \<open>unat (x + 1) = Suc (unat x)\<close>
-      using unat_word_Suc[of x \<open>length (Clause_v0 c)\<close>] x prems(3) by simp
-    have xa: \<open>unat xa = length (Clause_v0 c)\<close>
-      using prems(7,8) unfolding unset_from_post_def by simp
-    show ?thesis
-      using unit_lit_post_one[OF prems(4,5) x] prems(7) s xa by simp
-  qed
-  subgoal premises prems for x xa
-  proof -
-    have x: \<open>unat x < length (Clause_v0 c)\<close>
-      using prems(5,6) unfolding unset_from_post_def by simp
-    have s: \<open>unat (x + 1) = Suc (unat x)\<close>
-      using unat_word_Suc[of x \<open>length (Clause_v0 c)\<close>] x prems(3) by simp
-    show ?thesis
-      using unit_lit_post_two[OF prems(5) x _ prems(8)] prems(7) s by simp
-  qed
-  subgoal premises prems for x
-  proof -
-    have x: \<open>unat x < length (Clause_v0 c)\<close>
-      using prems(5,6) unfolding unset_from_post_def by simp
-    have s: \<open>unat (x + 1) = Suc (unat x)\<close>
-      using unat_word_Suc[of x \<open>length (Clause_v0 c)\<close>] x prems(3) by simp
-    show ?thesis
-      using x s by simp
-  qed
-  subgoal premises prems for x
-  proof -
-    have x: \<open>unat x < length (Clause_v0 c)\<close>
-      using prems(5,6) unfolding unset_from_post_def by simp
-    then show ?thesis
-      using prems(3) by simp
-  qed
-  subgoal premises prems
-    by (rule unit_lit_post_all_set[OF prems(5)])
-  subgoal premises prems
-    by (rule unit_lit_post_true[OF prems(4)])
+  apply (crush_base inline: len_def simp add: true_def false_def)
+  subgoal for k_ref i_ref
+    apply (ucincl_discharge\<open>
+      rule_tac
+        INV=\<open>\<lambda>j. \<Squnion>g k g' i. k_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>k \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>i \<star> can_alloc_reference \<star>
+               \<langle>unit_scan (Assignments_v0 (Pasn_assign pa)) (Pasn_set pa) c (unat i) (unat k) \<and>
+                length (Clause_v0 c) - unat i \<le> j\<rangle>\<close> and
+        INV'=\<open>\<lambda>j. \<Squnion>g k g' i. k_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>k \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> g'\<down>i \<star> can_alloc_reference \<star>
+               \<langle>unit_scan (Assignments_v0 (Pasn_assign pa)) (Pasn_set pa) c (unat i) (unat k) \<and>
+                unat i < length (Clause_v0 c) \<and> length (Clause_v0 c) - unat i \<le> Suc j\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>r. can_alloc_reference \<star>
+               \<langle>unit_lit_post (Assignments_v0 (Pasn_assign pa)) (Pasn_set pa) c (unat r)\<rangle>\<close> and
+        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_bounded_while_framedI\<close>)
+    apply (crush_base simp add: true_def false_def word_less_nat_alt
+        word_le_nat_alt unat_of_nat_eq unat_word_Suc_simp clause_pre_def)
+    subgoal premises prems for j g g' k i
+    proof -
+      have \<open>unat k = length (Clause_v0 c)\<close>
+        using unit_scan_bound(2)[OF prems(10)] prems(17) by simp
+      then show ?thesis
+        using unit_scan_first_unset[OF _ prems(11,16)] prems(10) by simp
+    qed
+    subgoal premises prems for j g g' i k
+      by (rule unit_lit_post_two[OF prems(10,17,11,16)])
+    subgoal premises prems for j g k g' i
+      by (rule unit_scan_false[OF prems(10,11,16)]) (use prems(18,19) in \<open>simp add: lit_sat_def\<close>)
+    subgoal premises prems for j g k g' i
+      by (rule unit_scan_false[OF prems(10,11,16)]) (use prems(18,19) in \<open>simp add: lit_sat_def\<close>)
+    subgoal premises prems for j g k g' i
+      by (rule unit_lit_post_true[OF prems(11,16)]) (use prems(18,19) in \<open>simp add: lit_sat_def\<close>)
+    subgoal premises prems for j g k g' i
+      by (rule unit_lit_post_true[OF prems(11,16)]) (use prems(18,19) in \<open>simp add: lit_sat_def\<close>)
+    subgoal premises prems for g g' i k
+    proof -
+      have i: \<open>unat i = length (Clause_v0 c)\<close>
+        using unit_scan_bound(1)[OF prems(7)] prems(8) by simp
+      have \<open>unat k \<noteq> length (Clause_v0 c)\<close>
+        using prems(14) word64_eq_of_nat_iff[of \<open>length (Clause_v0 c)\<close> k] prems(13) by simp
+      then show ?thesis
+        using unit_lit_post_end[of _ _ c \<open>unat k\<close>] prems(7) i by simp
+    qed
+    subgoal premises prems for g g' i
+    proof -
+      have i: \<open>unat i = length (Clause_v0 c)\<close>
+        using unit_scan_bound(1)[OF prems(7)] prems(8) by simp
+      then show ?thesis
+        using unit_lit_post_end[of _ _ c \<open>length (Clause_v0 c)\<close>] prems(7) by simp
+    qed
+    subgoal by (rule unit_scan_start)
+    done
   done
 
-definition Formula_unit_clause_contract :: \<open>Formula \<Rightarrow> Pasn \<Rightarrow> 64 word \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
-  \<open>Formula_unit_clause_contract f pa s \<equiv>
+text \<open>The result of \<^verbatim>\<open>Formula::unit_clause\<close> on the clauses \<open>s..e\<close>: the first clause there
+  that is not settled, or \<open>e\<close> if they all are.\<close>
+definition unit_clause_post :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> Formula \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool\<close> where
+  \<open>unit_clause_post a d f s e r \<equiv>
+     s \<le> r \<and> r \<le> e \<and> (r < e \<longrightarrow> \<not> settled a d (Formula_clauses f ! r)) \<and>
+     (\<forall>j. s \<le> j \<and> j < r \<longrightarrow> settled a d (Formula_clauses f ! j))\<close>
+
+text \<open>A clause for which \<^verbatim>\<open>Clause::unit_lit\<close> returns the clause's length is settled.\<close>
+lemma unit_lit_post_settled:
+  assumes \<open>formula_wf f n\<close> \<open>j < length (Formula_clauses f)\<close>
+    \<open>unit_lit_post a d (Formula_clauses f ! j) (unat (word64_of_nat (length (Clause_v0 (Formula_clauses f ! j)))))\<close>
+  shows \<open>settled a d (Formula_clauses f ! j)\<close>
+proof -
+  have \<open>length (Clause_v0 (Formula_clauses f ! j)) < 2^63\<close>
+    using assms(1) nth_mem[OF assms(2)] unfolding formula_wf_def by blast
+  then show ?thesis
+    using assms(3) unfolding unit_lit_post_def by (simp add: unat_of_nat_eq)
+qed
+
+text \<open>A clause for which it returns something else is not.\<close>
+lemma unit_lit_post_not_settled:
+  assumes \<open>formula_wf f n\<close> \<open>j < length (Formula_clauses f)\<close>
+    \<open>unit_lit_post a d (Formula_clauses f ! j) (unat x)\<close>
+    \<open>x \<noteq> word64_of_nat (length (Clause_v0 (Formula_clauses f ! j)))\<close>
+  shows \<open>\<not> settled a d (Formula_clauses f ! j)\<close>
+proof -
+  have \<open>length (Clause_v0 (Formula_clauses f ! j)) < 2^64\<close>
+    using assms(1) nth_mem[OF assms(2)] unfolding formula_wf_def by fastforce
+  then have \<open>unat x \<noteq> length (Clause_v0 (Formula_clauses f ! j))\<close>
+    using assms(4) word64_eq_of_nat_iff by blast
+  then show ?thesis
+    using assms(3) unfolding unit_lit_post_def by simp
+qed
+
+text \<open>The next index after one below \<open>e\<close>, for an \<open>e\<close> that is at most the number of clauses.\<close>
+lemma unit_clause_next:
+  fixes r e :: \<open>64 word\<close>
+  assumes \<open>formula_wf f n\<close> \<open>unat e \<le> length (Formula_clauses f)\<close> \<open>unat r < unat e\<close>
+  shows \<open>unat (r + 1) = Suc (unat r)\<close> \<open>unat r < 18446744073709551615\<close>
+proof -
+  have \<open>length (Formula_clauses f) < 2^64\<close>
+    using assms(1) unfolding formula_wf_def by simp
+  then show \<open>unat r < 18446744073709551615\<close>
+    using assms(2,3) by simp
+  then show \<open>unat (r + 1) = Suc (unat r)\<close>
+    by (rule unat_word_Suc_simp)
+qed
+
+definition Formula_unit_clause_contract :: \<open>Formula \<Rightarrow> Pasn \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
+  \<open>Formula_unit_clause_contract f pa s e \<equiv>
      let a = Assignments_v0 (Pasn_assign pa) in
      let pre = can_alloc_reference \<star>
         \<langle>formula_wf f (length a) \<and> length (Pasn_set pa) = length a \<and>
-         unat s \<le> length (Formula_clauses f)\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star> \<langle>unat r \<le> length (Formula_clauses f)\<rangle> in
+         unat s \<le> unat e \<and> unat e \<le> length (Formula_clauses f)\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star>
+        \<langle>unit_clause_post a (Pasn_set pa) f (unat s) (unat e) (unat r)\<rangle> in
      make_function_contract pre post\<close>
 
-text \<open>Only the bound of the result is needed: \<^verbatim>\<open>propagate\<close> calls \<^verbatim>\<open>Clause::unit_lit\<close> again
-  on the clause found.\<close>
 lemma Formula_unit_clause_spec:
-  shows \<open>\<Gamma>; Formula_unit_clause f pa s \<Turnstile>\<^sub>F Formula_unit_clause_contract f pa s\<close>
+  shows \<open>\<Gamma>; Formula_unit_clause f pa s e \<Turnstile>\<^sub>F Formula_unit_clause_contract f pa s e\<close>
   apply (crush_boot f: Formula_unit_clause_def contract: Formula_unit_clause_contract_def)
   apply (crush_base inline: len_def simp add: true_def false_def)
   subgoal for i_ref
     apply (ucincl_discharge\<open>
       rule_tac
         INV=\<open>\<lambda>k. \<Squnion>g i. i_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>i \<star> can_alloc_reference \<star>
-               \<langle>unat i \<le> length (Formula_clauses f) \<and> length (Formula_clauses f) - unat i \<le> k\<rangle>\<close> and
+               \<langle>unat s \<le> unat i \<and> unat i \<le> unat e \<and>
+                (\<forall>j. unat s \<le> j \<and> j < unat i \<longrightarrow>
+                   settled (Assignments_v0 (Pasn_assign pa)) (Pasn_set pa) (Formula_clauses f ! j)) \<and>
+                unat e - unat i \<le> k\<rangle>\<close> and
         INV'=\<open>\<lambda>k. \<Squnion>g i. i_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>i \<star> can_alloc_reference \<star>
-               \<langle>unat i < length (Formula_clauses f) \<and> length (Formula_clauses f) - unat i \<le> Suc k\<rangle>\<close> and
-        \<tau>=\<open>\<lambda>r. can_alloc_reference \<star> \<langle>unat r \<le> length (Formula_clauses f)\<rangle>\<close> and
+               \<langle>unat s \<le> unat i \<and> unat i < unat e \<and>
+                (\<forall>j. unat s \<le> j \<and> j < unat i \<longrightarrow>
+                   settled (Assignments_v0 (Pasn_assign pa)) (Pasn_set pa) (Formula_clauses f ! j)) \<and>
+                unat e - unat i \<le> Suc k\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>r. can_alloc_reference \<star>
+               \<langle>unit_clause_post (Assignments_v0 (Pasn_assign pa)) (Pasn_set pa) f (unat s) (unat e) (unat r)\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
     apply (crush_base inline: len_def specs add: Clause_unit_lit_spec contracts add: Clause_unit_lit_contract_def
         simp add: true_def false_def formula_wf_clause_pre word_less_nat_alt unat_of_nat_eq unat_word_Suc_simp)
-    apply (auto simp add: less_Suc_eq formula_wf_def unat_of_nat_eq unat_word_Suc_simp)
-    done
-  done
-
-definition Formula_conflict_contract :: \<open>Formula \<Rightarrow> Pasn \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
-  \<open>Formula_conflict_contract f pa \<equiv>
-     let a = Assignments_v0 (Pasn_assign pa) in
-     let pre = can_alloc_reference \<star> \<langle>formula_wf f (length a) \<and> length (Pasn_set pa) = length a\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star> \<langle>r = conflict a (Pasn_set pa) f\<rangle> in
-     make_function_contract pre post\<close>
-
-lemma Formula_conflict_spec:
-  shows \<open>\<Gamma>; Formula_conflict f pa \<Turnstile>\<^sub>F Formula_conflict_contract f pa\<close>
-  apply (crush_boot f: Formula_conflict_def contract: Formula_conflict_contract_def)
-  apply (crush_base inline: len_def simp add: true_def false_def)
-  subgoal for i_ref
-    apply (ucincl_discharge\<open>
-      rule_tac
-        INV=\<open>\<lambda>k. \<Squnion>g i. i_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>i \<star> can_alloc_reference \<star>
-               \<langle>unat i \<le> length (Formula_clauses f) \<and>
-                (\<forall>j < unat i. \<not> clause_false (Assignments_v0 (Pasn_assign pa)) (Pasn_set pa)
-                   (Formula_clauses f ! j)) \<and>
-                length (Formula_clauses f) - unat i \<le> k\<rangle>\<close> and
-        INV'=\<open>\<lambda>k. \<Squnion>g i. i_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>i \<star> can_alloc_reference \<star>
-               \<langle>unat i < length (Formula_clauses f) \<and>
-                (\<forall>j < unat i. \<not> clause_false (Assignments_v0 (Pasn_assign pa)) (Pasn_set pa)
-                   (Formula_clauses f ! j)) \<and>
-                length (Formula_clauses f) - unat i \<le> Suc k\<rangle>\<close> and
-        \<tau>=\<open>\<lambda>r. can_alloc_reference \<star> \<langle>r = conflict (Assignments_v0 (Pasn_assign pa)) (Pasn_set pa) f\<rangle>\<close> and
-        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
-      in wp_bounded_while_framedI\<close>)
-    apply (crush_base inline: len_def specs add: Clause_falsified_spec contracts add: Clause_falsified_contract_def
-        simp add: true_def false_def conflict_iff_nth formula_wf_clause_pre word_less_nat_alt unat_of_nat_eq
-          unat_word_Suc_simp)
-    apply (auto simp add: less_Suc_eq conflict_iff_nth formula_wf_def unat_of_nat_eq unat_word_Suc_simp)
+    subgoal premises prems for k g r
+      using unit_clause_next[OF prems(1,3,10)] prems(12) by simp
+    subgoal premises prems for k g r j
+    proof -
+      have \<open>settled (Assignments_v0 (Pasn_assign pa)) (Pasn_set pa) (Formula_clauses f ! unat r)\<close>
+        using unit_lit_post_settled[OF prems(1) _ prems(13)] prems(3,10) by simp
+      then show ?thesis
+        using prems(11,15,16) unit_clause_next(1)[OF prems(1,3,10)] by (cases \<open>j = unat r\<close>) auto
+    qed
+    subgoal premises prems for k g r
+      using unit_clause_next(1)[OF prems(1,3,10)] prems(10) by simp
+    subgoal premises prems for k g r
+      using unit_clause_next(1)[OF prems(1,3,10)] prems(9) by simp
+    subgoal premises prems for k g r
+      by (rule unit_clause_next(2)[OF prems(1,3,10)])
+    subgoal premises prems for k g x r
+      using unit_lit_post_not_settled[OF prems(1) _ prems(13,14)] prems(3,9,10,11)
+      unfolding unit_clause_post_def by simp
+    subgoal premises prems for g
+      using prems(7,8) unfolding unit_clause_post_def by simp
+    subgoal premises prems
+      using prems(1,4) unfolding formula_wf_def by linarith
     done
   done
 
@@ -379,114 +455,276 @@ lemma set_var_spec:
       contracts add: updated_contract_def simp add: true_def false_def)
   done
 
-text \<open>The facts about one step of \<^verbatim>\<open>propagate\<close> in the form the proof of its body needs them:
-  the clause \<open>x\<close> found from \<open>s\<close> on is unit with the unassigned literal \<open>xa\<close>.\<close>
-lemma propagate_step_facts:
-  assumes wf: \<open>formula_wf f (length a)\<close> and len: \<open>length d = length a\<close>
-    and s: \<open>unat s \<le> length (Formula_clauses f)\<close>
-    and k: \<open>2 * unset d + min (Suc 0) (unat s) < Suc k\<close>
-    and uc: \<open>unat x \<le> length (Formula_clauses f)\<close>
-    and ne: \<open>x \<noteq> word64_of_nat (length (Formula_clauses f))\<close>
-    and ul: \<open>unit_lit_post a d (Formula_clauses f ! unat x) (unat xa)\<close>
-    and nk: \<open>\<not> unat (word64_of_nat (length (Clause_v0 (Formula_clauses f ! unat x)))) \<le> unat xa\<close>
-  shows \<open>prop_rel f a d
-       (a[unat (Lit_var (Clause_v0 (Formula_clauses f ! unat x) ! unat xa)) :=
-          Lit_value (Clause_v0 (Formula_clauses f ! unat x) ! unat xa)])
-       (d[unat (Lit_var (Clause_v0 (Formula_clauses f ! unat x) ! unat xa)) := True])\<close>
-    \<open>2 * unset (d[unat (Lit_var (Clause_v0 (Formula_clauses f ! unat x) ! unat xa)) := True]) +
-       min (Suc 0) (unat (x + 1)) < k\<close>
-    \<open>unat (x + 1) \<le> length (Formula_clauses f)\<close>
-    \<open>unat x < 18446744073709551615\<close>
-    \<open>unat (Lit_var (Clause_v0 (Formula_clauses f ! unat x) ! unat xa)) < length a\<close>
-    \<open>unat xa < length (Clause_v0 (Formula_clauses f ! unat x))\<close>
-    \<open>unat x < length (Formula_clauses f)\<close>
+definition copy_contract :: \<open>Pasn \<Rightarrow> ('s, Pasn, 'abort) function_contract\<close> where
+  \<open>copy_contract pa \<equiv>
+     let pre = can_alloc_reference in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>r = pa\<rangle> in
+     make_function_contract pre post\<close>
+
+lemma copy_spec:
+  shows \<open>\<Gamma>; copy pa \<Turnstile>\<^sub>F copy_contract pa\<close>
+  apply (crush_boot f: copy_def contract: copy_contract_def)
+  apply (crush_base inline: Pasn_mk_def Assignments_mk_def simp add: Pasn.expand Assignments.expand)
+  done
+
+text \<open>The \<open>k\<close>-th unfolding of \<^const>\<open>propagate\<close> on the clauses \<open>s..e\<close>. Either \<open>e\<close> is the number
+  of clauses, or \<open>s\<close> is \<open>0\<close> and the clauses from \<open>e\<close> on are settled (the scan has come round to
+  the clause after the last unit one). Each recursive call either assigns one more variable or
+  goes on from the first clause, which it does not do twice in a row: twice the number of
+  unassigned variables, plus one if the scan has yet to come round, decreases and must be below
+  \<open>k\<close>.\<close>
+definition prop_pre :: \<open>Formula \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool\<close> where
+  \<open>prop_pre f a d s e k \<equiv>
+     formula_wf f (length a) \<and> length d = length a \<and> s \<le> e \<and> e \<le> length (Formula_clauses f) \<and>
+     (e \<noteq> length (Formula_clauses f) \<longrightarrow>
+        s = 0 \<and> (\<forall>j. e \<le> j \<and> j < length (Formula_clauses f) \<longrightarrow> settled a d (Formula_clauses f ! j))) \<and>
+     2 * unset d + (if e = length (Formula_clauses f) \<and> s \<noteq> 0 then 1 else 0) < k\<close>
+
+text \<open>\<^verbatim>\<open>Conflict\<close> means that no extension satisfies the formula; \<^verbatim>\<open>Fixpoint(pb)\<close> gives an
+  extension with the same satisfying extensions under which every clause is settled. The contract
+  states both conditions through these definitions, which \<open>crush_base\<close> does not unfold.\<close>
+definition prop_post :: \<open>Formula \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> Propagated \<Rightarrow> bool\<close> where
+  \<open>prop_post f a d r \<equiv> case r of
+     Propagated_Conflict \<Rightarrow> \<not> ext_sat f a d
+   | Propagated_Fixpoint pb \<Rightarrow> prop_rel f a d (Assignments_v0 (Pasn_assign pb)) (Pasn_set pb) \<and>
+       (\<forall>j < length (Formula_clauses f). settled (Assignments_v0 (Pasn_assign pb)) (Pasn_set pb) (Formula_clauses f ! j))\<close>
+
+definition propagate_contract :: \<open>nat \<Rightarrow> Formula \<Rightarrow> Pasn \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow> ('s, Propagated, 'abort) function_contract\<close> where
+  \<open>propagate_contract k f pa s e \<equiv>
+     let a = Assignments_v0 (Pasn_assign pa) in
+     let d = Pasn_set pa in
+     let pre = can_alloc_reference \<star> \<langle>prop_pre f a d (unat s) (unat e) k\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>prop_post f a d r\<rangle> in
+     make_function_contract pre post\<close>
+
+text \<open>The facts about the clause \<open>x\<close> that \<^verbatim>\<open>Formula::unit_clause\<close> found (it is below \<open>e\<close>), and
+  \<open>xa\<close>, the result of \<^verbatim>\<open>Clause::unit_lit\<close> on it.\<close>
+lemma prop_found_facts:
+  fixes s e x :: \<open>64 word\<close>
+  assumes pre: \<open>prop_pre f a d (unat s) (unat e) k\<close>
+    and ucp: \<open>unit_clause_post a d f (unat s) (unat e) (unat x)\<close> and ne: \<open>x \<noteq> e\<close>
+  shows \<open>unat x < unat e\<close> \<open>unat x < length (Formula_clauses f)\<close> \<open>unat x < 18446744073709551615\<close>
+    \<open>\<not> settled a d (Formula_clauses f ! unat x)\<close>
+    \<open>length (Clause_v0 (Formula_clauses f ! unat x)) < 2^63\<close>
 proof -
+  have \<open>unat x \<noteq> unat e\<close>
+    using ne word_unat.Rep_inject by blast
+  moreover have \<open>unat x \<le> unat e\<close>
+    using ucp unfolding unit_clause_post_def by simp
+  ultimately show x: \<open>unat x < unat e\<close>
+    by linarith
+  have n: \<open>unat e \<le> length (Formula_clauses f)\<close> \<open>length (Formula_clauses f) < 2^64\<close>
+    using pre unfolding prop_pre_def formula_wf_def by simp_all
+  show xn: \<open>unat x < length (Formula_clauses f)\<close>
+    using x n by simp
+  show \<open>unat x < 18446744073709551615\<close>
+    using xn n by simp
+  show \<open>\<not> settled a d (Formula_clauses f ! unat x)\<close>
+    using ucp x unfolding unit_clause_post_def by simp
+  show \<open>length (Clause_v0 (Formula_clauses f ! unat x)) < 2^63\<close>
+    using pre nth_mem[OF xn] unfolding prop_pre_def formula_wf_def by blast
+qed
+
+text \<open>A clause found by \<^verbatim>\<open>Formula::unit_clause\<close> that is not unit is false: the conflict.\<close>
+lemma prop_conflict:
+  fixes s e x xa :: \<open>64 word\<close>
+  assumes pre: \<open>prop_pre f a d (unat s) (unat e) k\<close>
+    and ucp: \<open>unit_clause_post a d f (unat s) (unat e) (unat x)\<close> and ne: \<open>x \<noteq> e\<close>
+    and ulp: \<open>unit_lit_post a d (Formula_clauses f ! unat x) (unat xa)\<close>
+    and nk: \<open>word64_of_nat (length (Clause_v0 (Formula_clauses f ! unat x))) \<le> xa\<close>
+  shows \<open>prop_post f a d Propagated_Conflict\<close>
+proof -
+  note fx = prop_found_facts[OF pre ucp ne]
+  have \<open>length (Clause_v0 (Formula_clauses f ! unat x)) \<le> unat xa\<close>
+    using nk fx(5) by (simp add: word_le_nat_alt unat_of_nat_eq)
+  then have \<open>\<forall>k. \<not> unit_at a d (Formula_clauses f ! unat x) k\<close>
+    using ulp unfolding unit_lit_post_def by auto
+  then have \<open>clause_false a d (Formula_clauses f ! unat x)\<close>
+    using fx(4) unfolding settled_def by blast
+  then have \<open>conflict a d f\<close>
+    using fx(2) unfolding conflict_iff_nth by blast
+  moreover have \<open>vars_below f (length d)\<close>
+    using pre formula_wf_vars_below unfolding prop_pre_def by simp
+  ultimately show ?thesis
+    using conflict_not_ext_sat unfolding prop_post_def by simp
+qed
+
+text \<open>The facts about one assignment of \<^verbatim>\<open>propagate\<close>: the clause \<open>x\<close> is unit with the
+  unassigned literal \<open>xa\<close>.\<close>
+lemma prop_assign_facts:
+  fixes s e x xa :: \<open>64 word\<close>
+  assumes pre: \<open>prop_pre f a d (unat s) (unat e) (Suc k)\<close>
+    and ucp: \<open>unit_clause_post a d f (unat s) (unat e) (unat x)\<close> and ne: \<open>x \<noteq> e\<close>
+    and ulp: \<open>unit_lit_post a d (Formula_clauses f ! unat x) (unat xa)\<close>
+    and nk: \<open>\<not> word64_of_nat (length (Clause_v0 (Formula_clauses f ! unat x))) \<le> xa\<close>
+  defines \<open>v \<equiv> unat (Lit_var (Clause_v0 (Formula_clauses f ! unat x) ! unat xa))\<close>
+    and \<open>b \<equiv> Lit_value (Clause_v0 (Formula_clauses f ! unat x) ! unat xa)\<close>
+  shows \<open>prop_rel f a d (a[v := b]) (d[v := True])\<close>
+    \<open>prop_pre f (a[v := b]) (d[v := True]) (unat (x + 1)) (unat (word64_of_nat (length (Formula_clauses f)))) k\<close>
+    \<open>unat x < 18446744073709551615\<close> \<open>v < length d\<close> \<open>v < length a\<close>
+    \<open>unat xa < length (Clause_v0 (Formula_clauses f ! unat x))\<close> \<open>unat x < length (Formula_clauses f)\<close>
+proof -
+  note fx = prop_found_facts[OF pre ucp ne]
+  have wf: \<open>formula_wf f (length a)\<close> and len: \<open>length d = length a\<close>
+    and m: \<open>2 * unset d < Suc k\<close>
+    using pre unfolding prop_pre_def by (simp_all split: if_splits)
   have lf: \<open>length (Formula_clauses f) < 2^64\<close>
     using wf unfolding formula_wf_def by simp
-  show x: \<open>unat x < length (Formula_clauses f)\<close>
-    by (rule formula_wf_idx[OF wf uc ne])
+  show x: \<open>unat x < length (Formula_clauses f)\<close> \<open>unat x < 18446744073709551615\<close>
+    using fx by simp_all
   define c where \<open>c = Formula_clauses f ! unat x\<close>
   have c: \<open>c \<in> set (Formula_clauses f)\<close>
     using x unfolding c_def by simp
-  have \<open>length (Clause_v0 c) < 2^63\<close>
-    using wf c unfolding formula_wf_def by blast
-  then show xa: \<open>unat xa < length (Clause_v0 (Formula_clauses f ! unat x))\<close>
-    using nk unfolding c_def by (simp add: unat_of_nat_eq)
+  show xa: \<open>unat xa < length (Clause_v0 (Formula_clauses f ! unat x))\<close>
+    using nk fx(5) by (simp add: word_le_nat_alt unat_of_nat_eq)
   have u: \<open>unit_at a d c (unat xa)\<close>
-    using ul xa unfolding unit_lit_post_def c_def by blast
+    using ulp xa unfolding unit_lit_post_def c_def by blast
   have vb: \<open>vars_below f (length a)\<close>
     using wf by (rule formula_wf_vars_below)
-  show v: \<open>unat (Lit_var (Clause_v0 (Formula_clauses f ! unat x) ! unat xa)) < length a\<close>
-    using vb c xa nth_mem[OF xa] unfolding vars_below_def c_def by blast
-  have nd: \<open>\<not> d ! unat (Lit_var (Clause_v0 (Formula_clauses f ! unat x) ! unat xa))\<close>
-    using u unfolding unit_at_def c_def by simp
-  have \<open>min (Suc 0) (unat (x + 1)) \<le> Suc 0\<close>
-    by simp
-  then show \<open>2 * unset (d[unat (Lit_var (Clause_v0 (Formula_clauses f ! unat x) ! unat xa)) := True]) +
-       min (Suc 0) (unat (x + 1)) < k\<close>
-    using unset_update[OF _ nd] v len k by simp
-  show \<open>prop_rel f a d
-       (a[unat (Lit_var (Clause_v0 (Formula_clauses f ! unat x) ! unat xa)) :=
-          Lit_value (Clause_v0 (Formula_clauses f ! unat x) ! unat xa)])
-       (d[unat (Lit_var (Clause_v0 (Formula_clauses f ! unat x) ! unat xa)) := True])\<close>
-    using prop_rel_unit[OF c u vb len] unfolding c_def .
-  show \<open>unat (x + 1) \<le> length (Formula_clauses f)\<close>
-    using unat_word_Suc[OF x lf] x by simp
-  show \<open>unat x < 18446744073709551615\<close>
-    using x lf by simp
+  show va: \<open>v < length a\<close>
+    using vb nth_mem[OF x(1)] nth_mem[OF xa] unfolding vars_below_def v_def by blast
+  then show \<open>v < length d\<close>
+    using len by simp
+  have nd: \<open>\<not> d ! v\<close>
+    using u unfolding unit_at_def c_def v_def by simp
+  show pr: \<open>prop_rel f a d (a[v := b]) (d[v := True])\<close>
+    using prop_rel_unit[OF c u vb len] unfolding c_def v_def b_def .
+  have us: \<open>unset (d[v := True]) < unset d\<close>
+    using unset_update[OF _ nd] va len by simp
+  have x1: \<open>unat (x + 1) = Suc (unat x)\<close>
+    using unat_word_Suc[OF x(1) lf] .
+  show \<open>prop_pre f (a[v := b]) (d[v := True]) (unat (x + 1)) (unat (word64_of_nat (length (Formula_clauses f)))) k\<close>
+    using wf len us m x1 x(1) lf unfolding prop_pre_def by (simp add: unat_of_nat_eq)
 qed
 
-text \<open>The \<open>k\<close>-th unfolding of \<^const>\<open>propagate\<close>. Each recursive call either assigns one
-  more variable or restarts the search for a unit clause from the first one, which it does not
-  do twice in a row: twice the number of unassigned variables, plus one if \<open>s\<close> is not \<open>0\<close>,
-  decreases and must be below \<open>k\<close>.\<close>
-definition propagate_contract :: \<open>nat \<Rightarrow> Formula \<Rightarrow> Pasn \<Rightarrow> 64 word \<Rightarrow> ('s, Pasn, 'abort) function_contract\<close> where
-  \<open>propagate_contract k f pa s \<equiv>
-     let a = Assignments_v0 (Pasn_assign pa) in
-     let d = Pasn_set pa in
-     let pre = can_alloc_reference \<star>
-        \<langle>formula_wf f (length a) \<and> length d = length a \<and> unat s \<le> length (Formula_clauses f) \<and>
-         2 * unset d + min 1 (unat s) < k\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star>
-        \<langle>prop_rel f a d (Assignments_v0 (Pasn_assign r)) (Pasn_set r)\<rangle> in
-     make_function_contract pre post\<close>
+lemma prop_post_rel:
+  assumes \<open>prop_rel f a d a' d'\<close> \<open>prop_post f a' d' r\<close>
+  shows \<open>prop_post f a d r\<close>
+proof (cases r)
+  case Propagated_Conflict
+  then show ?thesis
+    using assms unfolding prop_post_def prop_rel_def by simp
+next
+  case (Propagated_Fixpoint pb)
+  then show ?thesis
+    using assms prop_rel_trans[OF assms(1)] unfolding prop_post_def by simp
+qed
+
+text \<open>The scan of \<open>s..e\<close> to the last clause found none to propagate: it goes on from the first
+  clause up to \<open>s\<close>.\<close>
+lemma prop_round:
+  fixes s e :: \<open>64 word\<close>
+  assumes pre: \<open>prop_pre f a d (unat s) (unat e) (Suc k)\<close>
+    and ucp: \<open>unit_clause_post a d f (unat s) (unat e) (unat e)\<close>
+  shows \<open>e = word64_of_nat (length (Formula_clauses f)) \<Longrightarrow> s \<noteq> 0 \<Longrightarrow> prop_pre f a d (unat 0) (unat s) k\<close>
+proof -
+  have wf: \<open>formula_wf f (length a)\<close>
+    using pre unfolding prop_pre_def by simp
+  have lf: \<open>length (Formula_clauses f) < 2^64\<close>
+    using wf unfolding formula_wf_def by simp
+  have se: \<open>\<forall>j. unat s \<le> j \<and> j < unat e \<longrightarrow> settled a d (Formula_clauses f ! j)\<close>
+    using ucp unfolding unit_clause_post_def by simp
+  show \<open>prop_pre f a d (unat 0) (unat s) k\<close>
+    if \<open>e = word64_of_nat (length (Formula_clauses f))\<close> \<open>s \<noteq> 0\<close>
+  proof -
+    have \<open>unat e = length (Formula_clauses f)\<close>
+      using that(1) lf by (simp add: unat_of_nat_eq)
+    moreover have \<open>unat s \<noteq> 0\<close>
+      using that(2) unat_eq_zero by blast
+    ultimately show ?thesis
+      using pre se unfolding prop_pre_def by auto
+  qed
+qed
+
+text \<open>The scan found no clause to propagate and has come round: every clause is settled.\<close>
+lemma prop_fixpoint:
+  assumes pre: \<open>prop_pre f a d s e k\<close> and ucp: \<open>unit_clause_post a d f s e e\<close>
+    and en: \<open>e \<noteq> length (Formula_clauses f) \<or> s = 0\<close>
+    and pa: \<open>a = Assignments_v0 (Pasn_assign pa)\<close> \<open>d = Pasn_set pa\<close>
+  shows \<open>prop_post f a d (Propagated_Fixpoint pa)\<close>
+proof -
+  have se: \<open>\<forall>j. s \<le> j \<and> j < e \<longrightarrow> settled a d (Formula_clauses f ! j)\<close>
+    using ucp unfolding unit_clause_post_def by simp
+  have \<open>\<forall>j < length (Formula_clauses f). settled a d (Formula_clauses f ! j)\<close>
+  proof (cases \<open>e = length (Formula_clauses f)\<close>)
+    case True
+    then show ?thesis
+      using se en by auto
+  next
+    case False
+    have s0: \<open>s = 0\<close>
+      and ge: \<open>\<forall>j. e \<le> j \<and> j < length (Formula_clauses f) \<longrightarrow> settled a d (Formula_clauses f ! j)\<close>
+      using pre False unfolding prop_pre_def by simp_all
+    show ?thesis
+    proof (intro allI impI)
+      fix j assume j: \<open>j < length (Formula_clauses f)\<close>
+      show \<open>settled a d (Formula_clauses f ! j)\<close>
+      proof (cases \<open>j < e\<close>)
+        case True
+        then show ?thesis using se s0 by simp
+      next
+        case False
+        then show ?thesis using ge j by simp
+      qed
+    qed
+  qed
+  then show ?thesis
+    using pa prop_rel_refl unfolding prop_post_def by simp
+qed
 
 lemma propagate_rec_step_spec:
-  assumes \<open>\<And>pa s. \<Gamma>; R f pa s \<Turnstile>\<^sub>F propagate_contract k f pa s\<close>
-  shows \<open>\<Gamma>; propagate_rec_step R f pa s \<Turnstile>\<^sub>F propagate_contract (Suc k) f pa s\<close>
+  assumes \<open>\<And>pa s e. \<Gamma>; R f pa s e \<Turnstile>\<^sub>F propagate_contract k f pa s e\<close>
+  shows \<open>\<Gamma>; propagate_rec_step R f pa s e \<Turnstile>\<^sub>F propagate_contract (Suc k) f pa s e\<close>
   apply (crush_boot f: propagate_rec_step_def contract: propagate_contract_def)
-  apply (crush_base inline: len_def
+  apply (crush_base inline: len_def Propagated_Fixpoint_mk_def
       specs add: assms Formula_unit_clause_spec Clause_unit_lit_spec set_var_spec
       contracts add: propagate_contract_def Formula_unit_clause_contract_def Clause_unit_lit_contract_def
         set_var_contract_def
-      simp add: true_def false_def word_less_nat_alt word_le_nat_alt unat_of_nat_eq word64_eq_of_nat_iff
-        prop_rel_refl)
+      simp add: true_def false_def)
   subgoal premises prems
-    using prop_rel_trans[OF propagate_step_facts(1)[OF prems(1-8)] prems(9)] .
-  subgoal premises prems by (rule propagate_step_facts(2)[OF prems(1-8)])
-  subgoal premises prems by (rule propagate_step_facts(3)[OF prems(1-8)])
-  subgoal premises prems by (rule propagate_step_facts(4)[OF prems(1-8)])
-  subgoal premises prems by (rule propagate_step_facts(5)[OF prems(1-8)])
-  subgoal premises prems by (rule propagate_step_facts(6)[OF prems(1-8)])
-  subgoal premises prems by (rule propagate_step_facts(7)[OF prems(1-8)])
-  subgoal premises prems by (rule propagate_step_facts(6)[OF prems(1-8)])
-  subgoal premises prems by (rule propagate_step_facts(7)[OF prems(1-8)])
-  subgoal premises prems by (rule formula_wf_idx[OF prems(1,5,6)])
+    by (rule prop_post_rel[OF prop_assign_facts(1)[OF prems(1-5)] prems(6)])
+  subgoal premises prems by (rule prop_assign_facts(2)[OF prems(1-5)])
+  subgoal premises prems by (rule prop_assign_facts(3)[OF prems(1-5)])
+  subgoal premises prems by (rule prop_assign_facts(4)[OF prems(1-5)])
+  subgoal premises prems by (rule prop_assign_facts(5)[OF prems(1-5)])
+  subgoal premises prems by (rule prop_assign_facts(6)[OF prems(1-5)])
+  subgoal premises prems by (rule prop_assign_facts(7)[OF prems(1-5)])
+  subgoal premises prems by (rule prop_assign_facts(6)[OF prems(1-5)])
+  subgoal premises prems by (rule prop_assign_facts(7)[OF prems(1-5)])
+  subgoal premises prems by (rule prop_conflict[OF prems(1-5)])
+  subgoal premises prems by (rule prop_found_facts(2)[OF prems(1-3)])
   subgoal premises prems
-    by (rule formula_wf_clause_pre[OF prems(1,2) formula_wf_idx[OF prems(1,5,6)]])
-  subgoal premises prems by (rule formula_wf_idx[OF prems(1,5,6)])
+    using formula_wf_clause_pre[of f pa] prop_found_facts(2)[OF prems(1-3)] prems(1)
+    unfolding prop_pre_def by simp
+  subgoal premises prems by (rule prop_found_facts(2)[OF prems(1-3)])
   subgoal premises prems
-    using prems(4,6) unat_gt_0[of s] by (simp add: min_def split: if_splits)
+  proof -
+    have \<open>length (Formula_clauses f) < 2^64\<close>
+      using prems(1) unfolding prop_pre_def formula_wf_def by simp
+    then have \<open>unat e \<noteq> length (Formula_clauses f)\<close>
+      using prems(3) word64_eq_of_nat_iff by blast
+    then show ?thesis
+      using prop_fixpoint[OF prems(1,2)] by simp
+  qed
+  subgoal premises prems
+    using prop_fixpoint[OF prems(1,2)] by simp
+  subgoal premises prems
+    using prop_round[OF prems(1,2) refl prems(4)] by simp
+  subgoal premises prems using prems(1) unfolding prop_pre_def by simp
+  subgoal premises prems using prems(1) unfolding prop_pre_def by simp
+  subgoal premises prems using prems(1) unfolding prop_pre_def by simp
+  subgoal premises prems using prems(1) unfolding prop_pre_def by simp
   done
 
 lemma propagate_rec_spec:
-  shows \<open>\<Gamma>; (propagate_rec_step ^^ k) g f pa s \<Turnstile>\<^sub>F propagate_contract k f pa s\<close>
-proof (induction k arbitrary: pa s)
+  shows \<open>\<Gamma>; (propagate_rec_step ^^ k) g f pa s e \<Turnstile>\<^sub>F propagate_contract k f pa s e\<close>
+proof (induction k arbitrary: pa s e)
   case 0
   show ?case
     apply (ucincl_discharge\<open>intro satisfies_function_contractI\<close>)
     apply (subst wp_sstriple_iff)
-    apply (simp add: propagate_contract_def Let_def apure_precise_False asepconj_bot_zero2 bot_aentails_all)
+    apply (simp add: propagate_contract_def prop_pre_def Let_def apure_precise_False asepconj_bot_zero2
+        bot_aentails_all)
     done
 next
   case (Suc k)
@@ -495,7 +733,7 @@ next
 qed
 
 lemma propagate_spec:
-  shows \<open>\<Gamma>; propagate f pa s \<Turnstile>\<^sub>F propagate_contract urust_fuel f pa s\<close>
+  shows \<open>\<Gamma>; propagate f pa s e \<Turnstile>\<^sub>F propagate_contract urust_fuel f pa s e\<close>
   unfolding propagate_def by (rule propagate_rec_spec)
 
 text \<open>The \<open>k\<close>-th unfolding of \<^const>\<open>solve\<close>. Its precondition requires fewer than \<open>k\<close>
@@ -508,6 +746,12 @@ definition solve_contract :: \<open>nat \<Rightarrow> Formula \<Rightarrow> Pasn
         \<langle>formula_wf f (length a) \<and> length d = length a \<and> 2 * length a < urust_fuel \<and> unset d < k\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star> \<langle>sol f a d r\<rangle> in
      make_function_contract pre post\<close>
+
+text \<open>If every clause is settled, there is no conflict.\<close>
+lemma settled_no_conflict:
+  assumes \<open>\<forall>j < length (Formula_clauses f). settled a d (Formula_clauses f ! j)\<close>
+  shows \<open>\<not> conflict a d f\<close>
+  using assms unfolding conflict_iff_nth settled_def by blast
 
 text \<open>The facts about the partial assignment \<open>pb\<close> after unit propagation, at the first clause
   \<open>xa\<close> without a true literal and its first unassigned literal \<open>xb\<close>.\<close>
@@ -531,7 +775,7 @@ lemma solve_branch_facts:
   assumes wf: \<open>formula_wf f (length a)\<close> and len: \<open>length d = length a\<close>
     and fuel: \<open>2 * length a < urust_fuel\<close> and k: \<open>unset d < Suc k\<close>
     and pr: \<open>prop_rel f a d (Assignments_v0 (Pasn_assign pb)) (Pasn_set pb)\<close>
-    and nc: \<open>\<not> conflict (Assignments_v0 (Pasn_assign pb)) (Pasn_set pb) f\<close>
+    and st: \<open>\<forall>j < length (Formula_clauses f). settled (Assignments_v0 (Pasn_assign pb)) (Pasn_set pb) (Formula_clauses f ! j)\<close>
     and oc: \<open>open_clause_post (Assignments_v0 (Pasn_assign pb)) (Pasn_set pb) f (unat xa)\<close>
     and ne: \<open>xa \<noteq> word64_of_nat (length (Formula_clauses f))\<close>
     and uf: \<open>unset_from_post (Pasn_set pb) (Formula_clauses f ! unat xa) 0 (unat xb)\<close>
@@ -543,6 +787,8 @@ lemma solve_branch_facts:
     \<open>\<not> Pasn_set pb ! unat (Lit_var (Clause_v0 (Formula_clauses f ! unat xa) ! unat xb))\<close>
 proof -
   note p = solve_prop_facts[OF wf len fuel pr]
+  have nc: \<open>\<not> conflict (Assignments_v0 (Pasn_assign pb)) (Pasn_set pb) f\<close>
+    by (rule settled_no_conflict[OF st])
   show xa: \<open>unat xa < length (Formula_clauses f)\<close>
     by (rule solve_open_idx[OF wf oc ne])
   define c where \<open>c = Formula_clauses f ! unat xa\<close>
@@ -585,67 +831,63 @@ proof -
     using assms(2) unfolding prop_rel_def sol_def by simp
 qed
 
-lemma solve_conflict_leaf:
-  assumes \<open>formula_wf f (length a)\<close> \<open>length d = length a\<close> \<open>prop_rel f a d a' d'\<close> \<open>conflict a' d' f\<close>
-  shows \<open>sol f a d Answer_Unsat\<close>
-proof -
-  have \<open>vars_below f (length d')\<close>
-    using assms(1-3) formula_wf_vars_below unfolding prop_rel_def more_set_def by simp
-  then have \<open>\<not> ext_sat f a' d'\<close>
-    using conflict_not_ext_sat[OF assms(4)] by simp
-  then show ?thesis
-    using assms(3) unfolding prop_rel_def sol_def by simp
-qed
-
 lemma solve_rec_step_spec:
   assumes \<open>\<And>pa. \<Gamma>; R f pa \<Turnstile>\<^sub>F solve_contract k f pa\<close>
   shows \<open>\<Gamma>; solve_rec_step R f pa \<Turnstile>\<^sub>F solve_contract (Suc k) f pa\<close>
   apply (crush_boot f: solve_rec_step_def contract: solve_contract_def)
   apply (crush_base inline: len_def
-      specs add: assms propagate_spec Formula_conflict_spec Formula_open_clause_spec Clause_unset_from_spec
-        set_var_spec
-      contracts add: solve_contract_def propagate_contract_def Formula_conflict_contract_def
-        Formula_open_clause_contract_def Clause_unset_from_contract_def set_var_contract_def
+      specs add: assms propagate_spec Formula_open_clause_spec Clause_unset_from_spec
+        set_var_spec copy_spec
+      contracts add: solve_contract_def propagate_contract_def
+        Formula_open_clause_contract_def Clause_unset_from_contract_def set_var_contract_def copy_contract_def
       simp add: true_def false_def word_less_nat_alt unat_of_nat_eq word64_eq_of_nat_iff)
-  subgoal for x xa xb xc
-    apply (cases xc)
-     apply (crush_base inline: Answer_Sat_mk_def)
-    apply (crush_base specs add: assms set_var_spec contracts add: solve_contract_def set_var_contract_def)
+  subgoal for x
+    apply (cases x)
+     apply (crush_base simp add: prop_post_def sol_def)
+    apply (crush_base inline: len_def
+        specs add: assms Formula_open_clause_spec Clause_unset_from_spec set_var_spec copy_spec
+        contracts add: solve_contract_def Formula_open_clause_contract_def Clause_unset_from_contract_def
+          set_var_contract_def copy_contract_def
+        simp add: true_def false_def prop_post_def word_less_nat_alt unat_of_nat_eq word64_eq_of_nat_iff)
+    subgoal for pb xa xb xc
+      apply (cases xc)
+       apply (crush_base inline: Answer_Sat_mk_def)
+      apply (crush_base specs add: assms set_var_spec contracts add: solve_contract_def set_var_contract_def)
+      subgoal premises prems
+        using sol_prop_rel[OF prems(6) sol_step[OF solve_branch_facts(3)[OF prems(1-4,6-10)]
+            solve_prop_facts(1)[OF prems(1-3,6)] solve_branch_facts(6)[OF prems(1-4,6-10)] prems(11)]]
+        by simp
+      subgoal premises prems
+        using sol_prop_rel[OF prems(6) sol_step[OF solve_branch_facts(3)[OF prems(1-4,6-10)]
+            solve_prop_facts(1)[OF prems(1-3,6)] solve_branch_facts(6)[OF prems(1-4,6-10)] prems(11)]] prems(13)
+        by simp
+      subgoal premises prems by (rule solve_branch_facts(5)[OF prems(1-4,6-10)])
+      subgoal premises prems by (rule solve_prop_facts(3)[OF prems(1-3,6)])
+      subgoal premises prems by (rule solve_prop_facts(1)[OF prems(1-3,6)])
+      subgoal premises prems by (rule solve_prop_facts(2)[OF prems(1-3,6)])
+      subgoal premises prems by (rule solve_branch_facts(3,4)[OF prems(1-4,6-10)])
+      subgoal premises prems by (rule solve_branch_facts(3,4)[OF prems(1-4,6-10)])
+      done
+    subgoal premises prems by (rule solve_branch_facts(5)[OF prems(1-4,6-10)])
+    subgoal premises prems by (rule solve_prop_facts(3)[OF prems(1-3,6)])
+    subgoal premises prems by (rule solve_prop_facts(1)[OF prems(1-3,6)])
+    subgoal premises prems by (rule solve_prop_facts(2)[OF prems(1-3,6)])
+    subgoal premises prems by (rule solve_branch_facts(4)[OF prems(1-4,6-10)])
+    subgoal premises prems by (rule solve_branch_facts(3)[OF prems(1-4,6-10)])
+    subgoal premises prems by (rule solve_branch_facts(2)[OF prems(1-4,6-10)])
+    subgoal premises prems by (rule solve_branch_facts(1)[OF prems(1-4,6-10)])
+    subgoal premises prems by (rule solve_branch_facts(2)[OF prems(1-4,6-10)])
+    subgoal premises prems by (rule solve_branch_facts(1)[OF prems(1-4,6-10)])
     subgoal premises prems
-      using sol_prop_rel[OF prems(5) sol_step[OF solve_branch_facts(3)[OF prems(1-9)]
-          solve_prop_facts(1)[OF prems(1-3,5)] solve_branch_facts(6)[OF prems(1-9)] prems(10)]]
-      by simp
-    subgoal premises prems
-      using sol_prop_rel[OF prems(5) sol_step[OF solve_branch_facts(3)[OF prems(1-9)]
-          solve_prop_facts(1)[OF prems(1-3,5)] solve_branch_facts(6)[OF prems(1-9)] prems(10)]] prems(12)
-      by simp
-    subgoal premises prems by (rule solve_branch_facts(5)[OF prems(1-9)])
-    subgoal premises prems by (rule solve_prop_facts(3)[OF prems(1-3,5)])
-    subgoal premises prems by (rule solve_prop_facts(1)[OF prems(1-3,5)])
-    subgoal premises prems by (rule solve_prop_facts(2)[OF prems(1-3,5)])
-    subgoal premises prems by (rule solve_branch_facts(3,4)[OF prems(1-9)])
-    subgoal premises prems by (rule solve_branch_facts(3,4)[OF prems(1-9)])
+      by (rule formula_wf_clause_pre[OF solve_prop_facts(2,1)[OF prems(1-3,6)] solve_open_idx[OF prems(1,8,9)]])
+    subgoal premises prems by (rule solve_open_idx[OF prems(1,8,9)])
+    subgoal premises prems by (rule solve_sat_leaf[OF prems(1,6,8)])
+    subgoal premises prems by (rule solve_prop_facts(1)[OF prems(1-3,6)])
+    subgoal premises prems by (rule solve_prop_facts(2)[OF prems(1-3,6)])
     done
-  subgoal premises prems by (rule solve_branch_facts(5)[OF prems(1-9)])
-  subgoal premises prems by (rule solve_prop_facts(3)[OF prems(1-3,5)])
-  subgoal premises prems by (rule solve_prop_facts(1)[OF prems(1-3,5)])
-  subgoal premises prems by (rule solve_prop_facts(2)[OF prems(1-3,5)])
-  subgoal premises prems by (rule solve_branch_facts(4)[OF prems(1-9)])
-  subgoal premises prems by (rule solve_branch_facts(3)[OF prems(1-9)])
-  subgoal premises prems by (rule solve_branch_facts(2)[OF prems(1-9)])
-  subgoal premises prems by (rule solve_branch_facts(1)[OF prems(1-9)])
-  subgoal premises prems by (rule solve_branch_facts(2)[OF prems(1-9)])
-  subgoal premises prems by (rule solve_branch_facts(1)[OF prems(1-9)])
   subgoal premises prems
-    by (rule formula_wf_clause_pre[OF solve_prop_facts(2,1)[OF prems(1-3,5)] solve_open_idx[OF prems(1,7,8)]])
-  subgoal premises prems by (rule solve_open_idx[OF prems(1,7,8)])
-  subgoal premises prems by (rule solve_sat_leaf[OF prems(1,5,7)])
-  subgoal premises prems by (rule solve_prop_facts(1)[OF prems(1-3,5)])
-  subgoal premises prems by (rule solve_prop_facts(2)[OF prems(1-3,5)])
-  subgoal premises prems by (rule solve_conflict_leaf[OF prems(1,2,5,6)])
-  subgoal premises prems by (rule solve_prop_facts(1)[OF prems(1-3,5)])
-  subgoal premises prems by (rule solve_prop_facts(2)[OF prems(1-3,5)])
-  subgoal premises prems using unset_le_length[of \<open>Pasn_set pa\<close>] prems(2,3) by simp
+    using prems(1-3) unset_le_length[of \<open>Pasn_set pa\<close>]
+    unfolding prop_pre_def formula_wf_def by (simp add: unat_of_nat_eq)
   done
 
 lemma solve_rec_spec:
