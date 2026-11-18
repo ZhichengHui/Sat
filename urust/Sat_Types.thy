@@ -57,4 +57,22 @@ enum Answer =
 definition "Answer_Sat_mk" :: \<open>Assignments \<Rightarrow> ('s, Answer, 'abort, 'i, 'o) function_body\<close> where
   [crush_inline]: \<open>Answer_Sat_mk \<equiv> \<lambda>a0. FunctionBody (literal (Answer_Sat a0))\<close>
 
+(* Rust: Cdcl *)
+scalable_datatype_record Cdcl =
+  Cdcl_pa :: \<open>Pasn\<close>
+  Cdcl_level :: \<open>(64 word) list\<close>
+  Cdcl_reason :: \<open>(64 word) list\<close>
+  Cdcl_trail :: \<open>(64 word) list\<close>
+  Cdcl_qhead :: \<open>64 word\<close>
+  Cdcl_db :: \<open>Clause list\<close>
+  Cdcl_watches :: \<open>((64 word) list) list\<close>
+  Cdcl_dl :: \<open>64 word\<close>
+  Cdcl_activity :: \<open>(64 word) list\<close>
+  Cdcl_inc :: \<open>64 word\<close>
+  Cdcl_phase :: \<open>bool list\<close>
+micro_rust_record Cdcl
+
+definition "Cdcl_mk" :: \<open>Pasn \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (Clause list) \<Rightarrow> (((64 word) list) list) \<Rightarrow> (64 word) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (bool list) \<Rightarrow> ('s, Cdcl, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>Cdcl_mk \<equiv> \<lambda>a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10. FunctionBody (literal (make_Cdcl a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10))\<close>
+
 end

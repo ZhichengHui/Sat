@@ -1,8 +1,8 @@
 #![allow(non_snake_case)]
 
 // A verified SAT solver: conflict-driven clause learning (CDCL) with two watched literals, first-UIP
-// learning, non-chronological backjumping, VSIDS-like decisions with saved phases and Luby
-// restarts (`cdcl`). Its answers need no proof of termination: `Unsat` only when it has derived the
+// learning and non-chronological backjumping; it decides the first unassigned variable, false
+// first (`cdcl`). Its answers need no proof of termination: `Unsat` only when it has derived the
 // empty clause by resolution, `Sat` only for an assignment of every variable that falsifies no
 // clause of the formula. Should it stop without an answer, the solver falls back on DPLL with unit
 // propagation (`solve`), a port of a verified WhyML solver.
@@ -191,12 +191,6 @@ const NONE: usize = usize::MAX;
 /// The CDCL search stops (and the solver falls back on `solve`) if the formula has this many
 /// variables or more, so that the index of a literal fits a `usize`.
 const MAX_VARS: usize = 1 << 62;
-/// The clause database stops growing at this size.
-const MAX_CLAUSES: usize = 1 << 62;
-/// An activity above this rescales all activities.
-const MAX_ACTIVITY: u64 = 1 << 60;
-/// The number of conflicts of the first restart; the following ones follow the Luby sequence.
-const RESTART_UNIT: u64 = 100;
 
 /// The index of the literal `l` in the watch lists: `2·var + value`.
 fn lit_idx(l: Lit) -> usize {
@@ -253,29 +247,13 @@ fn resolve(c: &Vec<Lit>, d: &Vec<Lit>, v: usize, b: bool) -> Vec<Lit> {
     out
 }
 
-/// The `i`-th element (from 0) of the Luby sequence 1, 1, 2, 1, 1, 2, 4, 1, …
-fn luby(i: u64) -> u64 {
-    let mut size: u64 = 1;
-    let mut seq: u64 = 0;
-    while size < i + 1 && seq < 62 {
-        seq += 1;
-        size = 2 * size + 1;
-    }
-    let mut x = i;
-    while size - 1 != x && size > 1 {
-        size = (size - 1) / 2;
-        seq -= 1;
-        x = x % size;
-    }
-    1 << seq
-}
-
 /// The state of the CDCL search. `db` holds the clauses of the formula (without repeated
 /// literals and tautologies) and the learned clauses; every one of them is satisfied by every
 /// model of the formula. A clause of at least two literals is watched by its first two literals:
 /// `watches[lit_idx(l)]` lists the clauses that watch `l`. The variables assigned are listed in
-/// `trail` in the order of assignment; `level` and `reason` give the decision level of each and the
-/// clause that implied it (`NONE` for a decision).
+/// `trail` in the order of assignment, those before `qhead` already propagated; `level` and
+/// `reason` give the decision level of each and the clause that implied it (`NONE` for a
+/// decision); `dl` is the current decision level.
 struct Cdcl {
     pa: Pasn,
     level: Vec<usize>,
@@ -285,9 +263,6 @@ struct Cdcl {
     db: Vec<Clause>,
     watches: Vec<Vec<usize>>,
     dl: usize,
-    activity: Vec<u64>,
-    inc: u64,
-    phase: Vec<bool>,
 }
 
 impl Cdcl {
@@ -397,12 +372,14 @@ impl Cdcl {
 
     /// Conflict analysis: from the clause `confl` (all false), resolves with the reasons of the
     /// variables of the current level, latest first, until one literal of that level is left (the
-    /// first unique implication point); at level 0 until none is left.
+    /// first unique implication point); at level 0 until none is left. It stops early if the
+    /// clause gets more literals than there are variables, which does not happen: all its
+    /// literals are false.
     fn analyze(&self, confl: usize) -> Vec<Lit> {
         let mut cl: Vec<Lit> = self.db[confl].0.clone();
         let stop: usize = if self.dl == 0 { 0 } else { 1 };
         let mut t = self.trail.len();
-        while t > 0 && self.count_level(&cl, self.dl) > stop {
+        while t > 0 && cl.len() <= self.pa.set.len() && self.count_level(&cl, self.dl) > stop {
             t -= 1;
             let v = self.trail[t];
             let r = self.reason[v];
@@ -414,63 +391,43 @@ impl Cdcl {
         cl
     }
 
-    /// Unassigns every variable of a decision level above `lv`, saving its value as its phase.
+    /// Unassigns every variable of a decision level above `lv`.
     fn backjump(&mut self, lv: usize) {
         while self.trail.len() > 0 && self.level[self.trail[self.trail.len() - 1]] > lv {
             let v = self.trail[self.trail.len() - 1];
             self.trail.pop();
             self.pa.set[v] = false;
-            self.phase[v] = self.pa.assign.0[v];
             self.reason[v] = NONE;
         }
         self.qhead = self.trail.len();
         self.dl = lv;
     }
 
-    /// Increases the activity of every variable of `c`.
-    fn bump(&mut self, c: &Vec<Lit>) {
-        let mut i: usize = 0;
-        while i < c.len() {
-            self.activity[c[i].var] += self.inc;
-            if self.activity[c[i].var] > MAX_ACTIVITY {
-                let mut v: usize = 0;
-                while v < self.activity.len() {
-                    self.activity[v] = self.activity[v] >> 32;
-                    v += 1;
-                }
-                self.inc = (self.inc >> 32) + 1;
-            }
-            i += 1;
-        }
-        self.inc = self.inc + self.inc / 16 + 1;
-    }
-
-    /// The unassigned variable of the largest activity; `NONE` if every variable is assigned.
+    /// The first unassigned variable; `NONE` if every variable is assigned.
     fn pick(&self) -> usize {
-        let mut best = NONE;
         let mut v: usize = 0;
         while v < self.pa.set.len() {
-            if !self.pa.set[v] && (best == NONE || self.activity[v] > self.activity[best]) {
-                best = v;
+            if !self.pa.set[v] {
+                return v;
             }
             v += 1;
         }
-        best
+        NONE
     }
 
-    /// Learns the clause `cl` derived by `analyze` at a level above 0: backjumps to the second
-    /// largest level of its literals, adds it to the database with its literal of the current
-    /// level first, and assigns that literal.
+    /// Learns the (non-empty) clause `c` derived by `analyze` at a level above 0: backjumps to
+    /// the largest level of its other literals, adds it to the database with its literal of the
+    /// current level first, and assigns that literal.
     fn learn(&mut self, cl: Vec<Lit>) {
         let mut c = cl;
         let mut i: usize = 0;
-        let mut bj: usize = 0;
         while i < c.len() {
             if self.level[c[i].var] == self.dl {
                 c.swap(0, i);
             }
             i += 1;
         }
+        let mut bj: usize = 0;
         let mut j: usize = 1;
         while j < c.len() {
             if self.level[c[j].var] > bj {
@@ -479,23 +436,17 @@ impl Cdcl {
             }
             j += 1;
         }
-        self.bump(&c);
         self.backjump(bj);
         let l = c[0];
-        if self.db.len() >= MAX_CLAUSES {
-            return;
-        }
-        if c.len() == 1 {
+        let r = if c.len() == 1 {
             let r = self.db.len();
             self.db.push(Clause(c));
-            if !self.pa.set[l.var] {
-                self.enqueue(l, r);
-            }
+            r
         } else {
-            let r = self.add_clause(Clause(c));
-            if !self.pa.set[l.var] {
-                self.enqueue(l, r);
-            }
+            self.add_clause(Clause(c))
+        };
+        if !self.pa.set[l.var] {
+            self.enqueue(l, r);
         }
     }
 }
@@ -515,9 +466,6 @@ pub fn cdcl(f: &Formula) -> Option<Answer> {
         db: Vec::new(),
         watches: vec![Vec::new(); 2 * n],
         dl: 0,
-        activity: vec![0; n],
-        inc: 1,
-        phase: vec![false; n],
     };
     let mut confl = NONE;
     let mut i: usize = 0;
@@ -544,9 +492,6 @@ pub fn cdcl(f: &Formula) -> Option<Answer> {
         }
         i += 1;
     }
-    let mut conflicts: u64 = 0;
-    let mut restarts: u64 = 0;
-    let mut budget: u64 = RESTART_UNIT;
     loop {
         if confl == NONE {
             confl = s.propagate();
@@ -557,17 +502,10 @@ pub fn cdcl(f: &Formula) -> Option<Answer> {
             if cl.len() == 0 {
                 return Some(Answer::Unsat);
             }
-            if s.dl == 0 {
+            if s.dl == 0 || cl.len() > n {
                 return None;
             }
             s.learn(cl);
-            conflicts += 1;
-            if conflicts >= budget {
-                restarts += 1;
-                conflicts = 0;
-                budget = RESTART_UNIT * luby(restarts);
-                s.backjump(0);
-            }
             continue;
         }
         let v = s.pick();
@@ -577,9 +515,11 @@ pub fn cdcl(f: &Formula) -> Option<Answer> {
             }
             return Some(Answer::Sat(s.pa.assign));
         }
+        if s.dl >= n {
+            return None;
+        }
         s.dl += 1;
-        let b = s.phase[v];
-        s.enqueue(Lit { var: v, value: b }, NONE);
+        s.enqueue(Lit { var: v, value: false }, NONE);
     }
 }
 
