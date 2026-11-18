@@ -2,11 +2,13 @@
 //! small formulas, whose answers are compared with an independent brute-force evaluation. Every
 //! model returned is checked against the formula.
 
-use sat::{Answer, Clause, Formula, Lit, solver};
+use sat::{Answer, Clause, Formula, Lit, cdcl, solver};
 
 /// The solver's answer as a Boolean; every `Sat` model is checked independently: it gives a value to
-/// each variable and satisfies every clause.
+/// each variable and satisfies every clause. The CDCL search must answer by itself, without the
+/// fallback.
 fn decide(f: &Formula) -> bool {
+    assert!(cdcl(f).is_some(), "the CDCL search stopped without an answer");
     match solver(f) {
         Answer::Sat(a) => {
             assert_eq!(a.0.len(), f.num_vars, "the model does not give a value to each variable");
