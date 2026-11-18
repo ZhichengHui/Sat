@@ -429,8 +429,9 @@ impl Search {
             let v = q.var;
             if v != p && v < self.seen.len() && v < self.level.len() && !self.seen[v] && self.level[v] > 0 {
                 self.seen[v] = true;
+                let lv = self.level[v];
                 self.bump(v);
-                if self.level[v] >= cur {
+                if lv >= cur {
                     if count < NONE {
                         count += 1;
                     }
@@ -778,7 +779,9 @@ fn cdcl(f: &Formula) -> Option<Answer> {
             s.attach(f, &learned, c);
             s.enqueue(v, b, c);
             confl = NONE;
-            conflicts += 1;
+            if conflicts < restart_at {
+                conflicts += 1;
+            }
             if conflicts >= restart_at {
                 conflicts = 0;
                 if restart_at < BIG {

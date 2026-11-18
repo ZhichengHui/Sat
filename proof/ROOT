@@ -3,6 +3,7 @@ session "Sat_Proof" = "Sat_Spec" +
   theories
     Sat_Partial
     Sat_Proof
+    Sat_CDCL
 
 session "Sat_Top" in "top" = "Sat_Proof" +
   options [document = false]

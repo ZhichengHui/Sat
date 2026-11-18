@@ -561,8 +561,9 @@ definition "Search_analyze_clause" :: \<open>(('addr, 'gv, Search) Global_Store.
       let v = q.Lit_var;
       if ((((v != p) && (v < len(* (self.Search_seen)))) && (v < len(* (self.Search_level)))) && (!((* (self.Search_seen))[v]))) && (((* (self.Search_level))[v]) > 0_usize) {
         * (self.Search_seen[v]) = true;
+        let lv = (* (self.Search_level))[v];
         Search_bump(self, v);
-        if ((* (self.Search_level))[v]) >= cur {
+        if lv >= cur {
           if (* count_v) < NONE() {
             * count_v += 1_usize;
           }
@@ -734,7 +735,9 @@ definition "cdcl" :: \<open>Formula \<Rightarrow> ('s, Answer option, 'abort, 'i
         Search_attach(s, f, * learned, c);
         Search_enqueue(s, v, b, c);
         * confl = NONE();
-        * conflicts += 1_usize;
+        if (* conflicts) < (* restart_at) {
+          * conflicts += 1_usize;
+        };
         if (* conflicts) >= (* restart_at) {
           * conflicts = 0_usize;
           if (* restart_at) < BIG() {

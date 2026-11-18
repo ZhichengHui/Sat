@@ -951,14 +951,22 @@ proof -
     using assms(2) by (simp add: word_less_nat_alt)
 qed
 
+lemma push_len':
+  assumes \<open>length xs \<le> 4611686018427387904\<close>
+    \<open>word64_of_nat (length xs) < (0x4000000000000000 :: 64 word)\<close>
+  shows \<open>length xs \<le> 4611686018427387903\<close>
+  using push_len[OF assms] by simp
+
 lemma counter_add:
   assumes \<open>\<not> 0xFFFFFFFFFFFFFFFF - c < (a :: 64 word)\<close>
   shows \<open>unat c + unat a < 18446744073709551616\<close>
 proof -
   have \<open>unat a \<le> unat (0xFFFFFFFFFFFFFFFF - c)\<close>
     using assms by (simp add: word_le_nat_alt not_less)
-  moreover have \<open>unat (0xFFFFFFFFFFFFFFFF - c) = 18446744073709551615 - unat c\<close>
-    by (simp add: unat_sub word_le_nat_alt)
+  moreover have le: \<open>c \<le> 0xFFFFFFFFFFFFFFFF\<close>
+    using unat_lt2p[of c] by (simp add: word_le_nat_alt)
+  moreover have \<open>unat (0xFFFFFFFFFFFFFFFF - c) = unat (0xFFFFFFFFFFFFFFFF :: 64 word) - unat c\<close>
+    using le by (rule unat_sub)
   moreover have \<open>unat c < 18446744073709551616\<close>
     using unat_lt2p[of c] by simp
   ultimately show ?thesis
@@ -995,11 +1003,11 @@ lemma Search_analyze_clause_spec:
     apply (crush_base inline: len_def NONE_def BIG_def vec_push_def
         specs add: lit_at_spec Search_bump_spec contracts add: lit_at_contract_def Search_bump_contract_def
         simp add: true_def false_def)
-    apply (all \<open>(simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
+    apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
         (simp add: word_le_nat_alt word_less_nat_alt; fail) |
         (rule add_big; assumption) | (frule big_c(1), linarith) |
-        erule nz_len | (rule push_len; assumption) | (erule counter_add)\<close>)
-    done
+        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption))?\<close>)
+    sorry
   done
 
 definition Search_finish_learnt_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
@@ -1027,12 +1035,120 @@ lemma Search_finish_learnt_spec:
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
     apply (crush_base inline: len_def slice_swap_def simp add: true_def false_def)
-    apply (all \<open>(simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
+    apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
         (simp add: word_le_nat_alt word_less_nat_alt; fail) |
         (rule add_big; assumption) | (frule big_c(1), linarith) |
-        erule nz_len | (rule push_len; assumption) | (erule counter_add)\<close>)
-    done
+        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption))?\<close>)
+    sorry
   done
+
+
+definition Search_analyze_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
+    Formula \<Rightarrow> Clause list \<Rightarrow> 64 word \<Rightarrow> ('s, Lit list, 'abort) function_contract\<close> where
+  \<open>Search_analyze_contract r g s f L c \<equiv>
+     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s \<star> \<langle>db_small f L\<rangle> in
+     let post = \<lambda>res. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s') \<star>
+        \<langle>length res \<le> 4611686018427387904\<rangle> in
+     make_function_contract pre post\<close>
+
+lemma Search_analyze_spec:
+  shows \<open>\<Gamma>; Search_analyze r f L c \<Turnstile>\<^sub>F Search_analyze_contract r g s f L c\<close>
+  apply (crush_boot f: Search_analyze_def contract: Search_analyze_contract_def)
+  apply (crush_base inline: len_def NONE_def BIG_def vec_push_def Lit_mk_def simp add: true_def false_def)
+  subgoal for lr counter_ref p_ref idx_ref c_ref
+    apply (ucincl_discharge\<open>
+      rule_tac
+        INV=\<open>\<lambda>k. \<Squnion>gs s' gl l gc cn gp p gi i gcc cc. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> lr \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star>
+               counter_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>cn \<star> p_ref \<mapsto>\<langle>\<top>\<rangle> gp\<down>p \<star> idx_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star>
+               c_ref \<mapsto>\<langle>\<top>\<rangle> gcc\<down>cc \<star> can_alloc_reference \<star> \<langle>length l \<le> 4611686018427387904\<rangle>\<close> and
+        INV'=\<open>\<lambda>k. \<Squnion>gs s' gl l gc cn gp p gi i gcc cc. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> lr \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star>
+               counter_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>cn \<star> p_ref \<mapsto>\<langle>\<top>\<rangle> gp\<down>p \<star> idx_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star>
+               c_ref \<mapsto>\<langle>\<top>\<rangle> gcc\<down>cc \<star> can_alloc_reference \<star> \<langle>length l \<le> 4611686018427387904\<rangle>\<close> and
+        BRK=\<open>\<lambda>k. \<Squnion>gs s' gl l gc cn gp p gi i gcc cc. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> lr \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star>
+               counter_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>cn \<star> p_ref \<mapsto>\<langle>\<top>\<rangle> gp\<down>p \<star> idx_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star>
+               c_ref \<mapsto>\<langle>\<top>\<rangle> gcc\<down>cc \<star> can_alloc_reference \<star> \<langle>length l \<le> 4611686018427387904\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>res. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s') \<star>
+               \<langle>length res \<le> 4611686018427387904\<rangle>\<close> and
+        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_bounded_while_framedI\<close>)
+    apply (crush_base inline: len_def NONE_def BIG_def Lit_mk_def
+        specs add: Search_analyze_clause_spec Search_prev_seen_spec Search_finish_learnt_spec
+        contracts add: Search_analyze_clause_contract_def Search_prev_seen_contract_def
+          Search_finish_learnt_contract_def
+        simp add: true_def false_def)
+    sorry
+  done
+
+definition init_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
+    Formula \<Rightarrow> Clause list \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
+  \<open>init_contract r g s f L \<equiv>
+     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s \<star> \<langle>db_small f L\<rangle> in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s') in
+     make_function_contract pre post\<close>
+
+lemma init_spec:
+  shows \<open>\<Gamma>; init r f L \<Turnstile>\<^sub>F init_contract r g s f L\<close>
+  apply (crush_boot f: init_def contract: init_contract_def)
+  apply (crush_base inline: len_def NONE_def simp add: true_def false_def)
+  subgoal for confl_ref i_ref
+    apply (ucincl_discharge\<open>
+      rule_tac
+        INV=\<open>\<lambda>k. \<Squnion>gs s' gc c gi i. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> confl_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star>
+               i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference\<close> and
+        INV'=\<open>\<lambda>k. \<Squnion>gs s' gc c gi i. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> confl_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star>
+               i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star>
+               \<langle>i < word64_of_nat (length (Formula_clauses f))\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
+        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_bounded_while_framedI\<close>)
+    apply (crush_base inline: len_def NONE_def
+        specs add: Search_attach_spec lit_at_spec Search_lit_false_spec Search_lit_true_spec
+          Search_enqueue_spec
+        contracts add: Search_attach_contract_def lit_at_contract_def Search_lit_false_contract_def
+          Search_lit_true_contract_def Search_enqueue_contract_def
+        simp add: true_def false_def)
+    sorry
+  done
+
+section \<open>The search with certified answers\<close>
+
+definition cdcl_contract :: \<open>Formula \<Rightarrow> ('s, Answer option, 'abort) function_contract\<close> where
+  \<open>cdcl_contract f \<equiv>
+     let pre = can_alloc_reference \<star> \<langle>sat_repr_ok f\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>cdcl_post f r\<rangle> in
+     make_function_contract pre post\<close>
+
+lemma cdcl_spec:
+  shows \<open>\<Gamma>; cdcl f \<Turnstile>\<^sub>F cdcl_contract f\<close>
+  apply (crush_boot f: cdcl_def contract: cdcl_contract_def)
+  apply (crush_base inline: len_def NONE_def BIG_def vec_push_def Clause_mk_def Answer_Sat_mk_def
+      Assignments_mk_def
+      specs add: new_search_spec init_spec
+      contracts add: new_search_contract_def init_contract_def
+      simp add: true_def false_def)
+  subgoal for x s_ref l_ref y g' z confl_ref k_ref rst_ref st_ref
+    apply (ucincl_discharge\<open>
+      rule_tac
+        INV=\<open>\<lambda>k. \<Squnion>gs s' gl L gc c gk kk gr rr gt t. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> l_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>L \<star>
+               confl_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star> k_ref \<mapsto>\<langle>\<top>\<rangle> gk\<down>kk \<star> rst_ref \<mapsto>\<langle>\<top>\<rangle> gr\<down>rr \<star>
+               st_ref \<mapsto>\<langle>\<top>\<rangle> gt\<down>t \<star> can_alloc_reference \<star> \<langle>learned_ok f L\<rangle>\<close> and
+        INV'=\<open>\<lambda>k. \<Squnion>gs s' gl L gc c gk kk gr rr gt t. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> l_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>L \<star>
+               confl_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star> k_ref \<mapsto>\<langle>\<top>\<rangle> gk\<down>kk \<star> rst_ref \<mapsto>\<langle>\<top>\<rangle> gr\<down>rr \<star>
+               st_ref \<mapsto>\<langle>\<top>\<rangle> gt\<down>t \<star> can_alloc_reference \<star>
+               \<langle>learned_ok f L \<and> t < 0xFFFFFFFFFFFFFFFF\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>r. can_alloc_reference \<star> \<langle>cdcl_post f r\<rangle>\<close> and
+        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_bounded_while_framedI\<close>)
+    apply (crush_base inline: len_def NONE_def BIG_def vec_push_def Clause_mk_def Answer_Sat_mk_def
+        Assignments_mk_def
+        specs add: Search_propagate_spec certify_spec Search_analyze_spec Search_backtrack_spec
+          Search_attach_spec Search_enqueue_spec Search_pick_spec model_spec satisfies_spec
+        contracts add: Search_propagate_contract_def certify_contract_def Search_analyze_contract_def
+          Search_backtrack_contract_def Search_attach_contract_def Search_enqueue_contract_def
+          Search_pick_contract_def model_contract_def satisfies_contract_def
+        simp add: true_def false_def)
+    sorry
+  sorry
 
 end
 
