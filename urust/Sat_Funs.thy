@@ -17,26 +17,16 @@ definition "set_next" :: \<open>Pasn \<Rightarrow> bool \<Rightarrow> ('s, Pasn,
     Pasn_mk { Pasn_assign: Assignments_mk(* assign), Pasn_ix: (pa.Pasn_ix) + 1_usize }
   \<rbrakk>\<close>
 
-(* Rust: Clause::eval *)
-definition "Clause_eval" :: \<open>Clause \<Rightarrow> Assignments \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>Clause_eval \<equiv> \<lambda>self a. FunctionBody \<lbrakk>
+(* Rust: Clause::falsified *)
+definition "Clause_falsified" :: \<open>Clause \<Rightarrow> Pasn \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Clause_falsified \<equiv> \<lambda>self pa. FunctionBody \<lbrakk>
     let mut i = 0_usize;
     let clause_len = len(self.Clause_v0);
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < clause_len {
-      if (a.Assignments_v0[self.Clause_v0[* i].Lit_var]) == (self.Clause_v0[* i].Lit_value) {
-        return true;
+      if (self.Clause_v0[* i].Lit_var) >= (pa.Pasn_ix) {
+        return false;
       };
-      * i += 1_usize;
-    };
-    false
-  \<rbrakk>\<close>
-
-(* Rust: Formula::eval *)
-definition "Formula_eval" :: \<open>Formula \<Rightarrow> Assignments \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>Formula_eval \<equiv> \<lambda>self a. FunctionBody \<lbrakk>
-    let mut i = 0_usize;
-    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(self.Formula_clauses) {
-      if !Clause_eval(self.Formula_clauses[* i], a) {
+      if (pa.Pasn_assign.Assignments_v0[self.Clause_v0[* i].Lit_var]) == (self.Clause_v0[* i].Lit_value) {
         return false;
       };
       * i += 1_usize;
@@ -44,15 +34,28 @@ definition "Formula_eval" :: \<open>Formula \<Rightarrow> Assignments \<Rightarr
     true
   \<rbrakk>\<close>
 
+(* Rust: Formula::conflict *)
+definition "Formula_conflict" :: \<open>Formula \<Rightarrow> Pasn \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Formula_conflict \<equiv> \<lambda>self pa. FunctionBody \<lbrakk>
+    let mut i = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < len(self.Formula_clauses) {
+      if Clause_falsified(self.Formula_clauses[* i], pa) {
+        return true;
+      };
+      * i += 1_usize;
+    };
+    false
+  \<rbrakk>\<close>
+
 text \<open>Recursive group solve: defined by iterating solve_rec_step \<^term>\<open>urust_fuel\<close> times.\<close>
 
 definition "solve_rec_step" :: \<open>((Formula \<Rightarrow> Pasn \<Rightarrow> ('s, Answer, 'abort, 'i prompt, 'o prompt_output) function_body)) \<Rightarrow> ((Formula \<Rightarrow> Pasn \<Rightarrow> ('s, Answer, 'abort, 'i prompt, 'o prompt_output) function_body))\<close> where
   \<open>solve_rec_step \<equiv> \<lambda>rec_solve. (\<lambda>f pa. FunctionBody \<lbrakk>
-    if (pa.Pasn_ix) == len(pa.Pasn_assign.Assignments_v0) {
-      if Formula_eval(f, pa.Pasn_assign) {
-        return Answer_Sat_mk(pa.Pasn_assign);
-      };
+    if Formula_conflict(f, pa) {
       return Answer_Unsat;
+    };
+    if (pa.Pasn_ix) == len(pa.Pasn_assign.Assignments_v0) {
+      return Answer_Sat_mk(pa.Pasn_assign);
     };
     match \<epsilon>\<open>rec_solve\<close>(f, set_next(pa, true)) {
       Answer_Sat(a) \<Rightarrow> {
