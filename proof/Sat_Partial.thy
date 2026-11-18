@@ -228,13 +228,6 @@ proof
     using a'(2) c(1) unfolding formula_sat_def by blast
 qed
 
-text \<open>Without a conflict, an assignment of every variable satisfies the formula.\<close>
-lemma no_conflict_formula_sat:
-  assumes \<open>\<not> conflict a d f\<close> \<open>\<forall>v < length d. d ! v\<close> \<open>vars_below f (length d)\<close>
-  shows \<open>formula_sat a f\<close>
-  using assms unfolding conflict_def clause_false_def formula_sat_def clause_sat_def vars_below_def
-  by blast
-
 text \<open>Some literal of the clause is assigned its value.\<close>
 definition clause_true :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> Clause \<Rightarrow> bool\<close> where
   \<open>clause_true a d c \<equiv>
@@ -283,20 +276,16 @@ proof
   ultimately show False using assms(1) by simp
 qed
 
-lemma one_unset_unit:
-  assumes \<open>\<not> clause_true a d c\<close> \<open>k < length (Clause_v0 c)\<close>
-    \<open>\<not> d ! unat (Lit_var (Clause_v0 c ! k))\<close>
-    \<open>\<forall>j < k. d ! unat (Lit_var (Clause_v0 c ! j))\<close>
-    \<open>\<forall>j. Suc k \<le> j \<and> j < length (Clause_v0 c) \<longrightarrow> d ! unat (Lit_var (Clause_v0 c ! j))\<close>
-  shows \<open>unit_at a d c k\<close>
-  unfolding unit_at_def
-proof (intro conjI allI impI)
-  fix j assume j: \<open>j < length (Clause_v0 c)\<close> \<open>j \<noteq> k\<close>
-  show d: \<open>d ! unat (Lit_var (Clause_v0 c ! j))\<close>
-    using assms(4,5) j by (cases \<open>j < k\<close>) auto
-  show \<open>\<not> lit_sat a (Clause_v0 c ! j)\<close>
-    using assms(1) j d unfolding clause_true_def by blast
-qed (use assms in auto)
+text \<open>The clause is neither false nor unit under the partial assignment: unit propagation has
+  nothing to do with it.\<close>
+definition settled :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> Clause \<Rightarrow> bool\<close> where
+  \<open>settled a d c \<equiv> \<not> clause_false a d c \<and> (\<forall>k. \<not> unit_at a d c k)\<close>
+
+text \<open>If every clause is settled, there is no conflict.\<close>
+lemma settled_no_conflict:
+  assumes \<open>\<forall>j < length (Formula_clauses f). settled a d (Formula_clauses f ! j)\<close>
+  shows \<open>\<not> conflict a d f\<close>
+  using assms unfolding conflict_iff_nth settled_def by blast
 
 section \<open>Unit propagation\<close>
 
