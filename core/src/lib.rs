@@ -515,10 +515,10 @@ impl Search {
             return Vec::new();
         }
         learnt[0] = Lit { var: p, value: !self.assign[p] };
-        self.finish_learnt(&mut learnt);
         if self.inc < BIG {
             self.inc += self.inc / 16 + 1;
         }
+        self.finish_learnt(&mut learnt);
         learnt
     }
 
@@ -738,6 +738,35 @@ fn satisfies(f: &Formula, a: &Vec<bool>) -> bool {
     i >= f.clauses.len()
 }
 
+/// Handles the false clause `confl`: learns a certified clause and asserts its first literal
+/// after backjumping (0); or, at decision level 0, certifies the empty clause: the formula is
+/// unsatisfiable (1); or gives up (2).
+fn on_conflict(s: &mut Search, f: &Formula, learned: &mut Vec<Clause>, confl: usize) -> usize {
+    if s.lim.len() == 0 {
+        let empty: Vec<Lit> = Vec::new();
+        if certify(f, learned, &s.assign, &s.trail, &s.reason, confl, &empty) {
+            return 1;
+        }
+        return 2;
+    }
+    let learnt = s.analyze(f, learned, confl);
+    if learnt.len() == 0
+        || learned.len() >= BIG
+        || !certify(f, learned, &s.assign, &s.trail, &s.reason, confl, &learnt)
+    {
+        return 2;
+    }
+    let v = learnt[0].var;
+    let b = learnt[0].value;
+    let bj = if learnt.len() > 1 && learnt[1].var < s.level.len() { s.level[learnt[1].var] } else { 0 };
+    s.backtrack(bj);
+    let c = f.clauses.len() + learned.len();
+    learned.push(Clause(learnt));
+    s.attach(f, learned, c);
+    s.enqueue(v, b, c);
+    0
+}
+
 /// The CDCL search; `None` when it gives up.
 fn cdcl(f: &Formula) -> Option<Answer> {
     let n = f.num_vars;
@@ -756,28 +785,13 @@ fn cdcl(f: &Formula) -> Option<Answer> {
             confl = s.propagate(f, &learned);
         }
         if confl != NONE {
-            if s.lim.len() == 0 {
-                let empty: Vec<Lit> = Vec::new();
-                if certify(f, &learned, &s.assign, &s.trail, &s.reason, confl, &empty) {
-                    return Some(Answer::Unsat);
-                }
+            let r = on_conflict(&mut s, f, &mut learned, confl);
+            if r == 1 {
+                return Some(Answer::Unsat);
+            }
+            if r == 2 {
                 return None;
             }
-            let learnt = s.analyze(f, &learned, confl);
-            if learnt.len() == 0
-                || learned.len() >= BIG
-                || !certify(f, &learned, &s.assign, &s.trail, &s.reason, confl, &learnt)
-            {
-                return None;
-            }
-            let v = learnt[0].var;
-            let b = learnt[0].value;
-            let bj = if learnt.len() > 1 && learnt[1].var < s.level.len() { s.level[learnt[1].var] } else { 0 };
-            s.backtrack(bj);
-            let c = f.clauses.len() + learned.len();
-            learned.push(Clause(learnt));
-            s.attach(f, &learned, c);
-            s.enqueue(v, b, c);
             confl = NONE;
             if conflicts < restart_at {
                 conflicts += 1;

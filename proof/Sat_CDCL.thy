@@ -951,6 +951,19 @@ proof -
     using assms(2) by (simp add: word_less_nat_alt)
 qed
 
+lemma swap_ok:
+  assumes \<open>(ra :: 64 word) < word64_of_nat n\<close> \<open>(2 :: 64 word) < word64_of_nat n\<close>
+    \<open>Suc 0 < n \<longrightarrow> \<not> unat ra < n\<close>
+  shows False
+proof -
+  have \<open>unat ra < n\<close>
+    using assms(1) by (rule word64_less_of_nat)
+  moreover have \<open>unat (2 :: 64 word) < n\<close>
+    using assms(2) by (rule word64_less_of_nat)
+  ultimately show False
+    using assms(3) by simp
+qed
+
 lemma push_len':
   assumes \<open>length xs \<le> 4611686018427387904\<close>
     \<open>word64_of_nat (length xs) < (0x4000000000000000 :: 64 word)\<close>
@@ -1007,7 +1020,7 @@ lemma Search_analyze_clause_spec:
         (simp add: word_le_nat_alt word_less_nat_alt; fail) |
         (rule add_big; assumption) | (frule big_c(1), linarith) |
         erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption))?\<close>)
-    sorry
+    done
   done
 
 definition Search_finish_learnt_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
@@ -1039,7 +1052,8 @@ lemma Search_finish_learnt_spec:
         (simp add: word_le_nat_alt word_less_nat_alt; fail) |
         (rule add_big; assumption) | (frule big_c(1), linarith) |
         erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption))?\<close>)
-    sorry
+    apply (all \<open>(rule FalseE, rule swap_ok; assumption)?\<close>)
+    done
   done
 
 
@@ -1107,10 +1121,103 @@ lemma init_spec:
         contracts add: Search_attach_contract_def lit_at_contract_def Search_lit_false_contract_def
           Search_lit_true_contract_def Search_enqueue_contract_def
         simp add: true_def false_def)
-    sorry
+    apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
+        (simp add: word_le_nat_alt word_less_nat_alt; fail) |
+        (rule add_big; assumption) | (frule big_c(1), linarith) |
+        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption))\<close>)
+    done
   done
 
 section \<open>The search with certified answers\<close>
+
+text \<open>The facts about the clause database and the answers that the main loop of \<^verbatim>\<open>cdcl\<close> uses.\<close>
+
+lemma learned_ok_Nil:
+  \<open>learned_ok f []\<close>
+  unfolding learned_ok_def by simp
+
+lemma f_small:
+  assumes \<open>sat_repr_ok f\<close> \<open>\<not> 0x4000000000000000 \<le> word64_of_nat (length (Formula_clauses f))\<close>
+  shows \<open>length (Formula_clauses f) < 4611686018427387904\<close>
+proof -
+  have lf: \<open>length (Formula_clauses f) < 2 ^ 64\<close>
+    using assms(1) unfolding sat_repr_ok_def by simp
+  then have \<open>unat (word64_of_nat (length (Formula_clauses f))) = length (Formula_clauses f)\<close>
+    by (simp add: unat_of_nat_eq)
+  then show ?thesis
+    using assms(2) by (simp add: word_le_nat_alt not_le)
+qed
+
+lemma db_small_of:
+  assumes \<open>sat_repr_ok f\<close> \<open>length (Formula_clauses f) < 4611686018427387904\<close> \<open>learned_ok f L\<close>
+  shows \<open>db_small f L\<close>
+  using assms unfolding db_small_def db_def sat_repr_ok_def learned_ok_def by fastforce
+
+lemma db_index_add:
+  assumes \<open>length (Formula_clauses f) < 4611686018427387904\<close> \<open>length L < 4611686018427387904\<close>
+  shows \<open>unat (word64_of_nat (length (Formula_clauses f))) + unat (word64_of_nat (length L))
+    < 18446744073709551616\<close>
+  using assms by (simp add: unat_of_nat_eq)
+
+lemma learned_small:
+  assumes \<open>learned_ok f L\<close> \<open>\<not> 0x4000000000000000 \<le> word64_of_nat (length L)\<close>
+  shows \<open>length L < 4611686018427387904\<close>
+proof -
+  have \<open>length L < 2 ^ 64\<close>
+    using assms(1) unfolding learned_ok_def by simp
+  then have \<open>unat (word64_of_nat (length L)) = length L\<close>
+    by (simp add: unat_of_nat_eq)
+  then show ?thesis
+    using assms(2) by (simp add: word_le_nat_alt not_le)
+qed
+
+lemma cdcl_post_None:
+  \<open>cdcl_post f None\<close>
+  unfolding cdcl_post_def by simp
+
+lemma cdcl_post_Unsat:
+  assumes \<open>learned_ok f L\<close>
+    \<open>\<forall>a. (\<forall>c \<in> set (db f L). clause_sat a c) \<longrightarrow> (\<exists>l \<in> set ([] :: Lit list). lit_sat a l)\<close>
+  shows \<open>cdcl_post f (Some Answer_Unsat)\<close>
+  using learned_ok_unsat[OF assms] unfolding cdcl_post_def by simp
+
+lemma cdcl_post_Sat:
+  \<open>length m = unat (Formula_num_vars f) \<Longrightarrow> formula_sat m f \<Longrightarrow>
+    cdcl_post f (Some (Answer_Sat (make_Assignments m)))\<close>
+  unfolding cdcl_post_def by simp
+
+lemma half_add:
+  assumes \<open>x < (0x4000000000000000 :: 64 word)\<close>
+  shows \<open>unat x + unat (x div 2) < 18446744073709551616\<close>
+proof -
+  have \<open>unat (x div 2) \<le> unat x\<close>
+    by (simp add: unat_div)
+  then show ?thesis
+    using big_c(1)[OF assms] by linarith
+qed
+
+
+definition on_conflict_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
+    Formula \<Rightarrow> ('addr, 'gv, Clause list) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Clause list \<Rightarrow> 64 word \<Rightarrow>
+    ('s, 64 word, 'abort) function_contract\<close> where
+  \<open>on_conflict_contract r g s f lref gl L c \<equiv>
+     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s \<star> lref \<mapsto>\<langle>\<top>\<rangle> gl\<down>L \<star>
+        \<langle>sat_repr_ok f \<and> length (Formula_clauses f) < 4611686018427387904 \<and> learned_ok f L\<rangle> in
+     let post = \<lambda>res. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s') \<star>
+        (\<Squnion>gl' L'. lref \<mapsto>\<langle>\<top>\<rangle> gl'\<down>L' \<star>
+           \<langle>learned_ok f L' \<and> (res = 1 \<longrightarrow> (\<forall>a. \<not> formula_sat a f))\<rangle>) in
+     make_function_contract pre post\<close>
+
+lemma on_conflict_spec:
+  shows \<open>\<Gamma>; on_conflict r f lref c \<Turnstile>\<^sub>F on_conflict_contract r g s f lref gl L c\<close>
+  apply (crush_boot f: on_conflict_def contract: on_conflict_contract_def)
+  apply (crush_base inline: len_def NONE_def BIG_def vec_push_def Clause_mk_def
+      specs add: certify_spec Search_analyze_spec Search_backtrack_spec Search_attach_spec
+        Search_enqueue_spec
+      contracts add: certify_contract_def Search_analyze_contract_def Search_backtrack_contract_def
+        Search_attach_contract_def Search_enqueue_contract_def
+      simp add: true_def false_def)
+  sorry
 
 definition cdcl_contract :: \<open>Formula \<Rightarrow> ('s, Answer option, 'abort) function_contract\<close> where
   \<open>cdcl_contract f \<equiv>
@@ -1121,8 +1228,7 @@ definition cdcl_contract :: \<open>Formula \<Rightarrow> ('s, Answer option, 'ab
 lemma cdcl_spec:
   shows \<open>\<Gamma>; cdcl f \<Turnstile>\<^sub>F cdcl_contract f\<close>
   apply (crush_boot f: cdcl_def contract: cdcl_contract_def)
-  apply (crush_base inline: len_def NONE_def BIG_def vec_push_def Clause_mk_def Answer_Sat_mk_def
-      Assignments_mk_def
+  apply (crush_base inline: len_def NONE_def BIG_def
       specs add: new_search_spec init_spec
       contracts add: new_search_contract_def init_contract_def
       simp add: true_def false_def)
@@ -1139,13 +1245,11 @@ lemma cdcl_spec:
         \<tau>=\<open>\<lambda>r. can_alloc_reference \<star> \<langle>cdcl_post f r\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base inline: len_def NONE_def BIG_def vec_push_def Clause_mk_def Answer_Sat_mk_def
-        Assignments_mk_def
-        specs add: Search_propagate_spec certify_spec Search_analyze_spec Search_backtrack_spec
-          Search_attach_spec Search_enqueue_spec Search_pick_spec model_spec satisfies_spec
-        contracts add: Search_propagate_contract_def certify_contract_def Search_analyze_contract_def
-          Search_backtrack_contract_def Search_attach_contract_def Search_enqueue_contract_def
-          Search_pick_contract_def model_contract_def satisfies_contract_def
+    apply (crush_base inline: len_def NONE_def BIG_def vec_push_def Answer_Sat_mk_def Assignments_mk_def
+        specs add: Search_propagate_spec on_conflict_spec Search_backtrack_spec Search_enqueue_spec
+          Search_pick_spec model_spec satisfies_spec
+        contracts add: Search_propagate_contract_def on_conflict_contract_def Search_backtrack_contract_def
+          Search_enqueue_contract_def Search_pick_contract_def model_contract_def satisfies_contract_def
         simp add: true_def false_def)
     sorry
   sorry
