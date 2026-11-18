@@ -19,6 +19,11 @@ of an improvement, not a reason to avoid one; never route a change around the pr
   of the goal above, aimed at the active suites: small `agent-plan` issues, each with an aim
   measurable on them, ordered so that each builds on merged work. When no owner's issue is waiting
   and no suite is active, planners create no issues and signal `return-to-human`.
+- A task that stops for the owner labels its issue `needs-owner` and ends the session without
+  `coordination skip`. The workflow `owner gate` parks the issue (`agent-plan` becomes
+  `parked:agent-plan`, `directive` becomes `parked:directive`), so the agents stop when nothing
+  else is left. When the owner has answered and adds `owner-approved`, the workflow puts the issue
+  back in the queue, and pod resumes.
 
 ## Rules
 
@@ -83,8 +88,10 @@ of an improvement, not a reason to avoid one; never route a change around the pr
   instance, and how answers (and, where possible, models) are checked. Instances that are not
   small are fetched from their public source and checked by hash, not committed. The agent that
   builds the first suite also writes `bench/run.sh`.
-- `bench/active` lists the active suites, one per line. The owner activates and deactivates them;
-  an inactive suite stays in `bench/` and is not run.
+- `bench/active` lists the active suites, one per line. The pull request of a new suite also adds
+  it to `bench/active`, so the owner's approval activates it; the owner deactivates suites. An
+  inactive suite stays in `bench/` and is not run. A push to main that adds a suite to
+  `bench/active` opens a `directive` (workflow `wake on active suite`), and pod resumes.
 - Suites are built only for issues of the owner. A suite takes instances with known answers from
   public collections (SATLIB, or SAT-COMP through GBD), some that the solver solves and some that it does not yet,
   graded in difficulty where possible. Its pull request states what it measures, why it is at the

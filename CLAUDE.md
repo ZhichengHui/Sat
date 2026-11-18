@@ -54,7 +54,7 @@ follow them. In practice:
   say so in the pull request). That is the only change of `spec/` you may make.
 - If a task seems to need any other change of `spec/`, do not make it: comment on the issue
   explaining why, label the issue
-  `needs-owner`, and stop.
+  `needs-owner`, and stop: end the session without `coordination skip` (`PLAN.md`, Direction).
 - After three failed attempts with the same approach, change the approach.
 
 ## Tests
@@ -65,8 +65,9 @@ Their role is in `PLAN.md`. Run `cargo test --release` (`core/tests/`) and
 ## Benchmarks
 
 Their rules are in `PLAN.md`. `bench/active` lists the active suites; run one with
-`bench/run.sh SUITE` on the release build. A pull request that changes `bench/` gets the label
-`needs-owner` and waits for the owner's label `owner-approved`.
+`bench/run.sh SUITE` on the release build. The pull request of a new suite also adds it to
+`bench/active`. A pull request that changes `bench/` gets the label `needs-owner` and waits for
+the owner's label `owner-approved`.
 
 ## Commits and pull requests
 
