@@ -1,6 +1,6 @@
 # Checks of this repository:
 # - spec: tools/check-spec.sh (spec/ is unchanged except its heap locale, which matches the
-#   generated locale; see PLAN.md);
+#   generated locale, and the prism lists of generated functions; see PLAN.md);
 # - rust: cargo test;
 # - translation: urust/ is what the newest front end (master) generates from core/src/lib.rs;
 # - proofs: every Isabelle session of urust/, spec/ and proof/ on AutoCorrode, with HTML;

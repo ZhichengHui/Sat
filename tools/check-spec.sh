@@ -2,13 +2,22 @@
 # Usage: tools/check-spec.sh            check spec/ (CI runs this)
 #        tools/check-spec.sh --update   rewrite the manifest tools/spec.sha256 (the owner only)
 #
-# The rule it enforces (see PLAN.md): spec/ is fixed, with one exception. The locale <NAME>_heap in
-# spec/<NAME>_Spec.thy repeats the generated locale <NAME>_ctx of urust/<NAME>_Locale.thy without its
-# fuel line, and changes with it when the implementation uses a new type of mutable local.
-#   1. Every file of spec/, with the locale <NAME>_heap cut out, has the hash recorded in
+# The rule it enforces (see PLAN.md): spec/ is fixed, with two parts that follow the implementation.
+#   - The locale <NAME>_heap in spec/<NAME>_Spec.thy repeats the generated locale <NAME>_ctx of
+#     urust/<NAME>_Locale.thy without its fuel line, and changes with it when the implementation
+#     uses a new type of mutable local.
+#   - Each application of a generated function <NAME>_ctx.f in spec/ passes, between
+#     "reference_raw_fun" and "fuel", the prisms of the locale that f takes. That list changes with
+#     the implementation too.
+# The checks:
+#   1. Every file of spec/, with the locale <NAME>_heap cut out and every prism list between
+#      "reference_raw_fun" and "fuel" replaced by "<prisms>", has the hash recorded in
 #      tools/spec.sha256, and spec/ has exactly the files listed there.
 #   2. The locale <NAME>_heap is the generated <NAME>_ctx with "_ctx" renamed "_heap" and without
 #      the line "+ fixes urust_fuel :: nat".
+#   3. Each such prism list names prisms of the locale, in increasing order. That it is exactly
+#      the list the generated function takes is checked by Isabelle: the prisms of the locale have
+#      pairwise different types, so any other list does not type-check against the function.
 # <NAME> is the session name in urust/ROOT.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")/.." && pwd)
@@ -16,6 +25,7 @@ cd "$HERE"
 NAME=$(sed -n 's/^session "\([A-Za-z0-9_]*\)".*/\1/p' urust/ROOT | head -1)
 SPEC=spec/${NAME}_Spec.thy
 MANIFEST=tools/spec.sha256
+PRISMS='reference_raw_fun((?:\s+prism_[0-9]+)*)\s+fuel\b'
 
 # The lines of a file without the locale <NAME>_heap (from "locale <NAME>_heap =" up to the line
 # before the next "begin").
@@ -24,6 +34,11 @@ cut_locale() {
     $0 == start { skip = 1 }
     skip && $0 == "begin" { skip = 0 }
     !skip { print }' "$1"
+}
+
+# The same, with every prism list replaced by "<prisms>" (whitespace around it does not count).
+fixed_part() {
+  cut_locale "$1" | perl -0777 -pe "s/$PRISMS/reference_raw_fun <prisms> fuel/g"
 }
 
 # The locale <NAME>_heap of the spec, and the one expected from the generated locale.
@@ -42,7 +57,7 @@ expected_locale() {
 
 hashes() {
   find spec -type f | LC_ALL=C sort | while read -r f; do
-    printf '%s  %s\n' "$(cut_locale "$f" | sha256sum | cut -d' ' -f1)" "$f"
+    printf '%s  %s\n' "$(fixed_part "$f" | sha256sum | cut -d' ' -f1)" "$f"
   done
 }
 
@@ -54,7 +69,7 @@ fi
 
 status=0
 if ! diff <(hashes) <(LC_ALL=C sort -k2 "$MANIFEST") > /dev/null; then
-  echo "spec/ differs from $MANIFEST outside the locale ${NAME}_heap:"
+  echo "spec/ differs from $MANIFEST outside the locale ${NAME}_heap and the prism lists:"
   diff <(hashes) <(LC_ALL=C sort -k2 "$MANIFEST") || true
   status=1
 fi
@@ -66,5 +81,22 @@ elif ! diff <(spec_locale) <(expected_locale) > /dev/null; then
   diff <(spec_locale) <(expected_locale) || true
   status=1
 fi
-[ $status = 0 ] && echo "spec/ ok: unchanged outside the locale ${NAME}_heap, which matches urust/${NAME}_Locale.thy"
+nprisms=$(spec_locale | grep -cE '^  and prism_[0-9]+ ::' || true)
+bad=$(find spec -type f -name '*.thy' | LC_ALL=C sort | while read -r f; do
+  cut_locale "$f" | perl -0777 -ne '
+    while (/'"$PRISMS"'/g) {
+      my @n = ($1 =~ /prism_([0-9]+)/g);
+      my $ok = 1;
+      for my $i (0 .. $#n) {
+        $ok = 0 if $n[$i] < 1 || $n[$i] > '"$nprisms"' || ($i > 0 && $n[$i] <= $n[$i-1]);
+      }
+      print "'"$f"': prism list \"", join(" ", map { "prism_$_" } @n), "\"\n" unless $ok;
+    }'
+done)
+if [ -n "$bad" ]; then
+  echo "prism lists that are not increasing or name no prism of the locale ${NAME}_heap (1..$nprisms):"
+  echo "$bad"
+  status=1
+fi
+[ $status = 0 ] && echo "spec/ ok: unchanged outside the locale ${NAME}_heap and the prism lists; the locale matches urust/${NAME}_Locale.thy"
 exit $status

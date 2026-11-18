@@ -31,15 +31,23 @@ of an improvement, not a reason to avoid one; never route a change around the pr
 
 - `spec/` is the specification: the meaning of the top-level theorem `Sat_heap.solver_correct`
   depends on nothing else.
-- `spec/` is fixed, with one exception: the locale `Sat_heap` in `spec/Sat_Spec.thy` is the
-  generated locale `Sat_ctx` of `urust/Sat_Locale.thy` without its fuel line. When the
-  implementation uses a new type of mutable local, the generated locale gains a parameter, and
-  `Sat_heap` is updated to match it exactly. Nothing else in `spec/` changes unless the owner
-  changes it.
+- `spec/` is fixed, with two exceptions that follow the implementation:
+  - the locale `Sat_heap` in `spec/Sat_Spec.thy` is the generated locale `Sat_ctx` of
+    `urust/Sat_Locale.thy` without its fuel line. When the implementation uses a new type of
+    mutable local, the generated locale gains a parameter, and `Sat_heap` is updated to match it
+    exactly;
+  - each application of a generated function in `spec/` (`Sat_ctx.solver update_raw_fun
+    dereference_raw_fun reference_raw_fun prism_i ... prism_k fuel`) lists, between
+    `reference_raw_fun` and `fuel`, the prisms of the locale that the function takes, in
+    increasing order. When the function takes a new prism, the list is updated to match.
+
+  Nothing else in `spec/` changes unless the owner changes it.
 - A task that needs any other change of `spec/` stops there: say why on its issue and label the
   issue `needs-owner`.
-- `tools/check-spec.sh` enforces this in CI: outside the locale `Sat_heap`, `spec/` must match the
-  manifest `tools/spec.sha256`, and the locale must match the generated one. Only the owner
+- `tools/check-spec.sh` enforces this in CI: outside the locale `Sat_heap` and the prism
+  lists, `spec/` must match the manifest `tools/spec.sha256`; the locale must match the generated
+  one, and each prism list must name prisms of the locale in increasing order (type checking does
+  the rest). Only the owner
   updates the manifest (`tools/check-spec.sh --update`).
 - Make the solver fit the specification, never the specification fit the solver.
 

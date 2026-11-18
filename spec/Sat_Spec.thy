@@ -112,9 +112,10 @@ text \<open>The translation bounds every loop without an iteration bound and eve
   the fuel share their assumptions. The locale \<open>Sat_heap\<close> has the parameters and assumptions of
   \<^locale>\<open>Sat_ctx\<close> except the fuel (it repeats \<^verbatim>\<open>urust/Sat_Locale.thy\<close> without its last
   line); each value of the fuel gives an instance of \<^locale>\<open>Sat_ctx\<close> with the parameters of
-  \<open>Sat_heap\<close>. Its references are of standard types only (\<^typ>\<open>bool list\<close>,
-  \<^typ>\<open>64 word\<close>): the specification fixes no data structure of the implementation, only the
-  input and output types of \<^verbatim>\<open>Formula_Types\<close>.\<close>
+  \<open>Sat_heap\<close>. The abbreviation \<open>solver\<close> below passes to \<^verbatim>\<open>Sat_ctx.solver\<close> the prisms
+  of the locale that this function takes, in order. Like the locale, this list follows the
+  implementation (\<^verbatim>\<open>tools/check-spec.sh\<close> checks its form, type checking that it is the
+  function's list); the contract is stated on the input and output types only.\<close>
 
 locale Sat_heap =
   reference reference_types

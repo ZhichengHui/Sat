@@ -51,7 +51,9 @@ follow them. In practice:
   the gap to the framework as `PLAN.md` says.
 - After regenerating `urust/`, run `tools/check-spec.sh`. If it reports that the locale `Sat_heap`
   differs from the generated one, update that locale in `spec/Sat_Spec.thy` to match exactly (and
-  say so in the pull request). That is the only change of `spec/` you may make.
+  say so in the pull request). If a generated function in `spec/` now takes other prisms, update
+  its prism list (between `reference_raw_fun` and `fuel`) to the prisms it takes, in order. These
+  are the only changes of `spec/` you may make.
 - If a task seems to need any other change of `spec/`, do not make it: comment on the issue
   explaining why, label the issue
   `needs-owner`, and stop: end the session without `coordination skip` (`PLAN.md`, Direction).
