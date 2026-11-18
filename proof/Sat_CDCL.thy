@@ -1052,10 +1052,10 @@ lemma Search_analyze_clause_spec:
     apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
         (simp add: word_le_nat_alt word_less_nat_alt; fail) |
         (rule add_big; assumption) | (frule big_c(1), linarith) |
-        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) |
+        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
         (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
         (rule one_lt; assumption))?\<close>)
-    sorry
+    done
   done
 
 definition Search_finish_learnt_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
@@ -1085,11 +1085,11 @@ lemma Search_finish_learnt_spec:
     apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
         (simp add: word_le_nat_alt word_less_nat_alt; fail) |
         (rule add_big; assumption) | (frule big_c(1), linarith) |
-        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) |
+        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
         (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
         (rule one_lt; assumption))?\<close>)
     apply (all \<open>(rule FalseE, rule swap_ok; assumption)?\<close>)
-    sorry
+    done
   done
 
 definition Search_copy_learnt_contract :: \<open>Search \<Rightarrow> ('s, Lit list, 'abort) function_contract\<close> where
@@ -1116,10 +1116,10 @@ lemma Search_copy_learnt_spec:
     apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
         (simp add: word_le_nat_alt word_less_nat_alt; fail) |
         (rule add_big; assumption) | (frule big_c(1), linarith) |
-        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) |
+        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
         (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
         (rule one_lt; assumption))?\<close>)
-    sorry
+    done
   done
 
 definition Search_analyze_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
@@ -1160,10 +1160,10 @@ lemma Search_analyze_spec:
     apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
         (simp add: word_le_nat_alt word_less_nat_alt; fail) |
         (rule add_big; assumption) | (frule big_c(1), linarith) |
-        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) |
+        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
         (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
         (rule one_lt; assumption))?\<close>)
-    sorry
+    done
   done
 
 definition init_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
@@ -1311,6 +1311,11 @@ lemma unsat_of_cert:
     \<forall>a. \<not> formula_sat a f\<close>
   using learned_ok_unsat by blast
 
+lemma cdcl_post_Unsat2:
+  \<open>learned_ok f L \<Longrightarrow> \<forall>a. \<exists>c \<in> set (db f L). \<not> clause_sat a c \<Longrightarrow>
+    cdcl_post f (Some Answer_Unsat)\<close>
+  unfolding cdcl_post_def using db_sat by fastforce
+
 lemma cdcl_post_Unsat':
   \<open>\<forall>a. \<not> formula_sat a f \<Longrightarrow> cdcl_post f (Some Answer_Unsat)\<close>
   unfolding cdcl_post_def by simp
@@ -1323,7 +1328,7 @@ definition on_conflict_contract :: \<open>('addr, 'gv, Search) Global_Store.ref 
         \<langle>sat_repr_ok f \<and> length (Formula_clauses f) < 4611686018427387904 \<and> learned_ok f L\<rangle> in
      let post = \<lambda>res. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s') \<star>
         (\<Squnion>gl' L'. lref \<mapsto>\<langle>\<top>\<rangle> gl'\<down>L' \<star>
-           \<langle>learned_ok f L' \<and> (res = 1 \<longrightarrow> (\<forall>a. \<not> formula_sat a f))\<rangle>) in
+           \<langle>learned_ok f L' \<and> (res = 1 \<longrightarrow> \<not> (\<exists>a. \<forall>c \<in> set (db f L'). clause_sat a c))\<rangle>) in
      make_function_contract pre post\<close>
 
 lemma on_conflict_spec:
@@ -1338,15 +1343,15 @@ lemma on_conflict_spec:
   apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
         (simp add: word_le_nat_alt word_less_nat_alt; fail) |
         (rule add_big; assumption) | (frule big_c(1), linarith) |
-        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) |
+        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
         (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
         (rule one_lt; assumption) |
-        rule cdcl_post_None | (rule cdcl_post_Sat; assumption) | (rule cdcl_post_Unsat'; assumption) |
+        rule cdcl_post_None | (rule cdcl_post_Sat; assumption) | (rule cdcl_post_Unsat'; assumption) | (rule cdcl_post_Unsat2; assumption) |
         (rule half_add; assumption) | (rule f_small; assumption) | (rule f_len64; assumption) |
         (rule db_small_guard; assumption) | (rule db_small_Nil; assumption) | (rule learned_push'; assumption) |
         (rule db_small_push; assumption) | (rule db_index_add'; assumption) | (rule unsat_of_cert; assumption) |
         rule learned_ok_Nil | (rule db_small_of; assumption))?\<close>)
-  sorry
+  done
 
 definition cdcl_contract :: \<open>Formula \<Rightarrow> ('s, Answer option, 'abort) function_contract\<close> where
   \<open>cdcl_contract f \<equiv>
@@ -1383,27 +1388,27 @@ lemma cdcl_spec:
     apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
         (simp add: word_le_nat_alt word_less_nat_alt; fail) |
         (rule add_big; assumption) | (frule big_c(1), linarith) |
-        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) |
+        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
         (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
         (rule one_lt; assumption) |
-        rule cdcl_post_None | (rule cdcl_post_Sat; assumption) | (rule cdcl_post_Unsat'; assumption) |
+        rule cdcl_post_None | (rule cdcl_post_Sat; assumption) | (rule cdcl_post_Unsat'; assumption) | (rule cdcl_post_Unsat2; assumption) |
         (rule half_add; assumption) | (rule f_small; assumption) | (rule f_len64; assumption) |
         (rule db_small_guard; assumption) | (rule db_small_Nil; assumption) | (rule learned_push'; assumption) |
         (rule db_small_push; assumption) | (rule db_index_add'; assumption) | (rule unsat_of_cert; assumption) |
         rule learned_ok_Nil | (rule db_small_of; assumption))?\<close>)
-    sorry
+    done
   apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
         (simp add: word_le_nat_alt word_less_nat_alt; fail) |
         (rule add_big; assumption) | (frule big_c(1), linarith) |
-        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) |
+        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
         (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
         (rule one_lt; assumption) |
-        rule cdcl_post_None | (rule cdcl_post_Sat; assumption) | (rule cdcl_post_Unsat'; assumption) |
+        rule cdcl_post_None | (rule cdcl_post_Sat; assumption) | (rule cdcl_post_Unsat'; assumption) | (rule cdcl_post_Unsat2; assumption) |
         (rule half_add; assumption) | (rule f_small; assumption) | (rule f_len64; assumption) |
         (rule db_small_guard; assumption) | (rule db_small_Nil; assumption) | (rule learned_push'; assumption) |
         (rule db_small_push; assumption) | (rule db_index_add'; assumption) | (rule unsat_of_cert; assumption) |
         rule learned_ok_Nil | (rule db_small_of; assumption))?\<close>)
-  sorry
+  done
 
 end
 
