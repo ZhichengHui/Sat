@@ -61,6 +61,10 @@ code to avoid them. Known gaps and the workarounds that held:
   schematic, `crush_base` instantiated it with part of the state and the code after the inner loop
   lost its points-to facts. A loop directly inside an `else` branch also failed; put it after the
   `if` (f381ca7f / #80).
+- **A call added before a loop shifts the loop's parameters**: its post (`∃ g' s'`) adds parameters
+  in front, so `subgoal for n count_ref j_ref` binds the wrong ones (type clash `Search` vs
+  `focused`). Name the loop's variables with `apply (all ‹rename_tac …›)`, which names the last
+  parameters, as `learnt_lbd` does (c2676fcb / #82).
 - **A new mutable local of a new type adds a prism** to the locale `Sat_heap` in `spec/`. Put such
   data in a field of an existing record when possible (41040648, the LBD histogram).
 
