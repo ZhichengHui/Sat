@@ -8,6 +8,40 @@ text \<open>The facts that do not depend on the code of \<^verbatim>\<open>core/
   64-bit index arithmetic. \<^verbatim>\<open>Sat_Proof\<close> proves the contracts of the code with them; a solver
   with another search (CDCL) can reuse them unchanged.\<close>
 
+section \<open>The selector-update equations of the records\<close>
+
+text \<open>The simproc of \<^verbatim>\<open>scalable_datatype_record\<close> proves \<open>g (update_f h r) = g r\<close> when first
+  needed and keeps it in a cache shared by every theory, certified by the theory of the proof that
+  needed it first. With parallel proofs, that may be a theory the later users do not extend (a
+  proof of \<^verbatim>\<open>Sat_Proof\<close> while \<^verbatim>\<open>Sat_Certify\<close> and \<^verbatim>\<open>Sat_Search\<close> run beside it), and then a
+  user fails with ``Cannot transfer: not a super theory''. Proving every such equation here, at
+  the root of the proofs and before any proof is forked, certifies the cache by a theory that
+  every later one extends.\<close>
+ML \<open>
+  let
+    val ctxt = \<^context>
+    fun warm T =
+      let
+        val {selss = [sels], ...} = the (Ctr_Sugar.ctr_sugar_of ctxt (Proof_Context.read_type_name
+          {proper = true, strict = true} ctxt T |> dest_Type_name))
+        val upds = map (fn s => Syntax.read_term ctxt ("update_" ^ Long_Name.base_name (dest_Const_name s))) sels
+        fun eq (sel, upd) =
+          let
+            val t = Syntax.check_term ctxt (map_types (K dummyT) sel $
+              (map_types (K dummyT) upd $ Free ("h", dummyT) $ Free ("r", dummyT)))
+            val (sel', upd_h_r) = dest_comb t
+            val rhs = Thm.rhs_of (Simplifier.rewrite ctxt (Thm.cterm_of ctxt t))
+          in
+            if Thm.term_of rhs aconv sel' $ snd (dest_comb upd_h_r) then ()
+            else error ("record warm-up: " ^ Syntax.string_of_term ctxt t)
+          end
+      in
+        List.app (fn (i, u) => List.app (fn (j, s) => if i = j then () else eq (s, u))
+          (map_index I sels)) (map_index I upds)
+      end
+  in List.app warm ["Lit", "Pasn", "Formula", "Cut", "Search"] end
+\<close>
+
 section \<open>Satisfaction by index\<close>
 
 
