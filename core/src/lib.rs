@@ -246,17 +246,20 @@ struct Cut {
 /// `false_lit[key(v, b)]` holds iff the literal `(v, b)` is false under it; `trail`
 /// lists the assigned variables in order, decision level `d + 1` starts at trail position
 /// `lim[d]`, `level[v]` is the decision level of `v` and `reason[v]` the clause that propagated
-/// `v` (`NONE` for a decision). Clause `c` watches its literals at positions `wpos[2c]` and
-/// `wpos[2c + 1]`; the watch list `watches[key(v, b)]` of the literal `(v, b)` holds the watch
-/// nodes `2c`, `2c + 1` that watch it, and `wkey[node]` is the key of the literal node `node`
-/// watches, so that a visit sees whether the other watched literal is true without reading the
-/// clause. Each list is a vector of nodes, compacted in place when it is visited.
+/// `v` (`NONE` for a decision). The clauses are copied into the flat `arena`, clause `c` at
+/// offset `o = start[c]`: `arena[o]` is `c`, `arena[o + 1]` the end of the entry, `arena[o + 2]`
+/// and `arena[o + 3]` the arena positions of its two watched literals, `arena[o + 4]` and
+/// `arena[o + 5]` their keys, and from `o + 6` on the keys of its literals. The watch nodes of the
+/// clause are `2o` and `2o + 1`; the watch list `watches[key(v, b)]` of the literal `(v, b)` holds
+/// the nodes that watch it. A visit finds whether the other watched literal is true, and the
+/// literals to scan, in one place of the arena. Each list is a vector of nodes, compacted in place
+/// when it is visited.
 /// `qhead` is the first trail position not yet propagated. `phase` is the last value of each
 /// variable, `act` its activity, raised by `inc` whenever it takes part in a conflict; `seen`
 /// marks variables during conflict analysis, and `learnt` collects the literals of the clause it
 /// learns. Learned clause `i` has the literal block distance `lbd[i]` (the number of decision
 /// levels of its literals when it was learned); `reduce` sets `dead[i]` for about half of them and
-/// the keys of their nodes to `NONE`, and a node whose other node has the key `NONE` is dropped
+/// the keys of their watched literals to `NONE`, and a node whose other watched key is `NONE` is dropped
 /// from a watch list when the list is visited, so a dead clause no longer takes part
 /// in the search (it stays in the clause database). `stamp[l]` is `tick` if level `l` has been
 /// counted by the current `learnt_lbd`; `hist` is the histogram of the distances in `reduce`.
@@ -270,8 +273,8 @@ struct Search {
     lim: Vec<usize>,
     qhead: usize,
     watches: Vec<Vec<usize>>,
-    wpos: Vec<usize>,
-    wkey: Vec<usize>,
+    arena: Vec<usize>,
+    start: Vec<usize>,
     phase: Vec<bool>,
     act: Vec<usize>,
     inc: usize,
@@ -315,59 +318,82 @@ impl Search {
         }
     }
 
-    /// Adds the watch nodes `2c`, `2c + 1` of the new clause `c`, watching its first two
-    /// literals if it has two.
+    /// Adds the new clause `c` to the arena and, if it has two literals, its watch nodes `2o`,
+    /// `2o + 1` watching its first two literals.
     fn attach(&mut self, f: &Formula, learned: &Vec<Clause>, c: usize) {
-        self.wpos.push(0);
-        self.wpos.push(1);
-        self.wkey.push(NONE);
-        self.wkey.push(NONE);
-        if c < BIG && clause_len(f, learned, c) >= 2 {
-            let n0 = 2 * c;
-            let l0 = lit_at(f, learned, c, 0);
-            let l1 = lit_at(f, learned, c, 1);
-            let k0 = key(l0.var, l0.value);
-            let k1 = key(l1.var, l1.value);
-            if k0 < self.watches.len() && k1 < self.watches.len() && n0 + 1 < self.wkey.len() {
-                self.wkey[n0] = k0;
-                self.wkey[n0 + 1] = k1;
-                self.watches[k0].push(n0);
-                self.watches[k1].push(n0 + 1);
+        let o = self.arena.len();
+        self.start.push(o);
+        self.push_clause(f, learned, c);
+        if o < BIG && o + 7 < self.arena.len() && self.arena[o + 1] >= o + 8 {
+            let k0 = self.arena[o + 6];
+            let k1 = self.arena[o + 7];
+            if k0 < self.watches.len() && k1 < self.watches.len() {
+                self.arena[o + 4] = k0;
+                self.arena[o + 5] = k1;
+                self.watches[k0].push(2 * o);
+                self.watches[k1].push(2 * o + 1);
             }
         }
     }
 
-    /// A position of clause `c` other than `op` and `my` whose literal is not false; the
-    /// clause's length if there is none.
-    fn find_watch(&self, f: &Formula, learned: &Vec<Clause>, c: usize, op: usize, my: usize) -> usize {
-        let m = f.clauses.len();
-        if c < m {
-            return self.free_lit(&f.clauses[c], op, my);
+    /// Appends the entry of clause `c` to the arena: its index, the end of its entry, the
+    /// positions of its first two literals, two keys `NONE`, and the keys of its literals.
+    fn push_clause(&mut self, f: &Formula, learned: &Vec<Clause>, c: usize) {
+        let len = clause_len(f, learned, c);
+        let o = self.arena.len();
+        if o < BIG && len < BIG {
+            self.arena.push(c);
+            self.arena.push(o + 6 + len);
+            self.arena.push(o + 6);
+            self.arena.push(o + 7);
+            self.arena.push(NONE);
+            self.arena.push(NONE);
+            let mut j: usize = 0;
+            while j < len {
+                let l = lit_at(f, learned, c, j);
+                self.arena.push(key(l.var, l.value));
+                j += 1;
+            }
         }
-        if c - m < learned.len() {
-            return self.free_lit(&learned[c - m], op, my);
-        }
-        0
     }
 
-    /// A position of `cl` other than `op` and `my` whose literal is not false; the clause's length
-    /// if there is none. The scan is cyclic and starts after the later of the two watched
-    /// positions, so that the literals just before them, found false before, are read last.
-    fn free_lit(&self, cl: &Clause, op: usize, my: usize) -> usize {
-        let len = cl.0.len();
-        let mut j: usize = if my < len && op < len { if my > op { my + 1 } else { op + 1 } } else { 0 };
-        let mut n: usize = 0;
-        while n < len {
-            if j >= len {
-                j = 0;
-            }
-            if j != op && j != my && !self.lit_false(cl.0[j].var, cl.0[j].value) {
+    /// A position of the arena in `base..end` other than `op` and `my` whose literal is not
+    /// false; `end` if there is none. The scan is cyclic and starts after the later of the two
+    /// watched positions, so that the literals just before them, found false before, are read
+    /// last; it reads the three ranges between the watched positions in turn.
+    fn find_watch(&self, base: usize, end: usize, op: usize, my: usize) -> usize {
+        if op >= end || my >= end || op < base || my < base {
+            return end;
+        }
+        let hi = if my > op { my } else { op };
+        let lo = if my > op { op } else { my };
+        let a = self.scan(hi + 1, end);
+        if a < end {
+            return a;
+        }
+        let b = self.scan(base, lo);
+        if b < lo {
+            return b;
+        }
+        let d = self.scan(lo + 1, hi);
+        if d < hi {
+            return d;
+        }
+        end
+    }
+
+    /// The first position of the arena in `from..to` whose literal is not false; `to` if there
+    /// is none.
+    fn scan(&self, from: usize, to: usize) -> usize {
+        let end = if to < self.arena.len() { to } else { self.arena.len() };
+        let mut j = from;
+        while j < end {
+            if !self.key_false(self.arena[j]) {
                 return j;
             }
             j += 1;
-            n += 1;
         }
-        len
+        to
     }
 
     /// The literal with the key `k` is true: the literal of the key `k ^ 1` is false.
@@ -376,11 +402,11 @@ impl Search {
     }
 
     /// Visits the watch list `k` of a literal that has become false, until a clause is false: a
-    /// node whose other node has the key `NONE` (a dead clause) is dropped from it; each other
+    /// node whose other watched key is `NONE` (a dead clause) is dropped from it; each other
     /// clause on it gets a new watched literal that is not false, propagates its other watched
     /// literal, or is false. The list is compacted in place: the nodes that stay on it move to the
     /// front, in order. The index of a false clause, or `NONE`.
-    fn propagate_lit(&mut self, f: &Formula, learned: &Vec<Clause>, k: usize) -> usize {
+    fn propagate_lit(&mut self, k: usize) -> usize {
         if k >= self.watches.len() {
             return NONE;
         }
@@ -391,35 +417,34 @@ impl Search {
         while i < ws.len() && confl == NONE {
             let node = ws[i];
             i += 1;
-            let other = node ^ 1;
-            let okey = if other < self.wkey.len() { self.wkey[other] } else { NONE };
-            if okey == NONE || node >= self.wpos.len() || node >= self.wkey.len() {
+            let o = node / 2;
+            let side = node % 2;
+            let okey = if o < BIG && o + 5 < self.arena.len() { self.arena[o + 5 - side] } else { NONE };
+            if okey == NONE {
             } else if self.key_true(okey) {
                 if j < ws.len() {
                     ws[j] = node;
                     j += 1;
                 }
             } else {
-                let c = node / 2;
-                let my = self.wpos[node];
-                let op = if other < self.wpos.len() { self.wpos[other] } else { NONE };
-                let ol = lit_at(f, learned, c, op);
-                let found = self.find_watch(f, learned, c, op, my);
-                let nl = lit_at(f, learned, c, found);
-                let nk = key(nl.var, nl.value);
-                if found < clause_len(f, learned, c) && nk < self.watches.len() && nk != k {
-                    self.wpos[node] = found;
-                    self.wkey[node] = nk;
+                let c = self.arena[o];
+                let my = self.arena[o + 2 + side];
+                let op = self.arena[o + 3 - side];
+                let found = self.find_watch(o + 6, self.arena[o + 1], op, my);
+                let nk = if found < self.arena[o + 1] && found < self.arena.len() { self.arena[found] } else { NONE };
+                if nk < self.watches.len() && nk != k {
+                    self.arena[o + 2 + side] = found;
+                    self.arena[o + 4 + side] = nk;
                     self.watches[nk].push(node);
                 } else {
                     if j < ws.len() {
                         ws[j] = node;
                         j += 1;
                     }
-                    if self.lit_false(ol.var, ol.value) {
+                    if self.key_false(okey) {
                         confl = c;
                     } else {
-                        self.enqueue(ol.var, ol.value, c);
+                        self.enqueue(okey / 2, okey % 2 == 1, c);
                     }
                 }
             }
@@ -431,13 +456,13 @@ impl Search {
     }
 
     /// Unit propagation of the trail from `qhead` on; the index of a false clause, or `NONE`.
-    fn propagate(&mut self, f: &Formula, learned: &Vec<Clause>) -> usize {
+    fn propagate(&mut self) -> usize {
         while self.qhead < self.trail.len() {
             let v = self.trail[self.qhead];
             self.qhead += 1;
             if v < self.assign.len() {
                 let k = key(v, !self.assign[v]);
-                let c = self.propagate_lit(f, learned, k);
+                let c = self.propagate_lit(k);
                 if c != NONE {
                     self.qhead = self.trail.len();
                     return c;
@@ -664,14 +689,15 @@ impl Search {
         }
     }
 
-    /// Sets the keys of both watch nodes of learned clause `i` (clause `m + i`) to `NONE`, so that
+    /// Sets both watched keys of learned clause `i` (clause `m + i`) to `NONE`, so that
     /// the clause is dropped from the watch lists when they are visited.
     fn unwatch(&mut self, m: usize, i: usize) {
         if m < BIG && i < BIG {
             let c = m + i;
-            if c < BIG && 2 * c + 1 < self.wkey.len() {
-                self.wkey[2 * c] = NONE;
-                self.wkey[2 * c + 1] = NONE;
+            if c < self.start.len() && self.start[c] < BIG && self.start[c] + 5 < self.arena.len() {
+                let o = self.start[c];
+                self.arena[o + 4] = NONE;
+                self.arena[o + 5] = NONE;
             }
         }
     }
@@ -807,8 +833,8 @@ fn new_search(n: usize) -> Search {
         lim: Vec::new(),
         qhead: 0,
         watches: vec![Vec::new(); 2 * n],
-        wpos: Vec::new(),
-        wkey: Vec::new(),
+        arena: Vec::new(),
+        start: Vec::new(),
         phase: vec![false; n],
         act: vec![0; n],
         inc: 1,
@@ -1034,7 +1060,7 @@ pub fn cdcl(f: &Formula) -> Option<Answer> {
     while steps < NONE {
         steps += 1;
         if confl == NONE {
-            confl = s.propagate(f, &learned);
+            confl = s.propagate();
         }
         if confl != NONE {
             let r = on_conflict(&mut s, f, &mut learned, confl);

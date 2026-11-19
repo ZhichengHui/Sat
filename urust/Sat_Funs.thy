@@ -262,24 +262,41 @@ definition "new_search" :: \<open>(64 word) \<Rightarrow> ('s, Search, 'abort, '
     }
   \<rbrakk>\<close>
 
+(* Rust: Search::push_clause *)
+definition "Search_push_clause" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> Formula \<Rightarrow> (Clause list) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_push_clause \<equiv> \<lambda>self f learned c. FunctionBody \<lbrakk>
+    let len_v = clause_len(f, learned, c);
+    let o_v = len(* (self.Search_arena));
+    if (o_v < BIG()) && (len_v < BIG()) {
+      vec_push(self.Search_arena, c);
+      vec_push(self.Search_arena, (o_v + 6_usize) + len_v);
+      vec_push(self.Search_arena, o_v + 6_usize);
+      vec_push(self.Search_arena, o_v + 7_usize);
+      vec_push(self.Search_arena, NONE());
+      vec_push(self.Search_arena, NONE());
+      let mut j = 0_usize;
+      #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* j) < len_v {
+        let l = lit_at(f, learned, c, * j);
+        vec_push(self.Search_arena, key(l.Lit_var, l.Lit_value));
+        * j += 1_usize;
+      }
+    }
+  \<rbrakk>\<close>
+
 (* Rust: Search::attach *)
 definition "Search_attach" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> Formula \<Rightarrow> (Clause list) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_attach \<equiv> \<lambda>self f learned c. FunctionBody \<lbrakk>
-    vec_push(self.Search_wpos, 0_usize);
-    vec_push(self.Search_wpos, 1_usize);
-    vec_push(self.Search_wkey, NONE());
-    vec_push(self.Search_wkey, NONE());
-    if (c < BIG()) && (clause_len(f, learned, c) >= 2_usize) {
-      let n0 = 2_usize * c;
-      let l0 = lit_at(f, learned, c, 0_usize);
-      let l1 = lit_at(f, learned, c, 1_usize);
-      let k0 = key(l0.Lit_var, l0.Lit_value);
-      let k1 = key(l1.Lit_var, l1.Lit_value);
-      if ((k0 < len(* (self.Search_watches))) && (k1 < len(* (self.Search_watches)))) && ((n0 + 1_usize) < len(* (self.Search_wkey))) {
-        * (self.Search_wkey[n0]) = k0;
-        * (self.Search_wkey[n0 + 1_usize]) = k1;
-        vec_push(self.Search_watches[k0], n0);
-        vec_push(self.Search_watches[k1], n0 + 1_usize);
+    let o_v = len(* (self.Search_arena));
+    vec_push(self.Search_start, o_v);
+    Search_push_clause(self, f, learned, c);
+    if ((o_v < BIG()) && ((o_v + 7_usize) < len(* (self.Search_arena)))) && (((* (self.Search_arena))[o_v + 1_usize]) >= (o_v + 8_usize)) {
+      let k0 = (* (self.Search_arena))[o_v + 6_usize];
+      let k1 = (* (self.Search_arena))[o_v + 7_usize];
+      if (k0 < len(* (self.Search_watches))) && (k1 < len(* (self.Search_watches))) {
+        * (self.Search_arena[o_v + 4_usize]) = k0;
+        * (self.Search_arena[o_v + 5_usize]) = k1;
+        vec_push(self.Search_watches[k0], 2_usize * o_v);
+        vec_push(self.Search_watches[k1], (2_usize * o_v) + 1_usize);
       }
     }
   \<rbrakk>\<close>
@@ -743,49 +760,58 @@ definition "Search_key_true" :: \<open>Search \<Rightarrow> (64 word) \<Rightarr
     Search_key_false(self, k ^ 1_usize)
   \<rbrakk>\<close>
 
-(* Rust: Search::free_lit *)
-definition "Search_free_lit" :: \<open>Search \<Rightarrow> Clause \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>Search_free_lit \<equiv> \<lambda>self cl op_v my. FunctionBody \<lbrakk>
-    let len_v = len(cl.Clause_v0);
-    let mut j = if (my < len_v) && (op_v < len_v) {
-      if my > op_v {
-        my + 1_usize
-      } else {
-        op_v + 1_usize
-      }
+(* Rust: Search::scan *)
+definition "Search_scan" :: \<open>Search \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_scan \<equiv> \<lambda>self from_v to. FunctionBody \<lbrakk>
+    let end_v = if to < len(self.Search_arena) {
+      to
     } else {
-      0_usize
+      len(self.Search_arena)
     };
-    let mut n = 0_usize;
-    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* n) < len_v {
-      if (* j) >= len_v {
-        * j = 0_usize;
-      };
-      if (((* j) != op_v) && ((* j) != my)) && (!Search_lit_false(self, cl.Clause_v0[* j].Lit_var, cl.Clause_v0[* j].Lit_value)) {
+    let mut j = from_v;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* j) < end_v {
+      if !Search_key_false(self, self.Search_arena[* j]) {
         return * j;
       };
       * j += 1_usize;
-      * n += 1_usize;
     };
-    len_v
+    to
   \<rbrakk>\<close>
 
 (* Rust: Search::find_watch *)
-definition "Search_find_watch" :: \<open>Search \<Rightarrow> Formula \<Rightarrow> (Clause list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>Search_find_watch \<equiv> \<lambda>self f learned c op_v my. FunctionBody \<lbrakk>
-    let m = len(f.Formula_clauses);
-    if c < m {
-      return Search_free_lit(self, f.Formula_clauses[c], op_v, my);
+definition "Search_find_watch" :: \<open>Search \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_find_watch \<equiv> \<lambda>self base end_v op_v my. FunctionBody \<lbrakk>
+    if (((op_v >= end_v) || (my >= end_v)) || (op_v < base)) || (my < base) {
+      return end_v;
     };
-    if (c - m) < len(learned) {
-      return Search_free_lit(self, learned[c - m], op_v, my);
+    let hi = if my > op_v {
+      my
+    } else {
+      op_v
     };
-    0_usize
+    let lo = if my > op_v {
+      op_v
+    } else {
+      my
+    };
+    let a = Search_scan(self, hi + 1_usize, end_v);
+    if a < end_v {
+      return a;
+    };
+    let b = Search_scan(self, base, lo);
+    if b < lo {
+      return b;
+    };
+    let d = Search_scan(self, lo + 1_usize, hi);
+    if d < hi {
+      return d;
+    };
+    end_v
   \<rbrakk>\<close>
 
 (* Rust: Search::propagate_lit *)
-definition "Search_propagate_lit" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> Formula \<Rightarrow> (Clause list) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>Search_propagate_lit \<equiv> \<lambda>self f learned k. FunctionBody \<lbrakk>
+definition "Search_propagate_lit" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_propagate_lit \<equiv> \<lambda>self k. FunctionBody \<lbrakk>
     if k >= len(* (self.Search_watches)) {
       return NONE();
     };
@@ -796,13 +822,14 @@ definition "Search_propagate_lit" :: \<open>(('addr, 'gv, Search) Global_Store.r
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while ((* i) < len(* ws)) && ((* confl) == NONE()) {
       let node = (* ws)[* i];
       * i += 1_usize;
-      let other = node ^ 1_usize;
-      let okey = if other < len(* (self.Search_wkey)) {
-        (* (self.Search_wkey))[other]
+      let o_v = node / 2_usize;
+      let side = node % 2_usize;
+      let okey = if (o_v < BIG()) && ((o_v + 5_usize) < len(* (self.Search_arena))) {
+        (* (self.Search_arena))[(o_v + 5_usize) - side]
       } else {
         NONE()
       };
-      if ((okey == NONE()) || (node >= len(* (self.Search_wpos)))) || (node >= len(* (self.Search_wkey))) {
+      if okey == NONE() {
         ()
       } else {
         if Search_key_true(* self, okey) {
@@ -811,30 +838,28 @@ definition "Search_propagate_lit" :: \<open>(('addr, 'gv, Search) Global_Store.r
             * j += 1_usize;
           }
         } else {
-          let c = node / 2_usize;
-          let my = (* (self.Search_wpos))[node];
-          let op_v = if other < len(* (self.Search_wpos)) {
-            (* (self.Search_wpos))[other]
+          let c = (* (self.Search_arena))[o_v];
+          let my = (* (self.Search_arena))[(o_v + 2_usize) + side];
+          let op_v = (* (self.Search_arena))[(o_v + 3_usize) - side];
+          let found = Search_find_watch(* self, o_v + 6_usize, (* (self.Search_arena))[o_v + 1_usize], op_v, my);
+          let nk = if (found < ((* (self.Search_arena))[o_v + 1_usize])) && (found < len(* (self.Search_arena))) {
+            (* (self.Search_arena))[found]
           } else {
             NONE()
           };
-          let ol = lit_at(f, learned, c, op_v);
-          let found = Search_find_watch(* self, f, learned, c, op_v, my);
-          let nl = lit_at(f, learned, c, found);
-          let nk = key(nl.Lit_var, nl.Lit_value);
-          if ((found < clause_len(f, learned, c)) && (nk < len(* (self.Search_watches)))) && (nk != k) {
-            * (self.Search_wpos[node]) = found;
-            * (self.Search_wkey[node]) = nk;
+          if (nk < len(* (self.Search_watches))) && (nk != k) {
+            * (self.Search_arena[(o_v + 2_usize) + side]) = found;
+            * (self.Search_arena[(o_v + 4_usize) + side]) = nk;
             vec_push(self.Search_watches[nk], node);
           } else {
             if (* j) < len(* ws) {
               * (ws[* j]) = node;
               * j += 1_usize;
             };
-            if Search_lit_false(* self, ol.Lit_var, ol.Lit_value) {
+            if Search_key_false(* self, okey) {
               * confl = c;
             } else {
-              Search_enqueue(self, ol.Lit_var, ol.Lit_value, c);
+              Search_enqueue(self, okey / 2_usize, (okey % 2_usize) == 1_usize, c);
             }
           }
         }
@@ -847,14 +872,14 @@ definition "Search_propagate_lit" :: \<open>(('addr, 'gv, Search) Global_Store.r
   \<rbrakk>\<close>
 
 (* Rust: Search::propagate *)
-definition "Search_propagate" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> Formula \<Rightarrow> (Clause list) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>Search_propagate \<equiv> \<lambda>self f learned. FunctionBody \<lbrakk>
+definition "Search_propagate" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_propagate \<equiv> \<lambda>self. FunctionBody \<lbrakk>
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* (self.Search_qhead)) < len(* (self.Search_trail)) {
       let v = (* (self.Search_trail))[* (self.Search_qhead)];
       * (self.Search_qhead) += 1_usize;
       if v < len(* (self.Search_assign)) {
         let k = key(v, !((* (self.Search_assign))[v]));
-        let c = Search_propagate_lit(self, f, learned, k);
+        let c = Search_propagate_lit(self, k);
         if c != NONE() {
           * (self.Search_qhead) = len(* (self.Search_trail));
           return c;
@@ -902,9 +927,10 @@ definition "Search_unwatch" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<
   \<open>Search_unwatch \<equiv> \<lambda>self m i. FunctionBody \<lbrakk>
     if (m < BIG()) && (i < BIG()) {
       let c = m + i;
-      if (c < BIG()) && (((2_usize * c) + 1_usize) < len(* (self.Search_wkey))) {
-        * (self.Search_wkey[2_usize * c]) = NONE();
-        * (self.Search_wkey[(2_usize * c) + 1_usize]) = NONE();
+      if ((c < len(* (self.Search_start))) && (((* (self.Search_start))[c]) < BIG())) && ((((* (self.Search_start))[c]) + 5_usize) < len(* (self.Search_arena))) {
+        let o_v = (* (self.Search_start))[c];
+        * (self.Search_arena[o_v + 4_usize]) = NONE();
+        * (self.Search_arena[o_v + 5_usize]) = NONE();
       }
     }
   \<rbrakk>\<close>
@@ -974,7 +1000,7 @@ definition "cdcl" :: \<open>Formula \<Rightarrow> ('s, Answer option, 'abort, 'i
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* steps) < NONE() {
       * steps += 1_usize;
       if (* confl) == NONE() {
-        * confl = Search_propagate(s, f, * learned);
+        * confl = Search_propagate(s);
       };
       if (* confl) != NONE() {
         let r = on_conflict(s, f, learned, * confl);
