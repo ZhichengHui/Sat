@@ -806,8 +806,10 @@ definition "Search_propagate_lit" :: \<open>(('addr, 'gv, Search) Global_Store.r
         ()
       } else {
         if Search_key_true(* self, okey) {
-          * (ws[* j]) = node;
-          * j += 1_usize;
+          if (* j) < len(* ws) {
+            * (ws[* j]) = node;
+            * j += 1_usize;
+          }
         } else {
           let c = node / 2_usize;
           let my = (* (self.Search_wpos))[node];
@@ -825,8 +827,10 @@ definition "Search_propagate_lit" :: \<open>(('addr, 'gv, Search) Global_Store.r
             * (self.Search_wkey[node]) = nk;
             vec_push(self.Search_watches[nk], node);
           } else {
-            * (ws[* j]) = node;
-            * j += 1_usize;
+            if (* j) < len(* ws) {
+              * (ws[* j]) = node;
+              * j += 1_usize;
+            };
             if Search_lit_false(* self, ol.Lit_var, ol.Lit_value) {
               * confl = c;
             } else {
@@ -836,7 +840,9 @@ definition "Search_propagate_lit" :: \<open>(('addr, 'gv, Search) Global_Store.r
         }
       }
     };
-    * (self.Search_watches[k]) = close_gap(* ws, * i, * j);
+    if k < len(* (self.Search_watches)) {
+      * (self.Search_watches[k]) = close_gap(* ws, * i, * j);
+    };
     * confl
   \<rbrakk>\<close>
 
@@ -910,12 +916,17 @@ definition "Search_kill" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rig
     let mut i = 0_usize;
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while ((* i) < len(* (self.Search_lbd))) && ((* i) < len(* (self.Search_dead))) {
       let d = (* (self.Search_lbd))[* i];
-      if ((!((* (self.Search_dead))[* i])) && (d >= t)) && ((d > t) || ((* left) > 0_usize)) {
-        if d == t {
-          * left -= 1_usize;
-        };
-        * (self.Search_dead[* i]) = true;
-        Search_unwatch(self, m, * i);
+      if (!((* (self.Search_dead))[* i])) && (d >= t) {
+        if d > t {
+          * (self.Search_dead[* i]) = true;
+          Search_unwatch(self, m, * i);
+        } else {
+          if (* left) > 0_usize {
+            * (self.Search_dead[* i]) = true;
+            * left -= 1_usize;
+            Search_unwatch(self, m, * i);
+          }
+        }
       };
       * i += 1_usize;
     }

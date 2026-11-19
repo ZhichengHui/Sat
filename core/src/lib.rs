@@ -393,8 +393,10 @@ impl Search {
             let okey = if other < self.wkey.len() { self.wkey[other] } else { NONE };
             if okey == NONE || node >= self.wpos.len() || node >= self.wkey.len() {
             } else if self.key_true(okey) {
-                ws[j] = node;
-                j += 1;
+                if j < ws.len() {
+                    ws[j] = node;
+                    j += 1;
+                }
             } else {
                 let c = node / 2;
                 let my = self.wpos[node];
@@ -408,8 +410,10 @@ impl Search {
                     self.wkey[node] = nk;
                     self.watches[nk].push(node);
                 } else {
-                    ws[j] = node;
-                    j += 1;
+                    if j < ws.len() {
+                        ws[j] = node;
+                        j += 1;
+                    }
                     if self.lit_false(ol.var, ol.value) {
                         confl = c;
                     } else {
@@ -418,7 +422,9 @@ impl Search {
                 }
             }
         }
-        self.watches[k] = close_gap(ws, i, j);
+        if k < self.watches.len() {
+            self.watches[k] = close_gap(ws, i, j);
+        }
         confl
     }
 
@@ -642,12 +648,15 @@ impl Search {
         let mut i: usize = 0;
         while i < self.lbd.len() && i < self.dead.len() {
             let d = self.lbd[i];
-            if !self.dead[i] && d >= t && (d > t || left > 0) {
-                if d == t {
+            if !self.dead[i] && d >= t {
+                if d > t {
+                    self.dead[i] = true;
+                    self.unwatch(m, i);
+                } else if left > 0 {
+                    self.dead[i] = true;
                     left -= 1;
+                    self.unwatch(m, i);
                 }
-                self.dead[i] = true;
-                self.unwatch(m, i);
             }
             i += 1;
         }
