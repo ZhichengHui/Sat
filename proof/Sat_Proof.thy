@@ -42,13 +42,6 @@ lemma formula_wf_clause_pre:
   shows \<open>clause_pre (Formula_clauses f ! j) pa\<close>
   using assms nth_mem[OF assms(3)] unfolding formula_wf_def clause_pre_def by auto
 
-text \<open>An index into the clauses that is not their number is below it.\<close>
-lemma formula_wf_idx:
-  assumes \<open>formula_wf f n\<close> \<open>unat x \<le> length (Formula_clauses f)\<close>
-    \<open>x \<noteq> word64_of_nat (length (Formula_clauses f))\<close>
-  shows \<open>unat x < length (Formula_clauses f)\<close>
-  using assms word_ne_length[of x \<open>length (Formula_clauses f)\<close>] unfolding formula_wf_def by simp
-
 definition Clause_has_true_contract :: \<open>Clause \<Rightarrow> Pasn \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
   \<open>Clause_has_true_contract c pa \<equiv>
      let pre = can_alloc_reference \<star> \<langle>clause_pre c pa\<rangle> in
@@ -155,12 +148,6 @@ lemma unit_scan_false:
   shows \<open>unit_scan a d c (Suc i) k\<close>
   using assms unfolding unit_scan_def by (auto simp add: less_Suc_eq)
 
-lemma unit_scan_first_unset:
-  assumes \<open>unit_scan a d c i (length (Clause_v0 c))\<close> \<open>i < length (Clause_v0 c)\<close>
-    \<open>\<not> d ! unat (Lit_var (Clause_v0 c ! i))\<close>
-  shows \<open>unit_scan a d c (Suc i) i\<close>
-  using assms unfolding unit_scan_def by (auto simp add: less_Suc_eq)
-
 lemma unit_lit_post_true:
   assumes \<open>i < length (Clause_v0 c)\<close> \<open>d ! unat (Lit_var (Clause_v0 c ! i))\<close> \<open>lit_sat a (Clause_v0 c ! i)\<close>
   shows \<open>unit_lit_post a d c (length (Clause_v0 c))\<close>
@@ -218,12 +205,7 @@ lemma unit_scan_unset_first:
   assumes \<open>unit_scan a d c i k\<close> \<open>i < length (Clause_v0 c)\<close> \<open>\<not> d ! unat (Lit_var (Clause_v0 c ! i))\<close>
     \<open>\<not> k < length (Clause_v0 c)\<close>
   shows \<open>unit_scan a d c (Suc i) i\<close>
-proof -
-  have \<open>k = length (Clause_v0 c)\<close>
-    using unit_scan_bound(2)[OF assms(1)] assms(4) by simp
-  then show ?thesis
-    using unit_scan_first_unset assms(1-3) by simp
-qed
+  using assms unfolding unit_scan_def by (auto simp add: less_Suc_eq)
 
 text \<open>The end of the loop with one unassigned literal \<open>k\<close>, and with none.\<close>
 lemma unit_lit_post_end_unit:
@@ -592,8 +574,7 @@ lemma prop_assign_facts:
     and \<open>b \<equiv> Lit_value (Clause_v0 (Formula_clauses f ! unat x) ! unat xa)\<close>
   shows \<open>prop_rel f a d (a[v := b]) (d[v := True])\<close>
     \<open>prop_pre f (a[v := b]) (d[v := True]) (unat (x + 1)) (unat (word64_of_nat (length (Formula_clauses f)))) k\<close>
-    \<open>unat x < 18446744073709551615\<close> \<open>v < length d\<close> \<open>v < length a\<close>
-    \<open>unat xa < length (Clause_v0 (Formula_clauses f ! unat x))\<close> \<open>unat x < length (Formula_clauses f)\<close>
+    \<open>v < length d\<close> \<open>v < length a\<close> \<open>unat xa < length (Clause_v0 (Formula_clauses f ! unat x))\<close>
 proof -
   note fx = prop_found_facts[OF pre ucp ne]
   have wf: \<open>formula_wf f (length a)\<close> and len: \<open>length d = length a\<close>
@@ -601,7 +582,7 @@ proof -
     using pre unfolding prop_pre_def by (simp_all split: if_splits)
   have lf: \<open>length (Formula_clauses f) < 2^64\<close>
     using wf unfolding formula_wf_def by simp
-  show x: \<open>unat x < length (Formula_clauses f)\<close> \<open>unat x < 18446744073709551615\<close>
+  have x: \<open>unat x < length (Formula_clauses f)\<close> \<open>unat x < 18446744073709551615\<close>
     using fx by simp_all
   define c where \<open>c = Formula_clauses f ! unat x\<close>
   have c: \<open>c \<in> set (Formula_clauses f)\<close>
@@ -623,7 +604,7 @@ proof -
   have us: \<open>unset (d[v := True]) < unset d\<close>
     using unset_update[OF _ nd] va len by simp
   have x1: \<open>unat (x + 1) = Suc (unat x)\<close>
-    using unat_word_Suc[OF x(1) lf] .
+    using unat_word_Suc_simp[OF x(2)] .
   show \<open>prop_pre f (a[v := b]) (d[v := True]) (unat (x + 1)) (unat (word64_of_nat (length (Formula_clauses f)))) k\<close>
     using wf len us m x1 x(1) lf unfolding prop_pre_def by (simp add: unat_of_nat_eq)
 qed
@@ -724,7 +705,7 @@ lemma propagate_rec_step_spec:
         set_var_contract_def
       simp add: true_def false_def)
   subgoal by (rule prop_post_rel[OF prop_assign_facts(1)])
-  apply (solves \<open>rule prop_assign_facts(2-7); assumption\<close>)+
+  apply (solves \<open>rule prop_assign_facts(2-5) prop_found_facts(2,3); assumption\<close>)+
   subgoal by (rule prop_conflict)
   subgoal by (rule prop_found_facts(2))
   subgoal by (rule prop_found_clause_pre)
@@ -782,7 +763,8 @@ lemma solve_open_idx:
   assumes \<open>formula_wf f n\<close> \<open>open_clause_post a d f (unat xa)\<close>
     \<open>xa \<noteq> word64_of_nat (length (Formula_clauses f))\<close>
   shows \<open>unat xa < length (Formula_clauses f)\<close>
-  using formula_wf_idx[OF assms(1) _ assms(3)] assms(2) unfolding open_clause_post_def by simp
+  using assms word64_eq_of_nat_iff[of \<open>length (Formula_clauses f)\<close> xa]
+  unfolding formula_wf_def open_clause_post_def by simp
 
 lemma solve_branch_facts:
   assumes wf: \<open>formula_wf f (length a)\<close> and len: \<open>length d = length a\<close>
@@ -792,8 +774,7 @@ lemma solve_branch_facts:
     and oc: \<open>open_clause_post (Assignments_v0 (Pasn_assign pb)) (Pasn_set pb) f (unat xa)\<close>
     and ne: \<open>xa \<noteq> word64_of_nat (length (Formula_clauses f))\<close>
     and uf: \<open>unset_from_post (Pasn_set pb) (Formula_clauses f ! unat xa) 0 (unat xb)\<close>
-  shows \<open>unat xa < length (Formula_clauses f)\<close>
-    \<open>unat xb < length (Clause_v0 (Formula_clauses f ! unat xa))\<close>
+  shows \<open>unat xb < length (Clause_v0 (Formula_clauses f ! unat xa))\<close>
     \<open>unat (Lit_var (Clause_v0 (Formula_clauses f ! unat xa) ! unat xb)) < length (Assignments_v0 (Pasn_assign pb))\<close>
     \<open>unat (Lit_var (Clause_v0 (Formula_clauses f ! unat xa) ! unat xb)) < length (Pasn_set pb)\<close>
     \<open>unset ((Pasn_set pb)[unat (Lit_var (Clause_v0 (Formula_clauses f ! unat xa) ! unat xb)) := True]) < k\<close>
@@ -802,7 +783,7 @@ proof -
   note p = solve_prop_facts[OF wf len fuel pr]
   have nc: \<open>\<not> conflict (Assignments_v0 (Pasn_assign pb)) (Pasn_set pb) f\<close>
     by (rule settled_no_conflict[OF st])
-  show xa: \<open>unat xa < length (Formula_clauses f)\<close>
+  have xa: \<open>unat xa < length (Formula_clauses f)\<close>
     by (rule solve_open_idx[OF wf oc ne])
   define c where \<open>c = Formula_clauses f ! unat xa\<close>
   have ct: \<open>\<not> clause_true (Assignments_v0 (Pasn_assign pb)) (Pasn_set pb) c\<close>
@@ -849,8 +830,8 @@ lemma solve_branch_sol:
       | Answer_Unsat \<Rightarrow> sol f ((Assignments_v0 (Pasn_assign pb))[v := \<not> b]) ((Pasn_set pb)[v := True]) r\<close>
   shows \<open>sol f a d r\<close>
   using r1 r unfolding v_def b_def
-  by (rule sol_prop_rel[OF pr sol_step[OF solve_branch_facts(3)[OF wf len fuel k pr st oc ne uf]
-      solve_prop_facts(1)[OF wf len fuel pr] solve_branch_facts(6)[OF wf len fuel k pr st oc ne uf]]])
+  by (rule sol_prop_rel[OF pr sol_step[OF solve_branch_facts(2)[OF wf len fuel k pr st oc ne uf]
+      solve_prop_facts(1)[OF wf len fuel pr] solve_branch_facts(5)[OF wf len fuel k pr st oc ne uf]]])
 
 lemma solve_sat_leaf:
   assumes \<open>formula_wf f n\<close> \<open>prop_rel f a d (Assignments_v0 m) d'\<close>
@@ -891,7 +872,7 @@ lemma solve_rec_step_spec:
        apply (crush_base inline: Answer_Sat_mk_def)
       apply (crush_base specs add: assms set_var_spec contracts add: solve_contract_def set_var_contract_def)
       apply (solves \<open>rule solve_branch_sol, assumption+, simp\<close>)+
-      apply (solves \<open>rule solve_branch_facts solve_prop_facts; assumption\<close>)+
+      apply (solves \<open>rule solve_branch_facts solve_prop_facts solve_open_idx; assumption\<close>)+
       done
     apply (solves \<open>rule solve_branch_facts solve_prop_facts solve_open_idx solve_sat_leaf; assumption\<close>)+
     subgoal by (rule formula_wf_clause_pre[OF solve_prop_facts(2,1) solve_open_idx])
