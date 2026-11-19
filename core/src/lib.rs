@@ -1,11 +1,15 @@
 #![allow(non_snake_case)]
 
-// A naive, but verified SAT solver: backtracking with unit propagation. Before each decision it
-// assigns the remaining literal of every unit clause until none is left, abandons a branch as soon
-// as the partial assignment falsifies a clause, and decides the first unassigned literal of the
-// first clause without a true literal, trying the literal's value first.
-// It is a port of a verified WhyML solver, and is therefore
-// an imperative implementation of a functional program.
+// A verified SAT solver. `solver` runs an untrusted CDCL search (`cdcl`: two watched literals in a
+// flat clause arena, first-UIP learning with recursive minimisation, activity-based decisions,
+// restarts and deletion of learned clauses by literal block distance) whose answers are checked:
+// a model by `satisfies`, every learned clause, the empty one included, by `certify`. When a check
+// fails or the search runs out of fuel, `solver` falls back to `dpll`, a verified DPLL solver
+// (`solve`): backtracking with unit propagation, a port of a verified WhyML solver and therefore an
+// imperative implementation of a functional program. Before each decision it assigns the
+// remaining literal of every unit clause until none is left, abandons a branch as soon as the
+// partial assignment falsifies a clause, and decides the first unassigned literal of the first
+// clause without a true literal, trying the literal's value first.
 
 pub struct Assignments(pub Vec<bool>);
 pub struct Lit {
@@ -325,8 +329,8 @@ impl Search {
         }
     }
 
-    /// Adds the new clause `c` to the arena and, if it has two literals, its watch nodes `2o`,
-    /// `2o + 1` watching its first two literals.
+    /// Adds the new clause `c` to the arena and, if it has at least two literals, its watch nodes
+    /// `2o`, `2o + 1` watching its first two literals.
     fn attach(&mut self, f: &Formula, learned: &Vec<Clause>, c: usize) {
         let o = self.arena.len();
         self.start.push(o);
@@ -683,7 +687,7 @@ impl Search {
     }
 
     /// Moves the literals of `learnt` after the first that are not `lit_redundant` to the front,
-    /// in order; the number of literals moved, plus one.
+    /// in order; the number of literals kept, the first included.
     fn compact(&mut self) -> usize {
         let mut i: usize = 1;
         let mut j: usize = 1;

@@ -6,35 +6,6 @@ text \<open>The contracts of the conflict analysis of the CDCL search of \<^verb
   recursive minimisation of the learned clause. As in \<^verbatim>\<open>Sat_Search\<close>, they only need to return
   without a panic: the learned clause is checked by \<^verbatim>\<open>certify\<close>.\<close>
 
-section \<open>Words of the minimisation\<close>
-
-text \<open>The frames of the search stack are three words; the top frame is read below its length.\<close>
-lemma len_minus:
-  assumes \<open>\<not> word64_of_nat n < (3 :: 64 word)\<close> \<open>(1 :: 64 word) \<le> k\<close> \<open>k \<le> 3\<close>
-  shows \<open>unat (word64_of_nat n - k) < n\<close>
-proof -
-  have le: \<open>k \<le> word64_of_nat n\<close>
-    using assms by simp
-  then have \<open>unat k \<le> unat (word64_of_nat n :: 64 word)\<close>
-    by (simp add: word_le_nat_alt)
-  moreover have \<open>unat (word64_of_nat n :: 64 word) \<le> n\<close>
-    by (simp add: unat_of_nat)
-  moreover have \<open>0 < unat k\<close>
-    using assms(2) by (simp add: word_le_nat_alt)
-  moreover have \<open>unat (word64_of_nat n - k) = unat (word64_of_nat n :: 64 word) - unat k\<close>
-    using le by (rule unat_sub)
-  ultimately show ?thesis
-    by linarith
-qed
-
-lemma succ_less:
-  \<open>(j :: 64 word) < x \<Longrightarrow> unat (j + 1) = Suc (unat j)\<close>
-  using word64_less_max[of j x] unat_word_Suc_simp[of j] by simp
-
-method minimize_bound =
-  ((rule len_minus; simp) | (rule succ_less; assumption) | (erule succ_less) | erule not_le_max |
-    search_bound | arena_bound)
-
 context Sat_ctx
 begin
 
@@ -51,7 +22,7 @@ lemma Search_push_frame_spec:
   shows \<open>\<Gamma>; Search_push_frame r v \<Turnstile>\<^sub>F Search_push_frame_contract r g s v\<close>
   apply (crush_boot f: Search_push_frame_def contract: Search_push_frame_contract_def)
   apply (crush_base inline: len_def BIG_def vec_push_def simp add: true_def false_def)
-  apply (all \<open>minimize_bound?\<close>)
+  apply (all \<open>search_bound?\<close>)
   done
 
 definition Search_redundant_step_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
@@ -67,7 +38,7 @@ lemma Search_redundant_step_spec:
   apply (crush_base inline: len_def NONE_def vec_push_def vec_truncate_def
       specs add: Search_push_frame_spec contracts add: Search_push_frame_contract_def
       simp add: true_def false_def)
-  apply (all \<open>minimize_bound?\<close>)
+  apply (all \<open>search_bound?\<close>)
   done
 
 definition Search_unwind_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
@@ -91,7 +62,7 @@ lemma Search_unwind_spec:
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
     apply (crush_base inline: len_def NONE_def vec_clear_def simp add: true_def false_def)
-    apply (all \<open>minimize_bound?\<close>)
+    apply (all \<open>search_bound?\<close>)
     done
   done
 
@@ -120,7 +91,7 @@ lemma Search_lit_redundant_spec:
       specs add: Search_redundant_step_spec Search_unwind_spec
       contracts add: Search_redundant_step_contract_def Search_unwind_contract_def
       simp add: true_def false_def)
-  apply (all \<open>minimize_bound?\<close>)
+  apply (all \<open>search_bound?\<close>)
   done
 
 definition Search_compact_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
@@ -147,7 +118,7 @@ lemma Search_compact_spec:
       in wp_bounded_while_framedI\<close>)
     apply (crush_base inline: len_def slice_swap_def specs add: Search_lit_redundant_spec
         contracts add: Search_lit_redundant_contract_def simp add: true_def false_def)
-    apply (all \<open>minimize_bound?\<close>)
+    apply (all \<open>search_bound?\<close>)
     apply (all \<open>(rule FalseE, rule swap_ok2; assumption)?\<close>)
     done
   done
@@ -173,7 +144,7 @@ lemma Search_clear_marks_spec:
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
     apply (crush_base inline: len_def vec_clear_def simp add: true_def false_def)
-    apply (all \<open>minimize_bound?\<close>)
+    apply (all \<open>search_bound?\<close>)
     done
   done
 

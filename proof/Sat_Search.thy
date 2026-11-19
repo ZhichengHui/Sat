@@ -16,38 +16,25 @@ lemma nz_len:
 lemma push_len:
   assumes \<open>length xs \<le> 4611686018427387904\<close>
     \<open>word64_of_nat (length xs) < (0x4000000000000000 :: 64 word)\<close>
-  shows \<open>Suc (length xs) \<le> 4611686018427387904\<close>
+  shows \<open>Suc (length xs) \<le> 4611686018427387904\<close> \<open>length xs \<le> 4611686018427387903\<close>
 proof -
   have \<open>unat (word64_of_nat (length xs)) = length xs\<close>
     using assms(1) by (simp add: unat_of_nat_eq)
-  then show ?thesis
-    using assms(2) by (simp add: word_less_nat_alt)
+  then show \<open>Suc (length xs) \<le> 4611686018427387904\<close> \<open>length xs \<le> 4611686018427387903\<close>
+    using assms(2) by (simp_all add: word_less_nat_alt)
 qed
 
 lemma swap_ok:
   assumes \<open>(ra :: 64 word) < word64_of_nat n\<close> \<open>(2 :: 64 word) < word64_of_nat n\<close>
     \<open>Suc 0 < n \<longrightarrow> \<not> unat ra < n\<close>
   shows False
-proof -
-  have \<open>unat ra < n\<close>
-    using assms(1) by (rule word64_less_of_nat)
-  moreover have \<open>unat (2 :: 64 word) < n\<close>
-    using assms(2) by (rule word64_less_of_nat)
-  ultimately show False
-    using assms(3) by simp
-qed
+  using word64_less_of_nat[OF assms(1)] word64_less_of_nat[OF assms(2)] assms(3) by simp
 
 lemma swap_ok2:
   assumes \<open>(a :: 64 word) < word64_of_nat n\<close> \<open>(b :: 64 word) < word64_of_nat n\<close>
     \<open>unat a < n \<longrightarrow> \<not> unat b < n\<close>
   shows False
   using assms word64_less_of_nat by blast
-
-lemma push_len':
-  assumes \<open>length xs \<le> 4611686018427387904\<close>
-    \<open>word64_of_nat (length xs) < (0x4000000000000000 :: 64 word)\<close>
-  shows \<open>length xs \<le> 4611686018427387903\<close>
-  using push_len[OF assms] by simp
 
 lemma counter_add:
   assumes \<open>\<not> 0xFFFFFFFFFFFFFFFF - c < (a :: 64 word)\<close>
@@ -78,9 +65,29 @@ lemma not_le_max:
   \<open>\<not> (y :: 64 word) \<le> x \<Longrightarrow> unat x < 18446744073709551615\<close>
   using word64_less_max not_le by blast
 
-lemma big_succ:
-  \<open>(c :: 64 word) < 0x4000000000000000 \<Longrightarrow> unat (c + 1) = Suc (unat c)\<close>
-  using big_c(1)[of c] unat_word_Suc_simp[of c] by simp
+lemma succ_less:
+  \<open>(j :: 64 word) < x \<Longrightarrow> unat (j + 1) = Suc (unat j)\<close>
+  using word64_less_max[of j x] unat_word_Suc_simp[of j] by simp
+
+text \<open>The frames of the search stack of the minimisation are three words; the top frame is read
+  below its length.\<close>
+lemma len_minus:
+  assumes \<open>\<not> word64_of_nat n < (3 :: 64 word)\<close> \<open>(1 :: 64 word) \<le> k\<close> \<open>k \<le> 3\<close>
+  shows \<open>unat (word64_of_nat n - k) < n\<close>
+proof -
+  have le: \<open>k \<le> word64_of_nat n\<close>
+    using assms by simp
+  then have \<open>unat k \<le> unat (word64_of_nat n :: 64 word)\<close>
+    by (simp add: word_le_nat_alt)
+  moreover have \<open>unat (word64_of_nat n :: 64 word) \<le> n\<close>
+    by (simp add: unat_of_nat)
+  moreover have \<open>0 < unat k\<close>
+    using assms(2) by (simp add: word_le_nat_alt)
+  moreover have \<open>unat (word64_of_nat n - k) = unat (word64_of_nat n :: 64 word) - unat k\<close>
+    using le by (rule unat_sub)
+  ultimately show ?thesis
+    by linarith
+qed
 
 text \<open>Offsets into the arena: below \<open>2^62\<close>, adding a small constant does not overflow.\<close>
 lemma big_add:
@@ -153,15 +160,9 @@ lemma max_less:
   \<open>(0xFFFFFFFFFFFFFFFF :: 64 word) < y \<Longrightarrow> P\<close>
   using word64_less_max[of \<open>0xFFFFFFFFFFFFFFFF :: 64 word\<close> y] by simp
 
-method arena_bound =
-  (erule max_less | erule word64_less_of_nat | (rule arena_ix, assumption, assumption, simp, simp) |
-    (rule arena_small, assumption, simp) | erule big_twice | (erule arena_le, assumption, simp, simp) |
-    (frule big_c(1), linarith) | (rule arena_ix0, assumption, assumption, simp) |
-    (frule big_nle, linarith))
-
 lemma big_succ_le:
   \<open>(c :: 64 word) < 0x4000000000000000 \<Longrightarrow> unat (c + 1) \<le> 4611686018427387904\<close>
-  using big_c(1)[of c] big_succ[of c] by simp
+  using big_c(1)[of c] succ_less[of c] by simp
 
 lemma inc_div:
   \<open>(x :: 64 word) < 0x4000000000000000 \<Longrightarrow> unat (x div 0x20) < 18446744073709551615\<close>
@@ -185,17 +186,22 @@ lemma one_lt:
 
 section \<open>Bounds\<close>
 
-text \<open>The goals that \<open>crush_base\<close> leaves in the search are bounds of words and indices. Each
-  closes in one step: by the simplifier or by one of the word lemmas.\<close>
+text \<open>The goals that \<open>crush_base\<close> leaves in the search and in the minimisation
+  (\<^verbatim>\<open>Sat_Minimize\<close>) are bounds of words, indices and arena offsets. Each closes in one step: by the
+  simplifier or by one of the word lemmas. Every alternative closes its goal or fails.\<close>
 
 method search_bound =
   ((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
     (simp add: word_le_nat_alt word_less_nat_alt; fail) |
     (rule add_big; assumption) | (frule big_c(1), linarith) |
-    erule nz_len | (rule push_len; assumption) | erule counter_add | (rule push_len'; assumption) |
-    (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) |
-    (rule big_succ[symmetric]; assumption) | (rule big_succ_le; assumption) |
-    (rule inc_div; assumption) | (rule inc_add; assumption) | (rule one_lt; assumption))
+    erule nz_len | (rule push_len; assumption) | erule counter_add |
+    (rule one_le; assumption) | rule le_max | (rule succ_less; assumption) |
+    (rule succ_less[symmetric]; assumption) | (rule big_succ_le; assumption) |
+    (rule inc_div; assumption) | (rule inc_add; assumption) | (rule one_lt; assumption) |
+    erule not_le_max | (rule len_minus; simp; fail) |
+    erule max_less | erule word64_less_of_nat | (rule arena_ix, assumption, assumption, simp, simp) |
+    (rule arena_small, assumption, simp) | erule big_twice | (erule arena_le, assumption, simp, simp) |
+    (rule arena_ix0, assumption, assumption, simp) | (frule big_nle, linarith))
 
 context Sat_ctx
 begin
@@ -307,7 +313,7 @@ lemma Search_attach_spec:
   apply (crush_base inline: len_def NONE_def BIG_def vec_push_def
       specs add: Search_push_clause_spec contracts add: Search_push_clause_contract_def
       simp add: true_def false_def)
-  apply (all \<open>arena_bound\<close>)
+  apply (all \<open>search_bound\<close>)
   done
 
 definition Search_scan_contract :: \<open>Search \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
@@ -343,7 +349,7 @@ lemma Search_find_watch_spec:
   apply (crush_boot f: Search_find_watch_def contract: Search_find_watch_contract_def)
   apply (crush_base specs add: Search_scan_spec
       contracts add: Search_scan_contract_def simp add: true_def false_def)
-  apply (all \<open>(rule not_le_max, assumption)\<close>)
+  apply (all \<open>search_bound\<close>)
   done
 
 
@@ -386,7 +392,7 @@ lemma Search_move_watch_spec:
       contracts add: Search_find_watch_contract_def Search_enqueue_contract_def
         Search_key_false_contract_def
       simp add: true_def false_def)
-  apply (all \<open>arena_bound?\<close>)
+  apply (all \<open>search_bound?\<close>)
   done
 
 definition Search_propagate_lit_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
@@ -419,7 +425,7 @@ lemma Search_propagate_lit_spec:
       specs add: Search_move_watch_spec Search_key_true_spec close_gap_spec
       contracts add: Search_move_watch_contract_def Search_key_true_contract_def close_gap_contract_def
       simp add: true_def false_def)
-  apply (all \<open>search_bound | arena_bound\<close>)
+  apply (all \<open>search_bound\<close>)
   done
 
 
@@ -798,7 +804,7 @@ lemma Search_unwatch_spec:
   shows \<open>\<Gamma>; Search_unwatch r m i \<Turnstile>\<^sub>F Search_unwatch_contract r g s m i\<close>
   apply (crush_boot f: Search_unwatch_def contract: Search_unwatch_contract_def)
   apply (crush_base inline: len_def NONE_def BIG_def simp add: true_def false_def)
-  apply (all \<open>search_bound | arena_bound\<close>)
+  apply (all \<open>search_bound\<close>)
   done
 
 definition Search_kill_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
