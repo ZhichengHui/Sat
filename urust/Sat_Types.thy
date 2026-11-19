@@ -85,8 +85,8 @@ scalable_datatype_record Search =
   Search_lim :: \<open>(64 word) list\<close>
   Search_qhead :: \<open>64 word\<close>
   Search_watches :: \<open>((64 word) list) list\<close>
-  Search_wpos :: \<open>(64 word) list\<close>
-  Search_wkey :: \<open>(64 word) list\<close>
+  Search_arena :: \<open>(64 word) list\<close>
+  Search_start :: \<open>(64 word) list\<close>
   Search_phase :: \<open>bool list\<close>
   Search_act :: \<open>(64 word) list\<close>
   Search_inc :: \<open>64 word\<close>
