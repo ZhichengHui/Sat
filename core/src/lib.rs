@@ -262,11 +262,12 @@ struct Cut {
 /// variable, `act` its activity, raised by `inc` whenever it takes part in a conflict; `seen`
 /// marks variables during conflict analysis, and `learnt` collects the literals of the clause it
 /// learns. Learned clause `i` has the literal block distance `lbd[i]` (the number of decision
-/// levels of its literals when it was learned); `reduce` sets `dead[i]` for about half of them and
+/// levels of its literals when it was learned, lowered by `update_lbd` when it takes part in a later
+/// conflict); `reduce` sets `dead[i]` for about half of them and
 /// the keys of their watched literals to `NONE`, and a node whose other watched key is `NONE` is dropped
 /// from a watch list when the list is visited, so a dead clause no longer takes part
 /// in the search (it stays in the clause database). `stamp[l]` is `tick` if level `l` has been
-/// counted by the current `learnt_lbd`; `hist` is the histogram of the distances in `reduce`.
+/// counted by the current `learnt_lbd` or `clause_lbd`; `hist` is the histogram of the distances in `reduce`.
 /// During `minimize`, `seen` also marks the variables found redundant, `fail[v]` those found not
 /// redundant, `toclear` lists both to clear them afterwards, and `stack` holds the frames
 /// `(v, j, end)` of the depth-first search of `lit_redundant`: variable `v`, and the arena
@@ -556,6 +557,7 @@ impl Search {
     /// seen and above level 0 is marked; the literal is added to `learnt` if its level is below
     /// `cur`. The number of the marked variables at level `cur` or above.
     fn analyze_clause(&mut self, f: &Formula, learned: &Vec<Clause>, c: usize, p: usize, cur: usize) -> usize {
+        self.update_lbd(f, learned, c);
         let len = clause_len(f, learned, c);
         let mut count: usize = 0;
         let mut j: usize = 0;
@@ -577,6 +579,43 @@ impl Search {
             j += 1;
         }
         count
+    }
+
+    /// If clause `c` is a learned clause of a literal block distance above 2, lowers its distance
+    /// to the number of decision levels of its literals now when that is smaller (as Glucose does
+    /// for the clauses used in conflict analysis), so that `reduce` keeps it longer.
+    fn update_lbd(&mut self, f: &Formula, learned: &Vec<Clause>, c: usize) {
+        let m = f.clauses.len();
+        if c >= m && c - m < self.lbd.len() && self.lbd[c - m] > 2 {
+            let n = self.clause_lbd(f, learned, c);
+            if c - m < self.lbd.len() && n < self.lbd[c - m] {
+                self.lbd[c - m] = n;
+            }
+        }
+    }
+
+    /// The number of decision levels of the literals of clause `c`.
+    fn clause_lbd(&mut self, f: &Formula, learned: &Vec<Clause>, c: usize) -> usize {
+        if self.tick < NONE {
+            self.tick += 1;
+        }
+        let len = clause_len(f, learned, c);
+        let mut n: usize = 0;
+        let mut j: usize = 0;
+        while j < len {
+            let v = lit_at(f, learned, c, j).var;
+            if v < self.level.len() {
+                let lv = self.level[v];
+                if lv < self.stamp.len() && self.stamp[lv] != self.tick {
+                    self.stamp[lv] = self.tick;
+                    if n < NONE {
+                        n += 1;
+                    }
+                }
+            }
+            j += 1;
+        }
+        n
     }
 
     /// The last trail position before `idx` whose variable is marked; `NONE` if there is none.

@@ -648,6 +648,49 @@ lemma new_search_spec:
   done
 
 
+definition Search_clause_lbd_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
+    Formula \<Rightarrow> Clause list \<Rightarrow> 64 word \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
+  \<open>Search_clause_lbd_contract r g s f L c \<equiv>
+     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s \<star> \<langle>db_small f L\<rangle> in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s') in
+     make_function_contract pre post\<close>
+
+lemma Search_clause_lbd_spec:
+  shows \<open>\<Gamma>; Search_clause_lbd r f L c \<Turnstile>\<^sub>F Search_clause_lbd_contract r g s f L c\<close>
+  apply (crush_boot f: Search_clause_lbd_def contract: Search_clause_lbd_contract_def)
+  apply (crush_base inline: len_def NONE_def
+      specs add: clause_len_spec contracts add: clause_len_contract_def simp add: true_def false_def)
+  apply (all \<open>rename_tac n n_ref j_ref\<close>)
+  apply (all \<open>ucincl_discharge\<open>
+    rule_tac
+      INV=\<open>\<lambda>k. \<Squnion>gs s' gn cnt gj j. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
+             n_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>cnt \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference\<close> and
+      INV'=\<open>\<lambda>k. \<Squnion>gs s' gn cnt gj j. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
+             n_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>cnt \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference \<star>
+             \<langle>j < n\<rangle>\<close> and
+      \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
+      \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+    in wp_bounded_while_framedI\<close>\<close>)
+  apply (crush_base inline: len_def NONE_def
+      specs add: lit_at_spec contracts add: lit_at_contract_def simp add: true_def false_def)
+  apply (all \<open>search_bound?\<close>)
+  done
+
+definition Search_update_lbd_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
+    Formula \<Rightarrow> Clause list \<Rightarrow> 64 word \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
+  \<open>Search_update_lbd_contract r g s f L c \<equiv>
+     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s \<star> \<langle>db_small f L\<rangle> in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s') in
+     make_function_contract pre post\<close>
+
+lemma Search_update_lbd_spec:
+  shows \<open>\<Gamma>; Search_update_lbd r f L c \<Turnstile>\<^sub>F Search_update_lbd_contract r g s f L c\<close>
+  apply (crush_boot f: Search_update_lbd_def contract: Search_update_lbd_contract_def)
+  apply (crush_base inline: len_def specs add: Search_clause_lbd_spec
+      contracts add: Search_clause_lbd_contract_def simp add: true_def false_def)
+  apply (all \<open>search_bound?\<close>)
+  done
+
 definition Search_analyze_clause_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
     Formula \<Rightarrow> Clause list \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
   \<open>Search_analyze_clause_contract r g s f L c p cur \<equiv>
@@ -659,23 +702,23 @@ lemma Search_analyze_clause_spec:
   shows \<open>\<Gamma>; Search_analyze_clause r f L c p cur \<Turnstile>\<^sub>F Search_analyze_clause_contract r g s f L c p cur\<close>
   apply (crush_boot f: Search_analyze_clause_def contract: Search_analyze_clause_contract_def)
   apply (crush_base inline: len_def NONE_def BIG_def vec_push_def
-      specs add: clause_len_spec contracts add: clause_len_contract_def simp add: true_def false_def)
-  subgoal for n count_ref j_ref
-    apply (ucincl_discharge\<open>
-      rule_tac
-        INV=\<open>\<lambda>k. \<Squnion>gs s' gc cnt gj j. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
-               count_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>cnt \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference\<close> and
-        INV'=\<open>\<lambda>k. \<Squnion>gs s' gc cnt gj j. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
-               count_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>cnt \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference \<star>
-               \<langle>j < n\<rangle>\<close> and
-        \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
-        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
-      in wp_bounded_while_framedI\<close>)
-    apply (crush_base inline: len_def NONE_def BIG_def vec_push_def
-        specs add: lit_at_spec Search_bump_spec contracts add: lit_at_contract_def Search_bump_contract_def
-        simp add: true_def false_def)
-    apply (all \<open>search_bound?\<close>)
-    done
+      specs add: Search_update_lbd_spec clause_len_spec
+      contracts add: Search_update_lbd_contract_def clause_len_contract_def simp add: true_def false_def)
+  apply (all \<open>rename_tac n count_ref j_ref\<close>)
+  apply (all \<open>ucincl_discharge\<open>
+    rule_tac
+      INV=\<open>\<lambda>k. \<Squnion>gs s' gc cnt gj j. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
+             count_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>cnt \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference\<close> and
+      INV'=\<open>\<lambda>k. \<Squnion>gs s' gc cnt gj j. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
+             count_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>cnt \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference \<star>
+             \<langle>j < n\<rangle>\<close> and
+      \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
+      \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+    in wp_bounded_while_framedI\<close>\<close>)
+  apply (crush_base inline: len_def NONE_def BIG_def vec_push_def
+      specs add: lit_at_spec Search_bump_spec contracts add: lit_at_contract_def Search_bump_contract_def
+      simp add: true_def false_def)
+  apply (all \<open>search_bound?\<close>)
   done
 
 definition Search_finish_learnt_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
