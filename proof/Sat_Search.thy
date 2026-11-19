@@ -131,6 +131,23 @@ lemma arena_ix:
   shows \<open>unat (a + b) < m\<close> \<open>unat (b + a) < m\<close>
   using arena_le[of a c m b] assms by (simp_all add: not_le add.commute)
 
+text \<open>The index of the other watched key of a watch node: \<open>o + 5 - side\<close>.\<close>
+lemma side_ix:
+  assumes \<open>(a :: 64 word) < 0x4000000000000000\<close> \<open>a + 5 < word64_of_nat n\<close>
+  shows \<open>unat (a + 5 - x mod 2) < n\<close> \<open>x mod 2 \<le> a + 5\<close>
+proof -
+  have m: \<open>unat (x mod 2) \<le> 1\<close>
+    using word_mod_less_divisor[of 2 x] by (simp add: word_less_nat_alt)
+  have u: \<open>unat (a + 5) = unat a + 5\<close>
+    using big_add[OF assms(1), of 5] by simp
+  show le: \<open>x mod 2 \<le> a + 5\<close>
+    using m u by (simp add: word_le_nat_alt)
+  have \<open>unat (a + 5) < n\<close>
+    using assms(2) by (rule word64_less_of_nat)
+  then show \<open>unat (a + 5 - x mod 2) < n\<close>
+    using unat_sub[OF le] by simp
+qed
+
 lemma arena_small:
   assumes \<open>\<not> 0x4000000000000000 \<le> (a :: 64 word)\<close> \<open>b \<le> 8\<close>
   shows \<open>unat (a + b) < 18446744073709551614\<close> \<open>unat (a + b) < 18446744073709551615\<close>
@@ -352,6 +369,43 @@ lemma Search_find_watch_spec:
   apply (all \<open>search_bound\<close>)
   done
 
+definition Search_other_key_contract :: \<open>Search \<Rightarrow> 64 word \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
+  \<open>Search_other_key_contract s nd \<equiv>
+     make_function_contract can_alloc_reference (\<lambda>_. can_alloc_reference)\<close>
+
+lemma Search_other_key_spec:
+  shows \<open>\<Gamma>; Search_other_key s nd \<Turnstile>\<^sub>F Search_other_key_contract s nd\<close>
+  apply (crush_boot f: Search_other_key_def contract: Search_other_key_contract_def)
+  apply (crush_base inline: len_def NONE_def BIG_def simp add: true_def false_def)
+  apply (all \<open>(rule side_ix, assumption, assumption)?\<close>)
+  apply (all \<open>search_bound\<close>)
+  done
+
+definition Search_skip_true_contract :: \<open>Search \<Rightarrow> 64 word list \<Rightarrow> 64 word \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
+  \<open>Search_skip_true_contract s ws i \<equiv>
+     make_function_contract can_alloc_reference (\<lambda>_. can_alloc_reference)\<close>
+
+lemma Search_skip_true_spec:
+  shows \<open>\<Gamma>; Search_skip_true s ws i \<Turnstile>\<^sub>F Search_skip_true_contract s ws i\<close>
+  apply (crush_boot f: Search_skip_true_def contract: Search_skip_true_contract_def)
+  apply (crush_base inline: len_def specs add: Search_key_true_spec Search_other_key_spec
+      contracts add: Search_key_true_contract_def Search_other_key_contract_def
+      simp add: true_def false_def)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>rename_tac p_ref\<close>)
+  apply (all \<open>ucincl_discharge\<open>
+    rule_tac
+      INV=\<open>\<lambda>_. \<Squnion>gp p. p_ref \<mapsto>\<langle>\<top>\<rangle> gp\<down>p \<star> can_alloc_reference\<close> and
+      INV'=\<open>\<lambda>_. \<Squnion>gp p. p_ref \<mapsto>\<langle>\<top>\<rangle> gp\<down>p \<star> can_alloc_reference \<star>
+             \<langle>p < word64_of_nat (length ws)\<rangle>\<close> and
+      \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
+      \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+    in wp_bounded_while_framedI\<close>\<close>)
+  apply (crush_base inline: len_def specs add: Search_key_true_spec Search_other_key_spec
+      contracts add: Search_key_true_contract_def Search_other_key_contract_def
+      simp add: true_def false_def)
+  apply (all \<open>search_bound?\<close>)
+  done
 
 definition close_gap_contract :: \<open>64 word list \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow> ('s, 64 word list, 'abort) function_contract\<close> where
   \<open>close_gap_contract xs i j \<equiv>
@@ -406,8 +460,9 @@ lemma Search_propagate_lit_spec:
   shows \<open>\<Gamma>; Search_propagate_lit r k \<Turnstile>\<^sub>F Search_propagate_lit_contract r g s k\<close>
   apply (crush_boot f: Search_propagate_lit_def contract: Search_propagate_lit_contract_def)
   apply (crush_base inline: len_def NONE_def BIG_def mem_replace_def
-      specs add: Search_move_watch_spec Search_key_true_spec close_gap_spec
-      contracts add: Search_move_watch_contract_def Search_key_true_contract_def close_gap_contract_def
+      specs add: Search_move_watch_spec Search_skip_true_spec Search_other_key_spec close_gap_spec
+      contracts add: Search_move_watch_contract_def Search_skip_true_contract_def
+        Search_other_key_contract_def close_gap_contract_def
       simp add: true_def false_def)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>rename_tac ws_ref confl_ref i_ref j_ref\<close>)
@@ -422,10 +477,28 @@ lemma Search_propagate_lit_spec:
       \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
     in wp_bounded_while_framedI\<close>\<close>)
   apply (crush_base inline: len_def NONE_def BIG_def mem_replace_def
-      specs add: Search_move_watch_spec Search_key_true_spec close_gap_spec
-      contracts add: Search_move_watch_contract_def Search_key_true_contract_def close_gap_contract_def
+      specs add: Search_move_watch_spec Search_skip_true_spec Search_other_key_spec close_gap_spec
+      contracts add: Search_move_watch_contract_def Search_skip_true_contract_def
+        Search_other_key_contract_def close_gap_contract_def
       simp add: true_def false_def)
-  apply (all \<open>search_bound\<close>)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>ucincl_discharge\<open>
+    rule_tac
+      INV=\<open>\<lambda>_. \<Squnion>gw w gi i gj j. ws_ref \<mapsto>\<langle>\<top>\<rangle> gw\<down>w \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star>
+             j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference\<close> and
+      INV'=\<open>\<lambda>_. \<Squnion>gw w gi i gj j. ws_ref \<mapsto>\<langle>\<top>\<rangle> gw\<down>w \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star>
+             j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference \<star>
+             \<langle>i < word64_of_nat (length w) \<and> j < i\<rangle>\<close> and
+      BRK=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
+      \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
+      \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+    in wp_bounded_while_framedI\<close>\<close>)
+  apply (crush_base inline: len_def NONE_def BIG_def mem_replace_def
+      specs add: Search_move_watch_spec Search_skip_true_spec Search_other_key_spec close_gap_spec
+      contracts add: Search_move_watch_contract_def Search_skip_true_contract_def
+        Search_other_key_contract_def close_gap_contract_def
+      simp add: true_def false_def)
+  apply (all \<open>search_bound?\<close>)
   done
 
 

@@ -55,6 +55,12 @@ code to avoid them. Known gaps and the workarounds that held:
 - **Avoid `continue`**; write an if/else chain (41040648).
 - **Guards instead of relational invariants**: check `i < len` before `i += 1`, `v < x.len()` before
   an index, so no invariant relating lengths is needed (41040648, adea3d20).
+- **A nested loop** (the copy loop inside the visit loop of `propagate_lit`) is provable: apply the
+  inner `wp_bounded_while_framedI` after the outer one's `crush_base`, with only the references the
+  inner body uses in its `INV`, and set `BRK=‹λ_. ⟨False⟩›` for a loop without `break`; left
+  schematic, `crush_base` instantiated it with part of the state and the code after the inner loop
+  lost its points-to facts. A loop directly inside an `else` branch also failed; put it after the
+  `if` (f381ca7f / #80).
 - **A new mutable local of a new type adds a prism** to the locale `Sat_heap` in `spec/`. Put such
   data in a field of an existing record when possible (41040648, the LBD histogram).
 
@@ -100,5 +106,10 @@ code to avoid them. Known gaps and the workarounds that held:
 - **Tune on permuted copies** (variable renaming, clause and literal order), not on one instance
   only; several variants were "worse or noisier" there. Luby restarts were worse than geometric
   ones (41040648).
+- **Read the assembly of the hot loop.** Inlined into `cdcl`, the fields of `Search` live in memory:
+  a loop that also stores (into the watch list) reloads the `arena`/`false_lit` pointers and
+  lengths for every node. A small read-only `&self` loop (`skip_true`) keeps them in registers: −6 %
+  on the hole9 copies at the same trajectory, with the same cache misses. Write a select of an index
+  as arithmetic (`o + 5 - side`) when it must not become a branch (f381ca7f / #80).
 - **The machine is loaded** (load average 10–38): instances near the 20 s limit can go either way,
   and timings compare only within one run (c465b40d, c3e0f79e, 5952d953).
