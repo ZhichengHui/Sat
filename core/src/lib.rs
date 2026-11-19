@@ -242,20 +242,22 @@ struct Cut {
     left: usize,
 }
 
-/// The state of the CDCL search. The partial assignment is `assign`/`set` as in `Pasn`; `trail`
+/// The state of the CDCL search. The partial assignment is `assign`/`set` as in `Pasn`, and
+/// `false_lit[key(v, b)]` holds iff the literal `(v, b)` is false under it; `trail`
 /// lists the assigned variables in order, decision level `d + 1` starts at trail position
 /// `lim[d]`, `level[v]` is the decision level of `v` and `reason[v]` the clause that propagated
 /// `v` (`NONE` for a decision). Clause `c` watches its literals at positions `wpos[2c]` and
 /// `wpos[2c + 1]`; the watch list `watches[key(v, b)]` of the literal `(v, b)` holds the watch
 /// nodes `2c`, `2c + 1` that watch it, and `wkey[node]` is the key of the literal node `node`
 /// watches, so that a visit sees whether the other watched literal is true without reading the
-/// clause.
+/// clause. Each list is a vector of nodes, compacted in place when it is visited.
 /// `qhead` is the first trail position not yet propagated. `phase` is the last value of each
 /// variable, `act` its activity, raised by `inc` whenever it takes part in a conflict; `seen`
 /// marks variables during conflict analysis, and `learnt` collects the literals of the clause it
 /// learns. Learned clause `i` has the literal block distance `lbd[i]` (the number of decision
-/// levels of its literals when it was learned); `reduce` sets `dead[i]` for about half of them, and
-/// a dead clause is dropped from a watch list when the list is visited, so it no longer takes part
+/// levels of its literals when it was learned); `reduce` sets `dead[i]` for about half of them and
+/// the keys of their nodes to `NONE`, and a node whose other node has the key `NONE` is dropped
+/// from a watch list when the list is visited, so a dead clause no longer takes part
 /// in the search (it stays in the clause database). `stamp[l]` is `tick` if level `l` has been
 /// counted by the current `learnt_lbd`; `hist` is the histogram of the distances in `reduce`.
 struct Search {
