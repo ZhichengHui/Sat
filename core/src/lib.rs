@@ -417,7 +417,9 @@ impl Search {
     /// other watched literal is true stays; for each other one, `move_watch` gives the clause a
     /// new watched literal that is not false, propagates its other watched literal, or finds it
     /// false. The list is compacted in place: the nodes that stay on it move to the
-    /// front, in order. The index of a false clause, or `NONE`.
+    /// front, in order. `skip_true` finds each run of nodes whose other watched literal is
+    /// true in a loop that only reads the state, and the run moves in one piece. The index of a
+    /// false clause, or `NONE`.
     fn propagate_lit(&mut self, k: usize) -> usize {
         if k >= self.watches.len() {
             return NONE;
@@ -427,29 +429,31 @@ impl Search {
         let mut i: usize = 0;
         let mut j: usize = 0;
         while i < ws.len() && confl == NONE {
-            let node = ws[i];
-            i += 1;
-            let o = node / 2;
-            let okey = if o < BIG && o + 5 < self.arena.len() {
-                if node % 2 == 0 { self.arena[o + 5] } else { self.arena[o + 4] }
-            } else {
-                NONE
-            };
-            if okey == NONE {
-            } else if self.key_true(okey) {
-                if j < ws.len() {
-                    ws[j] = node;
-                    j += 1;
-                }
-            } else {
-                let r = self.move_watch(k, node, okey);
-                if r != 0 {
-                    if j < ws.len() {
-                        ws[j] = node;
-                        j += 1;
-                    }
-                    if r == 2 {
-                        confl = if o < self.arena.len() { self.arena[o] } else { NONE };
+            let e = self.skip_true(&ws, i);
+            if j == i {
+                i = e;
+                j = e;
+            }
+            while i < e && i < ws.len() && j < i {
+                ws[j] = ws[i];
+                i += 1;
+                j += 1;
+            }
+            if i < ws.len() {
+                let node = ws[i];
+                i += 1;
+                let okey = self.other_key(node);
+                if okey != NONE {
+                    let r = self.move_watch(k, node, okey);
+                    if r != 0 {
+                        if j < ws.len() {
+                            ws[j] = node;
+                            j += 1;
+                        }
+                        if r == 2 {
+                            let o = node / 2;
+                            confl = if o < self.arena.len() { self.arena[o] } else { NONE };
+                        }
                     }
                 }
             }
@@ -458,6 +462,27 @@ impl Search {
             self.watches[k] = close_gap(ws, i, j);
         }
         confl
+    }
+
+    /// The first position of `ws` from `i` on whose node's other watched literal is not true;
+    /// the length of `ws` if there is none.
+    fn skip_true(&self, ws: &Vec<usize>, i: usize) -> usize {
+        let mut p = i;
+        while p < ws.len() && self.key_true(self.other_key(ws[p])) {
+            p += 1;
+        }
+        p
+    }
+
+    /// The key of the other watched literal of the watch node `node`; `NONE` if the node is not
+    /// in the arena.
+    fn other_key(&self, node: usize) -> usize {
+        let o = node / 2;
+        if o < BIG && o + 5 < self.arena.len() {
+            self.arena[o + 5 - node % 2]
+        } else {
+            NONE
+        }
     }
 
     /// The watch node `node` of the clause at the arena offset `o = node / 2` watches a literal of

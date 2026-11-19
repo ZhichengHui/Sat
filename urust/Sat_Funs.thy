@@ -848,10 +848,31 @@ definition "on_conflict" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rig
     0_usize
   \<rbrakk>\<close>
 
+(* Rust: Search::other_key *)
+definition "Search_other_key" :: \<open>Search \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_other_key \<equiv> \<lambda>self node. FunctionBody \<lbrakk>
+    let o_v = node / 2_usize;
+    if (o_v < BIG()) && ((o_v + 5_usize) < len(self.Search_arena)) {
+      self.Search_arena[(o_v + 5_usize) - (node % 2_usize)]
+    } else {
+      NONE()
+    }
+  \<rbrakk>\<close>
+
 (* Rust: Search::key_true *)
 definition "Search_key_true" :: \<open>Search \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_key_true \<equiv> \<lambda>self k. FunctionBody \<lbrakk>
     Search_key_false(self, k ^ 1_usize)
+  \<rbrakk>\<close>
+
+(* Rust: Search::skip_true *)
+definition "Search_skip_true" :: \<open>Search \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_skip_true \<equiv> \<lambda>self ws i. FunctionBody \<lbrakk>
+    let mut p = i;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while ((* p) < len(ws)) && Search_key_true(self, Search_other_key(self, ws[* p])) {
+      * p += 1_usize;
+    };
+    * p
   \<rbrakk>\<close>
 
 (* Rust: Search::scan *)
@@ -952,27 +973,21 @@ definition "Search_propagate_lit" :: \<open>(('addr, 'gv, Search) Global_Store.r
     let mut i = 0_usize;
     let mut j = 0_usize;
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while ((* i) < len(* ws)) && ((* confl) == NONE()) {
-      let node = (* ws)[* i];
-      * i += 1_usize;
-      let o_v = node / 2_usize;
-      let okey = if (o_v < BIG()) && ((o_v + 5_usize) < len(* (self.Search_arena))) {
-        if (node % 2_usize) == 0_usize {
-          (* (self.Search_arena))[o_v + 5_usize]
-        } else {
-          (* (self.Search_arena))[o_v + 4_usize]
-        }
-      } else {
-        NONE()
+      let e = Search_skip_true(* self, * ws, * i);
+      if (* j) == (* i) {
+        * i = e;
+        * j = e;
       };
-      if okey == NONE() {
-        ()
-      } else {
-        if Search_key_true(* self, okey) {
-          if (* j) < len(* ws) {
-            * (ws[* j]) = node;
-            * j += 1_usize;
-          }
-        } else {
+      #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (((* i) < e) && ((* i) < len(* ws))) && ((* j) < (* i)) {
+        * (ws[* j]) = (* ws)[* i];
+        * i += 1_usize;
+        * j += 1_usize;
+      };
+      if (* i) < len(* ws) {
+        let node = (* ws)[* i];
+        * i += 1_usize;
+        let okey = Search_other_key(* self, node);
+        if okey != NONE() {
           let r = Search_move_watch(self, k, node, okey);
           if r != 0_usize {
             if (* j) < len(* ws) {
@@ -980,6 +995,7 @@ definition "Search_propagate_lit" :: \<open>(('addr, 'gv, Search) Global_Store.r
               * j += 1_usize;
             };
             if r == 2_usize {
+              let o_v = node / 2_usize;
               * confl = (if o_v < len(* (self.Search_arena)) {
                 (* (self.Search_arena))[o_v]
               } else {
