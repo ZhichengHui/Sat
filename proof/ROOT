@@ -5,6 +5,7 @@ session "Sat_Proof" = "Sat_Spec" +
     Sat_Proof
     Sat_Certify
     Sat_Search
+    Sat_Minimize
     Sat_CDCL
 
 session "Sat_Top" in "top" = "Sat_Proof" +
