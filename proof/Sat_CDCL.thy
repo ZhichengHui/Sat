@@ -1,5 +1,5 @@
 theory Sat_CDCL
-  imports Sat_Proof.Sat_Minimize
+  imports Sat_Proof.Sat_Reduce
 begin
 
 text \<open>The contract of the CDCL search of \<^verbatim>\<open>core/src/lib.rs\<close>, \<^verbatim>\<open>cdcl\<close>. The functions it calls
