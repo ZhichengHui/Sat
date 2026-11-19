@@ -1082,10 +1082,15 @@ pub fn cdcl(f: &Formula) -> Option<Answer> {
     None
 }
 
-/// The solver: CDCL, and the verified DPLL `solve` if CDCL gives up.
+/// The verified DPLL `solve` from the empty partial assignment: the fallback of `solver`.
+pub fn dpll(f: &Formula) -> Answer {
+    solve(f, Pasn { assign: Assignments(vec![false; f.num_vars]), set: vec![false; f.num_vars] })
+}
+
+/// The solver: CDCL, and the verified DPLL `dpll` if CDCL gives up.
 pub fn solver(f: &Formula) -> Answer {
     match cdcl(f) {
         Some(a) => a,
-        None => solve(f, Pasn { assign: Assignments(vec![false; f.num_vars]), set: vec![false; f.num_vars] }),
+        None => dpll(f),
     }
 }

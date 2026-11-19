@@ -42,8 +42,7 @@ Per-session details are in `progress/`.
 - The suite is saturated: every instance is decided and the times are close to z3's. Further
   progress needs a harder suite, which only the owner can add (`PLAN.md`, Benchmarks).
 - Trusted base (`PLAN.md`): the AutoCorrode translation, the locale `Sat_heap`, and `cli/`.
-- The DPLL fallback is never reached on the suite or the tests (#51, #52), and the tests through
-  `solver` hardly exercise it (review #49).
+- The DPLL fallback is never reached on the suite; it is tested directly through `pub fn dpll` (#69).
 - Known costs not addressed: `pick` is linear in the variables per decision; `certify` scans every
   trail reason; dead learned clauses are never freed (#51, review #48). The module comment of
   `core/src/lib.rs` still describes only the DPLL solver.

@@ -1026,6 +1026,12 @@ definition "cdcl" :: \<open>Formula \<Rightarrow> ('s, Answer option, 'abort, 'i
     None
   \<rbrakk>\<close>
 
+(* Rust: dpll *)
+definition "dpll" :: \<open>Formula \<Rightarrow> ('s, Answer, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>dpll \<equiv> \<lambda>f. FunctionBody \<lbrakk>
+    solve(f, Pasn_mk { Pasn_assign: Assignments_mk(vec_from_elem(false, f.Formula_num_vars)), Pasn_set: vec_from_elem(false, f.Formula_num_vars) })
+  \<rbrakk>\<close>
+
 (* Rust: solver *)
 definition "solver" :: \<open>Formula \<Rightarrow> ('s, Answer, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>solver \<equiv> \<lambda>f. FunctionBody \<lbrakk>
@@ -1034,7 +1040,7 @@ definition "solver" :: \<open>Formula \<Rightarrow> ('s, Answer, 'abort, 'i prom
         a
       },
       None \<Rightarrow> {
-        solve(f, Pasn_mk { Pasn_assign: Assignments_mk(vec_from_elem(false, f.Formula_num_vars)), Pasn_set: vec_from_elem(false, f.Formula_num_vars) })
+        dpll(f)
       }
     }
   \<rbrakk>\<close>

@@ -25,11 +25,38 @@ qed
 context Sat_ctx
 begin
 
-text \<open>With enough fuel the solver satisfies the contract of the specification. The answer of
-  \<open>cdcl_spec\<close> (\<^verbatim>\<open>Sat_CDCL\<close>) is the contract's when it is one; otherwise the proof reuses
-  \<open>solve_spec\<close> of \<^verbatim>\<open>Sat_Proof\<close> and turns its answer into the contract's with \<open>sol_start\<close>;
-  the fuel bound \<^const>\<open>fuel_top\<close> and \<^const>\<open>sat_repr_ok\<close> give the size conditions of
-  \<open>formula_wf\<close>.\<close>
+text \<open>With enough fuel \<^verbatim>\<open>dpll\<close>, the fallback of the solver, satisfies the contract of the
+  specification: the proof reuses \<open>solve_spec\<close> of \<^verbatim>\<open>Sat_Proof\<close> and turns its answer into the
+  contract's with \<open>sol_start\<close>; the fuel bound \<^const>\<open>fuel_top\<close> and \<^const>\<open>sat_repr_ok\<close> give the
+  size conditions of \<open>formula_wf\<close>.\<close>
+lemma dpll_spec:
+  assumes \<open>fuel_top f \<le> urust_fuel\<close>
+  shows \<open>\<Gamma>; dpll f \<Turnstile>\<^sub>F solver_contract f\<close>
+  apply (crush_boot f: dpll_def contract: solver_contract_def)
+  apply (crush_base inline: vec_from_elem_def Pasn_mk_def Assignments_mk_def
+      specs add: solve_spec contracts add: solve_contract_def
+      simp add: true_def false_def unat_lt2p formula_wf_def)
+  subgoal \<comment> \<open>the answer of \<^verbatim>\<open>solve\<close> from the empty assignment\<close>
+    by (erule sol_start)
+  subgoal \<comment> \<open>the fuel of the recursion of \<^verbatim>\<open>solve\<close>\<close>
+    using assms unset_le_length[of \<open>replicate (unat (Formula_num_vars f)) False\<close>]
+    by (simp add: fuel_top_def)
+  subgoal \<comment> \<open>the fuel of the recursion of \<^verbatim>\<open>propagate\<close>\<close>
+    using assms by (simp add: fuel_top_def)
+  subgoal \<comment> \<open>\<open>formula_wf\<close>: every variable is below the number of variables\<close>
+    unfolding formula_invariant_def by blast
+  subgoal \<comment> \<open>\<open>formula_wf\<close>: every clause is shorter than \<open>2^63\<close>\<close>
+    by (auto simp add: sat_repr_ok_def)
+  subgoal \<comment> \<open>the fuel of the loops over a clause's literals\<close>
+    by (rule order_trans[OF fuel_top_clause assms])
+  subgoal \<comment> \<open>the number of clauses fits in a word\<close>
+    by (simp add: sat_repr_ok_def)
+  subgoal \<comment> \<open>the fuel of the loops over the clauses\<close>
+    using assms by (simp add: fuel_top_def)
+  done
+
+text \<open>With enough fuel the solver satisfies the contract of the specification: the answer of
+  \<open>cdcl_spec\<close> (\<^verbatim>\<open>Sat_CDCL\<close>) when it is one, otherwise that of \<open>dpll_spec\<close>.\<close>
 lemma solver_spec:
   assumes \<open>fuel_top f \<le> urust_fuel\<close>
   shows \<open>\<Gamma>; solver f \<Turnstile>\<^sub>F solver_contract f\<close>
@@ -38,32 +65,11 @@ lemma solver_spec:
   subgoal premises prems for x
   proof (cases x)
     case None
-    have inv: \<open>formula_invariant f\<close> and repr: \<open>sat_repr_ok f\<close>
-      using prems by auto
     show ?thesis
       unfolding None
       apply (simp only: option.case)
-      apply (crush_base inline: vec_from_elem_def Pasn_mk_def Assignments_mk_def
-          specs add: solve_spec contracts add: solve_contract_def
-          simp add: true_def false_def unat_lt2p formula_wf_def)
-      subgoal \<comment> \<open>the answer of \<^verbatim>\<open>solve\<close> from the empty assignment\<close>
-        by (erule sol_start)
-      subgoal \<comment> \<open>the fuel of the recursion of \<^verbatim>\<open>solve\<close>\<close>
-        using assms unset_le_length[of \<open>replicate (unat (Formula_num_vars f)) False\<close>]
-        by (simp add: fuel_top_def)
-      subgoal \<comment> \<open>the fuel of the recursion of \<^verbatim>\<open>propagate\<close>\<close>
-        using assms by (simp add: fuel_top_def)
-      subgoal \<comment> \<open>\<open>formula_wf\<close>: every variable is below the number of variables\<close>
-        using inv unfolding formula_invariant_def by blast
-      subgoal \<comment> \<open>\<open>formula_wf\<close>: every clause is shorter than \<open>2^63\<close>\<close>
-        using repr by (auto simp add: sat_repr_ok_def)
-      subgoal \<comment> \<open>the fuel of the loops over a clause's literals\<close>
-        by (rule order_trans[OF fuel_top_clause assms])
-      subgoal \<comment> \<open>the number of clauses fits in a word\<close>
-        using repr by (simp add: sat_repr_ok_def)
-      subgoal \<comment> \<open>the fuel of the loops over the clauses\<close>
-        using assms by (simp add: fuel_top_def)
-      done
+      apply (crush_base specs add: dpll_spec[OF assms] contracts add: solver_contract_def)
+      using prems by auto
   next
     case (Some a)
     have \<open>cdcl_post f (Some a)\<close>
