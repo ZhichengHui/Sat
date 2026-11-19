@@ -58,49 +58,17 @@ qed simp
 lemma agree_update_self:
   assumes \<open>\<not> d ! v\<close>
   shows \<open>agree d a (a[v := b])\<close>
-  unfolding agree_def
-proof (intro allI impI)
-  fix u assume \<open>u < length d\<close> \<open>d ! u\<close>
-  then have \<open>v \<noteq> u\<close> using assms by auto
-  then show \<open>a[v := b] ! u = a ! u\<close> by (simp add: nth_list_update_neq)
-qed
+  using assms unfolding agree_def by (metis nth_list_update_neq)
 
 lemma agree_update:
   assumes \<open>agree (d[v := True]) (a[v := b]) m\<close> \<open>\<not> d ! v\<close>
   shows \<open>agree d a m\<close>
-  unfolding agree_def
-proof (intro allI impI)
-  fix u assume u: \<open>u < length d\<close> \<open>d ! u\<close>
-  then have vu: \<open>v \<noteq> u\<close> using assms(2) by auto
-  have \<open>u < length (d[v := True])\<close> \<open>d[v := True] ! u\<close>
-    using u vu by (simp_all add: nth_list_update_neq)
-  then have \<open>m ! u = a[v := b] ! u\<close>
-    using assms(1) unfolding agree_def by blast
-  then show \<open>m ! u = a ! u\<close>
-    using vu by (simp add: nth_list_update_neq)
-qed
+  using assms unfolding agree_def by (metis length_list_update nth_list_update_neq)
 
 lemma agree_update_intro:
   assumes \<open>agree d a m\<close> \<open>m ! v = b\<close> \<open>v < length a\<close>
   shows \<open>agree (d[v := True]) (a[v := b]) m\<close>
-  unfolding agree_def
-proof (intro allI impI)
-  fix u assume u: \<open>u < length (d[v := True])\<close> \<open>d[v := True] ! u\<close>
-  show \<open>m ! u = a[v := b] ! u\<close>
-  proof (cases \<open>u = v\<close>)
-    case True
-    then show ?thesis using assms(2,3) by simp
-  next
-    case False
-    then have vu: \<open>v \<noteq> u\<close> by simp
-    then have \<open>u < length d\<close> \<open>d ! u\<close>
-      using u by (simp_all add: nth_list_update_neq)
-    then have \<open>m ! u = a ! u\<close>
-      using assms(1) unfolding agree_def by blast
-    then show ?thesis
-      using vu by (simp add: nth_list_update_neq)
-  qed
-qed
+  using assms unfolding agree_def by (simp add: nth_list_update)
 
 lemma ext_sat_step:
   assumes \<open>v < length a\<close> \<open>length d = length a\<close> \<open>\<not> d ! v\<close>
@@ -406,24 +374,11 @@ qed
 
 section \<open>64-bit indices\<close>
 
-lemma unat_word_Suc:
-  fixes x :: \<open>64 word\<close>
-  assumes \<open>unat x < n\<close> \<open>n < 2^64\<close>
-  shows \<open>unat (x + 1) = Suc (unat x)\<close>
-proof -
-  have \<open>unat x + unat (1 :: 64 word) < 2 ^ LENGTH(64)\<close>
-    using assms by simp
-  then have \<open>unat (x + 1) = unat x + unat (1 :: 64 word)\<close>
-    using unat_add_lem[of x \<open>1 :: 64 word\<close>] by blast
-  then show ?thesis
-    by simp
-qed
-
 lemma unat_word_Suc_simp:
   fixes x :: \<open>64 word\<close>
   assumes \<open>unat x < 18446744073709551615\<close>
   shows \<open>unat (x + 1) = Suc (unat x)\<close>
-  using assms unat_word_Suc[of x 18446744073709551615] by simp
+  using assms unat_add_lem[of x 1] by simp
 
 lemma word64_eq_of_nat_iff:
   fixes x :: \<open>64 word\<close>
@@ -435,11 +390,5 @@ proof
   show \<open>x = word_of_nat n\<close> if \<open>unat x = n\<close>
     using that by (metis word_unat.Rep_inverse)
 qed
-
-lemma word_ne_length:
-  fixes x :: \<open>64 word\<close>
-  assumes \<open>x \<noteq> word64_of_nat n\<close> \<open>unat x \<le> n\<close> \<open>n < 2^64\<close>
-  shows \<open>unat x < n\<close>
-  using assms word64_eq_of_nat_iff[of n x] by simp
 
 end
