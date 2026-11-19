@@ -666,10 +666,10 @@ impl Search {
     /// the clause is dropped from the watch lists when they are visited.
     fn unwatch(&mut self, m: usize, i: usize) {
         if m < BIG && i < BIG {
-            let n0 = 2 * (m + i);
-            if n0 + 1 < self.wkey.len() {
-                self.wkey[n0] = NONE;
-                self.wkey[n0 + 1] = NONE;
+            let c = m + i;
+            if c < BIG && 2 * c + 1 < self.wkey.len() {
+                self.wkey[2 * c] = NONE;
+                self.wkey[2 * c + 1] = NONE;
             }
         }
     }

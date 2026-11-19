@@ -778,6 +778,12 @@ lemma Search_cut_spec:
     done
   done
 
+lemma big_sum:
+  assumes \<open>m + i < (0x4000000000000000 :: 64 word)\<close>
+  shows \<open>unat (2 * m + 2 * i) = 2 * unat (m + i)\<close> \<open>unat (2 * m + 2 * i + 1) = 2 * unat (m + i) + 1\<close>
+    \<open>unat (m + i) < 4611686018427387904\<close>
+  using big_c[OF assms] by (simp_all add: distrib_left)
+
 definition Search_unwatch_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
     64 word \<Rightarrow> 64 word \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
   \<open>Search_unwatch_contract r g s m i \<equiv>
@@ -789,7 +795,10 @@ lemma Search_unwatch_spec:
   shows \<open>\<Gamma>; Search_unwatch r m i \<Turnstile>\<^sub>F Search_unwatch_contract r g s m i\<close>
   apply (crush_boot f: Search_unwatch_def contract: Search_unwatch_contract_def)
   apply (crush_base inline: len_def NONE_def BIG_def simp add: true_def false_def)
-  apply (all \<open>search_bound\<close>)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>((drule word64_less_of_nat)+)?\<close>)
+  apply (simp_all only: big_sum)
+  apply (all \<open>frule big_sum(3), linarith\<close>)
   done
 
 definition Search_kill_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>

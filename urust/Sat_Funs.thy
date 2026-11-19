@@ -901,10 +901,10 @@ definition "Search_cut" :: \<open>Search \<Rightarrow> (64 word) \<Rightarrow> (
 definition "Search_unwatch" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_unwatch \<equiv> \<lambda>self m i. FunctionBody \<lbrakk>
     if (m < BIG()) && (i < BIG()) {
-      let n0 = 2_usize * (m + i);
-      if (n0 + 1_usize) < len(* (self.Search_wkey)) {
-        * (self.Search_wkey[n0]) = NONE();
-        * (self.Search_wkey[n0 + 1_usize]) = NONE();
+      let c = m + i;
+      if (c < BIG()) && (((2_usize * c) + 1_usize) < len(* (self.Search_wkey))) {
+        * (self.Search_wkey[2_usize * c]) = NONE();
+        * (self.Search_wkey[(2_usize * c) + 1_usize]) = NONE();
       }
     }
   \<rbrakk>\<close>
