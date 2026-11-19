@@ -38,15 +38,32 @@ lemma solver_spec:
   subgoal premises prems for x
   proof (cases x)
     case None
+    have inv: \<open>formula_invariant f\<close> and repr: \<open>sat_repr_ok f\<close>
+      using prems by auto
     show ?thesis
       unfolding None
       apply (simp only: option.case)
       apply (crush_base inline: vec_from_elem_def Pasn_mk_def Assignments_mk_def
           specs add: solve_spec contracts add: solve_contract_def
           simp add: true_def false_def unat_lt2p formula_wf_def)
-      using assms prems fuel_top_clause[of _ f] unat_lt2p[of \<open>Formula_num_vars f\<close>] sol_start
-        unset_le_length[of \<open>replicate (unat (Formula_num_vars f)) False\<close>]
-      by (fastforce simp: fuel_top_def sat_repr_ok_def formula_invariant_def)+
+      subgoal \<comment> \<open>the answer of \<^verbatim>\<open>solve\<close> from the empty assignment\<close>
+        by (erule sol_start)
+      subgoal \<comment> \<open>the fuel of the recursion of \<^verbatim>\<open>solve\<close>\<close>
+        using assms unset_le_length[of \<open>replicate (unat (Formula_num_vars f)) False\<close>]
+        by (simp add: fuel_top_def)
+      subgoal \<comment> \<open>the fuel of the recursion of \<^verbatim>\<open>propagate\<close>\<close>
+        using assms by (simp add: fuel_top_def)
+      subgoal \<comment> \<open>\<open>formula_wf\<close>: every variable is below the number of variables\<close>
+        using inv unfolding formula_invariant_def by blast
+      subgoal \<comment> \<open>\<open>formula_wf\<close>: every clause is shorter than \<open>2^63\<close>\<close>
+        using repr by (auto simp add: sat_repr_ok_def)
+      subgoal \<comment> \<open>the fuel of the loops over a clause's literals\<close>
+        by (rule order_trans[OF fuel_top_clause assms])
+      subgoal \<comment> \<open>the number of clauses fits in a word\<close>
+        using repr by (simp add: sat_repr_ok_def)
+      subgoal \<comment> \<open>the fuel of the loops over the clauses\<close>
+        using assms by (simp add: fuel_top_def)
+      done
   next
     case (Some a)
     have \<open>cdcl_post f (Some a)\<close>
