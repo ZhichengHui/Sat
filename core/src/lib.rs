@@ -263,6 +263,10 @@ struct Cut {
 /// from a watch list when the list is visited, so a dead clause no longer takes part
 /// in the search (it stays in the clause database). `stamp[l]` is `tick` if level `l` has been
 /// counted by the current `learnt_lbd`; `hist` is the histogram of the distances in `reduce`.
+/// During `minimize`, `seen` also marks the variables found redundant, `fail[v]` those found not
+/// redundant, `toclear` lists both to clear them afterwards, and `stack` holds the frames
+/// `(v, j, end)` of the depth-first search of `lit_redundant`: variable `v`, and the arena
+/// positions of the next literal of its reason and of the end of the reason's entry.
 struct Search {
     assign: Vec<bool>,
     set: Vec<bool>,
@@ -285,6 +289,9 @@ struct Search {
     stamp: Vec<usize>,
     tick: usize,
     hist: Vec<usize>,
+    fail: Vec<bool>,
+    stack: Vec<usize>,
+    toclear: Vec<usize>,
 }
 
 impl Search {
@@ -577,32 +584,112 @@ impl Search {
         }
     }
 
-    /// The literal of `v` in the learned clause is implied by the others: `v` has a reason clause
-    /// whose other literals have marked variables or variables of level 0.
-    fn redundant(&self, f: &Formula, learned: &Vec<Clause>, v: usize) -> bool {
+    /// Pushes the frame of `v` onto `stack`: `v`, the arena positions of the first literal of its
+    /// reason and of the end of the entry (`0, 0` if `v` has no reason in the arena).
+    fn push_frame(&mut self, v: usize) {
+        let mut from: usize = 0;
+        let mut end: usize = 0;
+        if v < self.reason.len() {
+            let r = self.reason[v];
+            if r < self.start.len() {
+                let o = self.start[r];
+                if o < BIG && o + 1 < self.arena.len() {
+                    from = o + 6;
+                    end = self.arena[o + 1];
+                }
+            }
+        }
+        self.stack.push(v);
+        self.stack.push(from);
+        self.stack.push(end);
+    }
+
+    /// One step of the search of `lit_redundant` on its top frame `(v, j, end)`, `j` the arena
+    /// position of the next literal of the reason of `v`: pops the frame if `j` is `end` (`v` is
+    /// redundant); otherwise advances `j` and looks at the variable `q` of that literal. If `q`
+    /// is `v`, of level 0 or marked, nothing more; if it is known not redundant, a decision, or of
+    /// a level that no literal of `learnt` has, `q` is marked not redundant and the search fails
+    /// (1); otherwise `q` is marked and its frame pushed. 0 if the search goes on.
+    fn redundant_step(&mut self) -> usize {
+        let n = self.stack.len();
+        if n < 3 {
+            return 1;
+        }
+        let v = self.stack[n - 3];
+        let j = self.stack[n - 2];
+        if j >= self.stack[n - 1] || j >= self.arena.len() {
+            self.stack.truncate(n - 3);
+            return 0;
+        }
+        self.stack[n - 2] = j + 1;
+        let q = self.arena[j] / 2;
+        if q == v {
+            return 0;
+        }
+        if q >= self.seen.len() || q >= self.level.len() || q >= self.fail.len() || q >= self.reason.len() {
+            return 1;
+        }
+        if self.level[q] == 0 || self.seen[q] {
+            return 0;
+        }
+        let lq = self.level[q];
+        if self.fail[q] || self.reason[q] == NONE || lq >= self.stamp.len() || self.stamp[lq] != self.tick {
+            self.fail[q] = true;
+            self.toclear.push(q);
+            return 1;
+        }
+        self.seen[q] = true;
+        self.toclear.push(q);
+        self.push_frame(q);
+        0
+    }
+
+    /// After a failed search of `lit_redundant`: the variables of the frames above the first are
+    /// not redundant; unmarks them, marks them not redundant, and empties `stack`.
+    fn unwind(&mut self) {
+        let mut k: usize = 3;
+        while k < self.stack.len() {
+            let q = self.stack[k];
+            if q < self.seen.len() && q < self.fail.len() {
+                self.seen[q] = false;
+                self.fail[q] = true;
+            }
+            if k < NONE - 3 {
+                k += 3;
+            } else {
+                k = NONE;
+            }
+        }
+        self.stack.clear();
+    }
+
+    /// The literal of `v` in the learned clause is implied by the others (recursive minimisation):
+    /// `v` has a reason clause each of whose other literals has a marked variable, a variable of
+    /// level 0, or (recursively) a redundant variable; a depth-first search over `stack`. The
+    /// levels of the literals of `learnt` have the stamp `tick`.
+    fn lit_redundant(&mut self, v: usize) -> bool {
         if v >= self.reason.len() || self.reason[v] == NONE {
             return false;
         }
-        let r = self.reason[v];
-        let len = clause_len(f, learned, r);
-        let mut j: usize = 0;
-        while j < len {
-            let q = lit_at(f, learned, r, j).var;
-            if q != v && !(q < self.seen.len() && q < self.level.len() && (self.seen[q] || self.level[q] == 0)) {
+        self.stack.clear();
+        self.push_frame(v);
+        while self.stack.len() >= 3 {
+            if self.redundant_step() != 0 {
+                self.unwind();
                 return false;
             }
-            j += 1;
         }
         true
     }
 
-    /// Moves the literals of `learnt` after the first that are not `redundant` to the front, in
-    /// order; the number of literals moved, plus one.
-    fn compact(&mut self, f: &Formula, learned: &Vec<Clause>) -> usize {
+    /// Moves the literals of `learnt` after the first that are not `lit_redundant` to the front,
+    /// in order; the number of literals moved, plus one.
+    fn compact(&mut self) -> usize {
         let mut i: usize = 1;
         let mut j: usize = 1;
         while j < self.learnt.len() {
-            if !self.redundant(f, learned, self.learnt[j].var) && i < self.learnt.len() {
+            let v = self.learnt[j].var;
+            if !self.lit_redundant(v) && i < self.learnt.len() && j < self.learnt.len() {
                 if i < j {
                     self.learnt.swap(i, j);
                 }
@@ -611,6 +698,20 @@ impl Search {
             j += 1;
         }
         i
+    }
+
+    /// Clears the marks `seen` and `fail` of the variables of `toclear`, and empties it.
+    fn clear_marks(&mut self) {
+        let mut k: usize = 0;
+        while k < self.toclear.len() {
+            let q = self.toclear[k];
+            if q < self.seen.len() && q < self.fail.len() {
+                self.seen[q] = false;
+                self.fail[q] = false;
+            }
+            k += 1;
+        }
+        self.toclear.clear();
     }
 
     /// Clears the marks of the variables of the literals of `learnt` from position `i` on.
@@ -625,10 +726,13 @@ impl Search {
         }
     }
 
-    /// Removes from `learnt` the literals after the first that are `redundant`, and clears the
-    /// marks of their variables.
-    fn minimize(&mut self, f: &Formula, learned: &Vec<Clause>) {
-        let i = self.compact(f, learned);
+    /// Removes from `learnt` the literals after the first that are `lit_redundant`, and clears
+    /// the marks of their variables and of those of the search. Stamps the levels of `learnt`
+    /// first (`learnt_lbd`) for the level filter of the search.
+    fn minimize(&mut self) {
+        self.learnt_lbd();
+        let i = self.compact();
+        self.clear_marks();
         self.unmark_from(i);
         self.learnt.truncate(i);
     }
@@ -783,7 +887,7 @@ impl Search {
         if self.inc < BIG {
             self.inc += self.inc / 32 + 1;
         }
-        self.minimize(f, learned);
+        self.minimize();
         self.finish_learnt();
         self.copy_learnt()
     }
@@ -867,6 +971,9 @@ fn new_search(n: usize) -> Search {
         stamp: vec![0; n + 1],
         tick: 0,
         hist: Vec::new(),
+        fail: vec![false; n],
+        stack: Vec::new(),
+        toclear: Vec::new(),
     }
 }
 
