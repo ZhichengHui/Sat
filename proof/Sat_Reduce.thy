@@ -127,16 +127,8 @@ text \<open>The moving averages of the literal block distances, scaled by \<open
 lemma restart_avg:
   assumes \<open>\<not> 0x20000000000 \<le> (a :: 64 word)\<close>
   shows \<open>unat (a * 0x10000 div n) * 5 < 18446744073709551616\<close>
-proof -
-  have a: \<open>unat a < 0x20000000000\<close>
-    using assms by (simp add: word_le_nat_alt)
-  then have \<open>unat (a * 0x10000) = unat a * 65536\<close>
-    using unat_mult_lem[of a \<open>0x10000 :: 64 word\<close>] by simp
-  moreover have \<open>unat (a * 0x10000 div n) \<le> unat (a * 0x10000)\<close>
-    by (simp add: unat_div)
-  ultimately show ?thesis
-    using a by linarith
-qed
+  using assms div_le_dividend[of \<open>unat a * 65536\<close> \<open>unat n\<close>]
+  by (simp add: word_le_nat_alt unat_div unat_word_ariths, linarith)
 
 lemma restart_avg2:
   \<open>\<not> 0x20000000000 \<le> (a :: 64 word) + l \<Longrightarrow>
@@ -144,14 +136,8 @@ lemma restart_avg2:
   using restart_avg[of \<open>a + l\<close> n] by (simp add: distrib_right)
 
 lemma restart_lt:
-  \<open>\<not> 0x20000000000 \<le> (a :: 64 word) \<Longrightarrow> unat a < 281474976710656\<close>
   \<open>unat (x :: 64 word) < 18446744073709551616\<close>
-  by (simp_all add: word_le_nat_alt unat_lt2p[of x, simplified])
-
-lemma restart_mul:
-  \<open>\<not> 0x2000000000 \<le> (x :: 64 word) \<Longrightarrow> unat x * 3 < 18446744073709551616\<close>
-  \<open>(x :: 64 word) < 0x100000 \<Longrightarrow> unat x * 2048 < 18446744073709551616\<close>
-  by (simp_all add: word_le_nat_alt word_less_nat_alt)
+  using unat_lt2p[of x] by simp
 
 lemma restart_div_le:
   \<open>(x :: 64 word) div 0x20 \<le> x\<close>
@@ -160,23 +146,11 @@ lemma restart_div_le:
 lemma restart_add:
   assumes \<open>(f :: 64 word) < 0x1000000000\<close> and \<open>(l :: 64 word) < 0x100000\<close>
   shows \<open>unat (f - f div 0x20) + unat (l * 0x800) < 18446744073709551616\<close>
-proof -
-  have \<open>unat (f - f div 0x20) \<le> unat f\<close>
-    by (simp add: word_sub_le restart_div_le word_le_nat_alt[symmetric])
-  moreover have \<open>unat (l * 0x800) = unat l * 2048\<close>
-    using assms(2) unat_mult_lem[of l \<open>0x800 :: 64 word\<close>] by (simp add: word_less_nat_alt)
-  ultimately show ?thesis
-    using assms by (simp add: word_less_nat_alt)
-qed
+  using assms by (simp add: word_less_nat_alt word_le_nat_alt unat_sub unat_div unat_word_ariths)
 
-lemma restart_sum:
-  \<open>(a :: 64 word) < 0x10000000000 \<Longrightarrow> (l :: 64 word) < 0x100000 \<Longrightarrow> unat a + unat l < 18446744073709551616\<close>
-  by (simp add: word_less_nat_alt)
-
+text \<open>The other bounds of \<^verbatim>\<open>restart_due\<close> close by the simplifier in \<open>search_bound\<close>.\<close>
 method restart_bound =
-  (rule restart_div_le restart_lt(2) |
-    (rule restart_avg restart_avg2 restart_lt(1) restart_mul restart_add restart_sum; assumption) |
-    (simp add: word_less_nat_alt; fail))
+  (rule restart_div_le restart_lt | (rule restart_avg restart_avg2 restart_add; assumption))
 
 definition Search_restart_due_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
     ('s, bool, 'abort) function_contract\<close> where

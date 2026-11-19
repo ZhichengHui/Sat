@@ -39,18 +39,7 @@ lemma swap_ok2:
 lemma counter_add:
   assumes \<open>\<not> 0xFFFFFFFFFFFFFFFF - c < (a :: 64 word)\<close>
   shows \<open>unat c + unat a < 18446744073709551616\<close>
-proof -
-  have \<open>unat a \<le> unat (0xFFFFFFFFFFFFFFFF - c)\<close>
-    using assms by (simp add: word_le_nat_alt not_less)
-  moreover have le: \<open>c \<le> 0xFFFFFFFFFFFFFFFF\<close>
-    using unat_lt2p[of c] by (simp add: word_le_nat_alt)
-  moreover have \<open>unat (0xFFFFFFFFFFFFFFFF - c) = unat (0xFFFFFFFFFFFFFFFF :: 64 word) - unat c\<close>
-    using le by (rule unat_sub)
-  moreover have \<open>unat c < 18446744073709551616\<close>
-    using unat_lt2p[of c] by simp
-  ultimately show ?thesis
-    by simp
-qed
+  using assms unat_lt2p[of c] by (simp add: word_le_nat_alt not_less unat_sub)
 
 
 lemma one_le:
@@ -74,33 +63,13 @@ text \<open>The frames of the search stack of the minimisation are three words; 
 lemma len_minus:
   assumes \<open>\<not> word64_of_nat n < (3 :: 64 word)\<close> \<open>(1 :: 64 word) \<le> k\<close> \<open>k \<le> 3\<close>
   shows \<open>unat (word64_of_nat n - k) < n\<close>
-proof -
-  have le: \<open>k \<le> word64_of_nat n\<close>
-    using assms by simp
-  then have \<open>unat k \<le> unat (word64_of_nat n :: 64 word)\<close>
-    by (simp add: word_le_nat_alt)
-  moreover have \<open>unat (word64_of_nat n :: 64 word) \<le> n\<close>
-    by (simp add: unat_of_nat)
-  moreover have \<open>0 < unat k\<close>
-    using assms(2) by (simp add: word_le_nat_alt)
-  moreover have \<open>unat (word64_of_nat n - k) = unat (word64_of_nat n :: 64 word) - unat k\<close>
-    using le by (rule unat_sub)
-  ultimately show ?thesis
-    by linarith
-qed
+  using assms by (simp add: word_le_nat_alt word_less_nat_alt unat_sub unat_of_nat)
 
 text \<open>Offsets into the arena: below \<open>2^62\<close>, adding a small constant does not overflow.\<close>
 lemma big_add:
   assumes \<open>(a :: 64 word) < 0x4000000000000000\<close> \<open>(b :: 64 word) \<le> 8\<close>
   shows \<open>unat (a + b) = unat a + unat b\<close>
-proof -
-  have \<open>unat a < 4611686018427387904\<close>
-    using big_c(1)[OF assms(1)] .
-  moreover have \<open>unat b \<le> 8\<close>
-    using assms(2) by (simp add: word_le_nat_alt)
-  ultimately show ?thesis
-    by (simp add: unat_add_lem[symmetric])
-qed
+  using assms by (simp add: word_le_nat_alt word_less_nat_alt unat_add_lem[symmetric])
 
 lemma arena_end:
   assumes \<open>(a :: 64 word) < 0x4000000000000000\<close> \<open>(x :: 64 word) < 0x4000000000000000\<close>
@@ -135,34 +104,13 @@ text \<open>The index of the other watched key of a watch node: \<open>o + 5 - s
 lemma side_ix:
   assumes \<open>(a :: 64 word) < 0x4000000000000000\<close> \<open>a + 5 < word64_of_nat n\<close>
   shows \<open>unat (a + 5 - x mod 2) < n\<close> \<open>x mod 2 \<le> a + 5\<close>
-proof -
-  have m: \<open>unat (x mod 2) \<le> 1\<close>
-    using word_mod_less_divisor[of 2 x] by (simp add: word_less_nat_alt)
-  have u: \<open>unat (a + 5) = unat a + 5\<close>
-    using big_add[OF assms(1), of 5] by simp
-  show le: \<open>x mod 2 \<le> a + 5\<close>
-    using m u by (simp add: word_le_nat_alt)
-  have \<open>unat (a + 5) < n\<close>
-    using assms(2) by (rule word64_less_of_nat)
-  then show \<open>unat (a + 5 - x mod 2) < n\<close>
-    using unat_sub[OF le] by simp
-qed
+  using assms word64_less_of_nat[OF assms(2)] word_mod_less_divisor[of 2 x]
+  by (simp_all add: word_le_nat_alt word_less_nat_alt unat_sub unat_word_ariths)
 
 lemma arena_small:
   assumes \<open>\<not> 0x4000000000000000 \<le> (a :: 64 word)\<close> \<open>b \<le> 8\<close>
   shows \<open>unat (a + b) < 18446744073709551614\<close> \<open>unat (a + b) < 18446744073709551615\<close>
-proof -
-  have a: \<open>a < 0x4000000000000000\<close>
-    using assms(1) by (simp add: not_le)
-  have \<open>unat (a + b) = unat a + unat b\<close>
-    using big_add[OF a assms(2)] .
-  moreover have \<open>unat a < 4611686018427387904\<close>
-    using big_c(1)[OF a] .
-  moreover have \<open>unat b \<le> 8\<close>
-    using assms(2) by (simp add: word_le_nat_alt)
-  ultimately show \<open>unat (a + b) < 18446744073709551614\<close> \<open>unat (a + b) < 18446744073709551615\<close>
-    by simp_all
-qed
+  using assms by (simp_all add: word_le_nat_alt unat_word_ariths)
 
 lemma arena_ix0:
   assumes \<open>\<not> word64_of_nat m \<le> a + c\<close> \<open>\<not> 0x4000000000000000 \<le> (a :: 64 word)\<close> \<open>c \<le> 8\<close>
@@ -188,14 +136,7 @@ lemma inc_div:
 lemma inc_add:
   assumes \<open>(x :: 64 word) < 0x4000000000000000\<close>
   shows \<open>unat x + unat (x div 0x20 + 1) < 18446744073709551616\<close>
-proof -
-  have d: \<open>unat (x div 0x20) \<le> unat x\<close>
-    by (simp add: unat_div)
-  have \<open>unat (x div 0x20 + 1) = Suc (unat (x div 0x20))\<close>
-    using big_c(1)[OF assms] d unat_word_Suc_simp[of \<open>x div 0x20\<close>] by simp
-  then show ?thesis
-    using big_c(1)[OF assms] d by simp
-qed
+  using assms by (simp add: word_less_nat_alt unat_div unat_word_ariths)
 
 lemma one_lt:
   \<open>1 < word64_of_nat n \<Longrightarrow> Suc 0 < n\<close>
