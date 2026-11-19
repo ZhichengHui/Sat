@@ -332,16 +332,32 @@ impl Search {
     /// A position of clause `c` other than `op` and `my` whose literal is not false; the
     /// clause's length if there is none.
     fn find_watch(&self, f: &Formula, learned: &Vec<Clause>, c: usize, op: usize, my: usize) -> usize {
-        let len = clause_len(f, learned, c);
-        let mut j: usize = 0;
-        while j < len {
-            if j != op && j != my {
-                let l = lit_at(f, learned, c, j);
-                if !self.lit_false(l.var, l.value) {
-                    return j;
-                }
+        let m = f.clauses.len();
+        if c < m {
+            return self.free_lit(&f.clauses[c], op, my);
+        }
+        if c - m < learned.len() {
+            return self.free_lit(&learned[c - m], op, my);
+        }
+        0
+    }
+
+    /// A position of `cl` other than `op` and `my` whose literal is not false; the clause's length
+    /// if there is none. The scan is cyclic and starts after the later of the two watched
+    /// positions, so that the literals just before them, found false before, are read last.
+    fn free_lit(&self, cl: &Clause, op: usize, my: usize) -> usize {
+        let len = cl.0.len();
+        let mut j: usize = if my < len && op < len { if my > op { my + 1 } else { op + 1 } } else { 0 };
+        let mut n: usize = 0;
+        while n < len {
+            if j >= len {
+                j = 0;
+            }
+            if j != op && j != my && !self.lit_false(cl.0[j].var, cl.0[j].value) {
+                return j;
             }
             j += 1;
+            n += 1;
         }
         len
     }

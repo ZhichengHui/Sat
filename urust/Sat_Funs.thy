@@ -735,21 +735,44 @@ definition "Search_key_true" :: \<open>Search \<Rightarrow> (64 word) \<Rightarr
     (k != NONE()) && Search_lit_true(self, k / 2_usize, (k % 2_usize) == 1_usize)
   \<rbrakk>\<close>
 
+(* Rust: Search::free_lit *)
+definition "Search_free_lit" :: \<open>Search \<Rightarrow> Clause \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_free_lit \<equiv> \<lambda>self cl op_v my. FunctionBody \<lbrakk>
+    let len_v = len(cl.Clause_v0);
+    let mut j = if (my < len_v) && (op_v < len_v) {
+      if my > op_v {
+        my + 1_usize
+      } else {
+        op_v + 1_usize
+      }
+    } else {
+      0_usize
+    };
+    let mut n = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* n) < len_v {
+      if (* j) >= len_v {
+        * j = 0_usize;
+      };
+      if (((* j) != op_v) && ((* j) != my)) && (!Search_lit_false(self, cl.Clause_v0[* j].Lit_var, cl.Clause_v0[* j].Lit_value)) {
+        return * j;
+      };
+      * j += 1_usize;
+      * n += 1_usize;
+    };
+    len_v
+  \<rbrakk>\<close>
+
 (* Rust: Search::find_watch *)
 definition "Search_find_watch" :: \<open>Search \<Rightarrow> Formula \<Rightarrow> (Clause list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_find_watch \<equiv> \<lambda>self f learned c op_v my. FunctionBody \<lbrakk>
-    let len_v = clause_len(f, learned, c);
-    let mut j = 0_usize;
-    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* j) < len_v {
-      if ((* j) != op_v) && ((* j) != my) {
-        let l = lit_at(f, learned, c, * j);
-        if !Search_lit_false(self, l.Lit_var, l.Lit_value) {
-          return * j;
-        }
-      };
-      * j += 1_usize;
+    let m = len(f.Formula_clauses);
+    if c < m {
+      return Search_free_lit(self, f.Formula_clauses[c], op_v, my);
     };
-    len_v
+    if (c - m) < len(learned) {
+      return Search_free_lit(self, learned[c - m], op_v, my);
+    };
+    0_usize
   \<rbrakk>\<close>
 
 (* Rust: Search::propagate_lit *)
