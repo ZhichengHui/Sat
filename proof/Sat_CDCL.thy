@@ -35,6 +35,10 @@ lemma word64_less_of_nat:
   \<open>(x :: 64 word) < word64_of_nat n \<Longrightarrow> unat x < n\<close>
   by (metis le_unat_uoi linorder_not_le nat_less_le order_le_less_trans unat_mono word_less_nat_alt)
 
+lemma word64_not_le_of_nat:
+  \<open>\<not> word64_of_nat n \<le> (x :: 64 word) \<Longrightarrow> unat x < n\<close>
+  by (simp add: not_le word64_less_of_nat)
+
 lemma word64_unat_less_max:
   assumes \<open>unat (x :: 64 word) < unat (y :: 64 word)\<close>
   shows \<open>unat x < 18446744073709551615\<close>
@@ -750,12 +754,7 @@ lemma Search_unlink_spec:
   shows \<open>\<Gamma>; Search_unlink r k p n \<Turnstile>\<^sub>F Search_unlink_contract r g s k p n\<close>
   apply (crush_boot f: Search_unlink_def contract: Search_unlink_contract_def)
   apply (crush_base inline: len_def simp add: true_def false_def)
-  apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
-        (simp add: word_le_nat_alt word_less_nat_alt; fail) |
-        (rule add_big; assumption) | (frule big_c(1), linarith) |
-        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
-        (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
-        (rule one_lt; assumption))?\<close>)
+  apply (simp_all add: word64_less_of_nat)
   done
 
 definition Search_propagate_lit_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
@@ -1010,6 +1009,12 @@ proof -
     using assms(3) by simp
 qed
 
+lemma swap_ok2:
+  assumes \<open>(a :: 64 word) < word64_of_nat n\<close> \<open>(b :: 64 word) < word64_of_nat n\<close>
+    \<open>unat a < n \<longrightarrow> \<not> unat b < n\<close>
+  shows False
+  using assms word64_less_of_nat by blast
+
 lemma push_len':
   assumes \<open>length xs \<le> 4611686018427387904\<close>
     \<open>word64_of_nat (length xs) < (0x4000000000000000 :: 64 word)\<close>
@@ -1178,6 +1183,7 @@ lemma Search_redundant_spec:
   apply (crush_base inline: len_def NONE_def Lit_mk_def
       specs add: clause_len_spec contracts add: clause_len_contract_def
       simp add: true_def false_def)
+  apply (all \<open>(erule word64_not_le_of_nat)?\<close>)
   subgoal for x j_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -1227,8 +1233,9 @@ lemma Search_compact_spec:
         erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
         (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
         (rule one_lt; assumption))?\<close>)
-    sorry
-  sorry
+    apply (all \<open>(rule FalseE, rule swap_ok2; assumption)?\<close>)
+    done
+  done
 
 definition Search_unmark_from_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
     64 word \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
@@ -1257,8 +1264,8 @@ lemma Search_unmark_from_spec:
         erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
         (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
         (rule one_lt; assumption))?\<close>)
-    sorry
-  sorry
+    done
+  done
 
 definition Search_minimize_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
     Formula \<Rightarrow> Clause list \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
@@ -1273,7 +1280,7 @@ lemma Search_minimize_spec:
   apply (crush_base inline: vec_truncate_def specs add: Search_compact_spec Search_unmark_from_spec
       contracts add: Search_compact_contract_def Search_unmark_from_contract_def
       simp add: true_def false_def)
-  sorry
+  done
 
 definition Search_analyze_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
     Formula \<Rightarrow> Clause list \<Rightarrow> 64 word \<Rightarrow> ('s, Lit list, 'abort) function_contract\<close> where
@@ -1348,8 +1355,27 @@ lemma Search_learnt_lbd_spec:
         erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
         (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
         (rule one_lt; assumption))?\<close>)
-    sorry
-  sorry
+    done
+  subgoal for n_ref j_ref
+    apply (ucincl_discharge\<open>
+      rule_tac
+        INV=\<open>\<lambda>k. \<Squnion>gs s' gn n gj j. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
+               n_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference\<close> and
+        INV'=\<open>\<lambda>k. \<Squnion>gs s' gn n gj j. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
+               n_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference \<star>
+               \<langle>j < word64_of_nat (length (Search_learnt s'))\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
+        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_bounded_while_framedI\<close>)
+    apply (crush_base inline: len_def NONE_def simp add: true_def false_def)
+    apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
+        (simp add: word_le_nat_alt word_less_nat_alt; fail) |
+        (rule add_big; assumption) | (frule big_c(1), linarith) |
+        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
+        (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
+        (rule one_lt; assumption))?\<close>)
+    done
+  done
 
 definition init_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
     Formula \<Rightarrow> Clause list \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
@@ -1567,8 +1593,8 @@ lemma Search_count_live_spec:
         erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
         (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
         (rule one_lt; assumption))?\<close>)
-    sorry
-  sorry
+    done
+  done
 
 definition Search_cut_contract :: \<open>Search \<Rightarrow> 64 word \<Rightarrow> ('s, Cut, 'abort) function_contract\<close> where
   \<open>Search_cut_contract s live \<equiv> make_function_contract can_alloc_reference (\<lambda>_. can_alloc_reference)\<close>
@@ -1594,8 +1620,8 @@ lemma Search_cut_spec:
         erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
         (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
         (rule one_lt; assumption))?\<close>)
-    sorry
-  sorry
+    done
+  done
 
 definition Search_kill_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
     64 word \<Rightarrow> 64 word \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
@@ -1626,8 +1652,8 @@ lemma Search_kill_spec:
         erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
         (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
         (rule one_lt; assumption))?\<close>)
-    sorry
-  sorry
+    done
+  done
 
 definition Search_reduce_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
     ('s, unit, 'abort) function_contract\<close> where
@@ -1642,7 +1668,7 @@ lemma Search_reduce_spec:
   apply (crush_base specs add: Search_count_live_spec Search_cut_spec Search_kill_spec
       contracts add: Search_count_live_contract_def Search_cut_contract_def Search_kill_contract_def
       simp add: true_def false_def)
-  sorry
+  done
 
 definition cdcl_contract :: \<open>Formula \<Rightarrow> ('s, Answer option, 'abort) function_contract\<close> where
   \<open>cdcl_contract f \<equiv>
