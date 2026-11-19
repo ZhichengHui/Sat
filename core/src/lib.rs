@@ -766,8 +766,9 @@ fn on_conflict(s: &mut Search, f: &Formula, learned: &mut Vec<Clause>, confl: us
     0
 }
 
-/// The CDCL search; `None` when it gives up.
-fn cdcl(f: &Formula) -> Option<Answer> {
+/// The CDCL search; `None` when it gives up. Public so that tests can call it without the
+/// fallback.
+pub fn cdcl(f: &Formula) -> Option<Answer> {
     let n = f.num_vars;
     if n >= BIG || f.clauses.len() >= BIG {
         return None;
