@@ -15,7 +15,9 @@ no longer apply are removed. Progress entries are cited by session prefix (`prog
   agents: c3e0f79e, adea3d20, 5952d953). Try steps by editing the file and re-checking in place.
 - **Do not edit a file while the server is still checking it**: it produces spurious "Cannot join
   unrelated theory certificates" errors. Wait for the check to finish, or close and reopen
-  (adea3d20).
+  (adea3d20). Editing a line above a `crush_base` that had finished gave the same error when it
+  re-ran; and a changed imported theory (`urust/`, after regenerating) is not reloaded. In both
+  cases `isabelle_close` with `destroy` and reopen (b0b18b19 / #85).
 - **Large theories are slow in the Pool Server** (1700 lines: ~1 min per heavy step, ~25 min a pass).
   Check new contracts in a scratch theory in `dev/` holding only them and their dependencies
   (41040648), or batch-build only the new theory on a heap of the unchanged ones under `target/isa/`
@@ -46,6 +48,9 @@ code to avoid them. Known gaps and the workarounds that held:
 - **Large loop bodies**: `crush_base` took > 4 min on the whole CDCL loop body. Keep one loop per
   function; move branches into their own functions (`on_conflict`, `minimize`, `reduce`) (adea3d20
   gap 3, 41040648).
+- **Sequential `if`s multiply `crush_base`'s paths**: a loop-free method with seven guarded
+  updates in a row ran > 3 min; one block under a combined guard (`if a < X && b < Y { … }`) and
+  one early `return` took ~1 min (b0b18b19, `restart_due`).
 - **`loop` without `break`** translates to `panic!("unreachable …")` when fuel runs out; use
   `while cond` (e.g. `while steps < usize::MAX`) (adea3d20 gap 4).
 - **`match` on an `Option` result is not split**: `cases x` and `simp only: option.case` before
