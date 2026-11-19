@@ -967,6 +967,75 @@ lemma Search_reduce_spec:
       simp add: true_def false_def)
   done
 
+lemma restart_avg:
+  assumes \<open>\<not> 0x20000000000 \<le> (a :: 64 word)\<close>
+  shows \<open>unat (a * 0x10000 div n) * 5 < 18446744073709551616\<close>
+proof -
+  have a: \<open>unat a < 0x20000000000\<close>
+    using assms by (simp add: word_le_nat_alt)
+  then have \<open>unat (a * 0x10000) = unat a * 65536\<close>
+    using unat_mult_lem[of a \<open>0x10000 :: 64 word\<close>] by simp
+  moreover have \<open>unat (a * 0x10000 div n) \<le> unat (a * 0x10000)\<close>
+    by (simp add: unat_div)
+  ultimately show ?thesis
+    using a by linarith
+qed
+
+lemma restart_avg2:
+  \<open>\<not> 0x20000000000 \<le> (a :: 64 word) + l \<Longrightarrow>
+    unat ((a * 0x10000 + l * 0x10000) div n) * 5 < 18446744073709551616\<close>
+  using restart_avg[of \<open>a + l\<close> n] by (simp add: distrib_right)
+
+lemma restart_lt:
+  \<open>\<not> 0x20000000000 \<le> (a :: 64 word) \<Longrightarrow> unat a < 281474976710656\<close>
+  \<open>unat (x :: 64 word) < 18446744073709551616\<close>
+  by (simp_all add: word_le_nat_alt unat_lt2p[of x, simplified])
+
+lemma restart_mul:
+  \<open>\<not> 0x2000000000 \<le> (x :: 64 word) \<Longrightarrow> unat x * 3 < 18446744073709551616\<close>
+  \<open>(x :: 64 word) < 0x100000 \<Longrightarrow> unat x * 2048 < 18446744073709551616\<close>
+  by (simp_all add: word_le_nat_alt word_less_nat_alt)
+
+lemma restart_div_le:
+  \<open>(x :: 64 word) div 0x20 \<le> x\<close>
+  by (simp add: word_le_nat_alt unat_div)
+
+lemma restart_add:
+  assumes \<open>(f :: 64 word) < 0x1000000000\<close> and \<open>(l :: 64 word) < 0x100000\<close>
+  shows \<open>unat (f - f div 0x20) + unat (l * 0x800) < 18446744073709551616\<close>
+proof -
+  have \<open>unat (f - f div 0x20) \<le> unat f\<close>
+    by (simp add: word_sub_le restart_div_le word_le_nat_alt[symmetric])
+  moreover have \<open>unat (l * 0x800) = unat l * 2048\<close>
+    using assms(2) unat_mult_lem[of l \<open>0x800 :: 64 word\<close>] by (simp add: word_less_nat_alt)
+  ultimately show ?thesis
+    using assms by (simp add: word_less_nat_alt)
+qed
+
+lemma restart_sum:
+  \<open>(a :: 64 word) < 0x10000000000 \<Longrightarrow> (l :: 64 word) < 0x100000 \<Longrightarrow> unat a + unat l < 18446744073709551616\<close>
+  by (simp add: word_less_nat_alt)
+
+method restart_bound =
+  (rule restart_div_le restart_lt(2) |
+    (rule restart_avg restart_avg2 restart_lt(1) restart_mul restart_add restart_sum; assumption) |
+    (simp add: word_less_nat_alt; fail))
+
+definition Search_restart_due_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
+    ('s, bool, 'abort) function_contract\<close> where
+  \<open>Search_restart_due_contract r g s \<equiv>
+     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s') in
+     make_function_contract pre post\<close>
+
+lemma Search_restart_due_spec:
+  shows \<open>\<Gamma>; Search_restart_due r \<Turnstile>\<^sub>F Search_restart_due_contract r g s\<close>
+  apply (crush_boot f: Search_restart_due_def contract: Search_restart_due_contract_def)
+  apply (crush_base inline: len_def BIG_def simp add: true_def false_def)
+  apply (all \<open>restart_bound?\<close>)
+  apply (all \<open>search_bound\<close>)
+  done
+
 end
 
 end

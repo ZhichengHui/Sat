@@ -261,7 +261,11 @@ definition "new_search" :: \<open>(64 word) \<Rightarrow> ('s, Search, 'abort, '
       let fld_33 = vec_from_elem(false, n);
       let fld_34 = { let res_10 = []; \<llangle>res_10 :: (64 word) list\<rrangle> };
       let fld_35 = { let res_11 = []; \<llangle>res_11 :: (64 word) list\<rrangle> };
-      \<llangle>make_Search fld_12 fld_13 fld_14 fld_15 fld_16 fld_17 fld_18 fld_19 fld_20 fld_21 fld_22 fld_23 fld_24 fld_25 fld_26 fld_27 fld_28 fld_29 fld_30 fld_31 fld_32 fld_33 fld_34 fld_35\<rrangle>
+      let fld_36 = 0_usize;
+      let fld_37 = 0_usize;
+      let fld_38 = 0_usize;
+      let fld_39 = 0_usize;
+      \<llangle>make_Search fld_12 fld_13 fld_14 fld_15 fld_16 fld_17 fld_18 fld_19 fld_20 fld_21 fld_22 fld_23 fld_24 fld_25 fld_26 fld_27 fld_28 fld_29 fld_30 fld_31 fld_32 fld_33 fld_34 fld_35 fld_36 fld_37 fld_38 fld_39\<rrangle>
     }
   \<rbrakk>\<close>
 
@@ -1145,6 +1149,33 @@ definition "Search_reduce" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<R
     Search_kill(self, m, c.Cut_t, c.Cut_left);
   \<rbrakk>\<close>
 
+(* Rust: Search::restart_due *)
+definition "Search_restart_due" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_restart_due \<equiv> \<lambda>self. FunctionBody \<lbrakk>
+    let n = len(* (self.Search_lbd));
+    let l = if n > 0_usize {
+      (* (self.Search_lbd))[n - 1_usize]
+    } else {
+      0_usize
+    };
+    if (((l < 1048576_usize) && ((* (self.Search_lbd_sum)) < 1099511627776_usize)) && ((* (self.Search_nconf)) < BIG())) && ((* (self.Search_fast)) < 68719476736_usize) {
+      * (self.Search_lbd_sum) += l;
+      * (self.Search_nconf) += 1_usize;
+      * (self.Search_fast) = ((* (self.Search_fast)) - ((* (self.Search_fast)) / 32_usize)) + (l * 2048_usize);
+    };
+    if (* (self.Search_since)) < 50_usize {
+      * (self.Search_since) += 1_usize;
+    };
+    if ((((* (self.Search_since)) < 50_usize) || ((* (self.Search_nconf)) == 0_usize)) || ((* (self.Search_lbd_sum)) >= 2199023255552_usize)) || ((* (self.Search_fast)) >= 137438953472_usize) {
+      return false;
+    };
+    if ((* (self.Search_fast)) * 3_usize) > ((((* (self.Search_lbd_sum)) * 65536_usize) / (* (self.Search_nconf))) * 5_usize) {
+      * (self.Search_since) = 0_usize;
+      return true;
+    };
+    false
+  \<rbrakk>\<close>
+
 (* Rust: Search::pick *)
 definition "Search_pick" :: \<open>Search \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_pick \<equiv> \<lambda>self. FunctionBody \<lbrakk>
@@ -1171,8 +1202,6 @@ definition "cdcl" :: \<open>Formula \<Rightarrow> ('s, Answer option, 'abort, 'i
     let mut s = new_search(n);
     let mut learned = { let init_2 = { let res_1 = []; \<llangle>res_1 :: Clause list\<rrangle> }; \<llangle>init_2 :: Clause list\<rrangle> };
     let mut confl = init(s, f, * learned);
-    let mut conflicts = 0_usize;
-    let mut restart_at = 100_usize;
     let mut since_reduce = 0_usize;
     let mut reduce_at = 1000_usize;
     let mut steps = 0_usize;
@@ -1200,14 +1229,7 @@ definition "cdcl" :: \<open>Formula \<Rightarrow> ('s, Answer option, 'abort, 'i
           };
           Search_reduce(s, len(f.Formula_clauses));
         };
-        if (* conflicts) < (* restart_at) {
-          * conflicts += 1_usize;
-        };
-        if (* conflicts) >= (* restart_at) {
-          * conflicts = 0_usize;
-          if (* restart_at) < BIG() {
-            * restart_at += (* restart_at) / 2_usize;
-          };
+        if Search_restart_due(s) {
           Search_backtrack(s, 0_usize);
         }
       } else {

@@ -136,15 +136,15 @@ lemma cdcl_spec:
       specs add: new_search_spec init_spec
       contracts add: new_search_contract_def init_contract_def
       simp add: true_def false_def)
-  subgoal for _ s_ref l_ref _ _ _ confl_ref k_ref rst_ref sr_ref ra_ref st_ref
+  subgoal for _ s_ref l_ref _ _ _ confl_ref sr_ref ra_ref st_ref
     apply (ucincl_discharge\<open>
       rule_tac
-        INV=\<open>\<lambda>k. \<Squnion>gs s' gl L gc c gk kk gr rr gsr sr gra ra gt t. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> l_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>L \<star>
-               confl_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star> k_ref \<mapsto>\<langle>\<top>\<rangle> gk\<down>kk \<star> rst_ref \<mapsto>\<langle>\<top>\<rangle> gr\<down>rr \<star>
+        INV=\<open>\<lambda>k. \<Squnion>gs s' gl L gc c gsr sr gra ra gt t. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> l_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>L \<star>
+               confl_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star>
                sr_ref \<mapsto>\<langle>\<top>\<rangle> gsr\<down>sr \<star> ra_ref \<mapsto>\<langle>\<top>\<rangle> gra\<down>ra \<star>
                st_ref \<mapsto>\<langle>\<top>\<rangle> gt\<down>t \<star> can_alloc_reference \<star> \<langle>learned_ok f L\<rangle>\<close> and
-        INV'=\<open>\<lambda>k. \<Squnion>gs s' gl L gc c gk kk gr rr gsr sr gra ra gt t. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> l_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>L \<star>
-               confl_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star> k_ref \<mapsto>\<langle>\<top>\<rangle> gk\<down>kk \<star> rst_ref \<mapsto>\<langle>\<top>\<rangle> gr\<down>rr \<star>
+        INV'=\<open>\<lambda>k. \<Squnion>gs s' gl L gc c gsr sr gra ra gt t. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> l_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>L \<star>
+               confl_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star>
                sr_ref \<mapsto>\<langle>\<top>\<rangle> gsr\<down>sr \<star> ra_ref \<mapsto>\<langle>\<top>\<rangle> gra\<down>ra \<star>
                st_ref \<mapsto>\<langle>\<top>\<rangle> gt\<down>t \<star> can_alloc_reference \<star>
                \<langle>learned_ok f L \<and> t < 0xFFFFFFFFFFFFFFFF\<rangle>\<close> and
@@ -153,10 +153,10 @@ lemma cdcl_spec:
       in wp_bounded_while_framedI\<close>)
     apply (crush_base inline: len_def NONE_def BIG_def vec_push_def Answer_Sat_mk_def Assignments_mk_def
         specs add: Search_propagate_spec on_conflict_spec Search_backtrack_spec Search_enqueue_spec
-          Search_pick_spec model_spec satisfies_spec Search_reduce_spec
+          Search_pick_spec model_spec satisfies_spec Search_reduce_spec Search_restart_due_spec
         contracts add: Search_propagate_contract_def on_conflict_contract_def Search_backtrack_contract_def
           Search_enqueue_contract_def Search_pick_contract_def model_contract_def satisfies_contract_def
-          Search_reduce_contract_def
+          Search_reduce_contract_def Search_restart_due_contract_def
         simp add: true_def false_def)
     apply (all \<open>cdcl_bound?\<close>)
     done

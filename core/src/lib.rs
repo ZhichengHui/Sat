@@ -2,14 +2,14 @@
 
 // A verified SAT solver. `solver` runs an untrusted CDCL search (`cdcl`: two watched literals in a
 // flat clause arena, first-UIP learning with recursive minimisation, activity-based decisions,
-// restarts and deletion of learned clauses by literal block distance) whose answers are checked:
-// a model by `satisfies`, every learned clause, the empty one included, by `certify`. When a check
-// fails or the search runs out of fuel, `solver` falls back to `dpll`, a verified DPLL solver
-// (`solve`): backtracking with unit propagation, a port of a verified WhyML solver and therefore an
-// imperative implementation of a functional program. Before each decision it assigns the
-// remaining literal of every unit clause until none is left, abandons a branch as soon as the
-// partial assignment falsifies a clause, and decides the first unassigned literal of the first
-// clause without a true literal, trying the literal's value first.
+// Glucose's dynamic restarts and deletion of learned clauses by literal block distance) whose
+// answers are checked: a model by `satisfies`, every learned clause, the empty one included, by
+// `certify`. When a check fails or the search runs out of fuel, `solver` falls back to `dpll`, a
+// verified DPLL solver (`solve`): backtracking with unit propagation, a port of a verified WhyML
+// solver and therefore an imperative implementation of a functional program. Before each decision
+// it assigns the remaining literal of every unit clause until none is left, abandons a branch as
+// soon as the partial assignment falsifies a clause, and decides the first unassigned literal of
+// the first clause without a true literal, trying the literal's value first.
 
 pub struct Assignments(pub Vec<bool>);
 pub struct Lit {
@@ -271,7 +271,8 @@ struct Cut {
 /// During `minimize`, `seen` also marks the variables found redundant, `fail[v]` those found not
 /// redundant, `toclear` lists both to clear them afterwards, and `stack` holds the frames
 /// `(v, j, end)` of the depth-first search of `lit_redundant`: variable `v`, and the arena
-/// positions of the next literal of its reason and of the end of the reason's entry.
+/// positions of the next literal of its reason and of the end of the reason's entry. `fast`,
+/// `lbd_sum`, `nconf` and `since` are the moving averages and counts of `restart_due`.
 struct Search {
     assign: Vec<bool>,
     set: Vec<bool>,
@@ -297,6 +298,10 @@ struct Search {
     fail: Vec<bool>,
     stack: Vec<usize>,
     toclear: Vec<usize>,
+    fast: usize,
+    lbd_sum: usize,
+    nconf: usize,
+    since: usize,
 }
 
 impl Search {
@@ -904,6 +909,33 @@ impl Search {
         self.kill(m, c.t, c.left);
     }
 
+    /// Glucose's dynamic restarts, after a conflict: adds the literal block distance `l` of the
+    /// clause learned last (the last of `lbd`) to a fast moving average (`fast`, weight 1/32,
+    /// scaled by `2^16`) and to the average over all conflicts (`lbd_sum` / `nconf`), unless `l`
+    /// or the sum is out of range (`l >= 2^20`, `lbd_sum >= 2^40`); true, and the count `since`
+    /// starts again, when at least 50 conflicts after the last restart the fast average times
+    /// K = 0.6 exceeds the overall one.
+    fn restart_due(&mut self) -> bool {
+        let n = self.lbd.len();
+        let l = if n > 0 { self.lbd[n - 1] } else { 0 };
+        if l < 0x100000 && self.lbd_sum < 0x10000000000 && self.nconf < BIG && self.fast < 0x1000000000 {
+            self.lbd_sum += l;
+            self.nconf += 1;
+            self.fast = self.fast - self.fast / 32 + l * 2048;
+        }
+        if self.since < 50 {
+            self.since += 1;
+        }
+        if self.since < 50 || self.nconf == 0 || self.lbd_sum >= 0x20000000000 || self.fast >= 0x2000000000 {
+            return false;
+        }
+        if self.fast * 3 > self.lbd_sum * 65536 / self.nconf * 5 {
+            self.since = 0;
+            return true;
+        }
+        false
+    }
+
     /// A copy of `learnt`, of at most `BIG` literals.
     fn copy_learnt(&self) -> Vec<Lit> {
         let mut out: Vec<Lit> = Vec::new();
@@ -1042,6 +1074,10 @@ fn new_search(n: usize) -> Search {
         fail: vec![false; n],
         stack: Vec::new(),
         toclear: Vec::new(),
+        fast: 0,
+        lbd_sum: 0,
+        nconf: 0,
+        since: 0,
     }
 }
 
@@ -1249,8 +1285,6 @@ pub fn cdcl(f: &Formula) -> Option<Answer> {
     let mut s = new_search(n);
     let mut learned: Vec<Clause> = Vec::new();
     let mut confl = init(&mut s, f, &learned);
-    let mut conflicts: usize = 0;
-    let mut restart_at: usize = 100;
     let mut since_reduce: usize = 0;
     let mut reduce_at: usize = 1000;
     let mut steps: usize = 0;
@@ -1278,14 +1312,7 @@ pub fn cdcl(f: &Formula) -> Option<Answer> {
                 }
                 s.reduce(f.clauses.len());
             }
-            if conflicts < restart_at {
-                conflicts += 1;
-            }
-            if conflicts >= restart_at {
-                conflicts = 0;
-                if restart_at < BIG {
-                    restart_at += restart_at / 2;
-                }
+            if s.restart_due() {
                 s.backtrack(0);
             }
         } else {
