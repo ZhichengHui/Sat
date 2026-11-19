@@ -35,6 +35,10 @@ lemma word64_less_of_nat:
   \<open>(x :: 64 word) < word64_of_nat n \<Longrightarrow> unat x < n\<close>
   by (metis le_unat_uoi linorder_not_le nat_less_le order_le_less_trans unat_mono word_less_nat_alt)
 
+lemma word64_not_le_of_nat:
+  \<open>\<not> word64_of_nat n \<le> (x :: 64 word) \<Longrightarrow> unat x < n\<close>
+  by (simp add: not_le word64_less_of_nat)
+
 lemma word64_unat_less_max:
   assumes \<open>unat (x :: 64 word) < unat (y :: 64 word)\<close>
   shows \<open>unat x < 18446744073709551615\<close>
@@ -660,6 +664,28 @@ lemma Search_lit_false_spec:
   using word64_less_of_nat apply auto
   done
 
+definition Search_is_dead_contract :: \<open>Search \<Rightarrow> Formula \<Rightarrow> 64 word \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
+  \<open>Search_is_dead_contract s f c \<equiv>
+     make_function_contract (can_alloc_reference) (\<lambda>_. can_alloc_reference)\<close>
+
+lemma Search_is_dead_spec:
+  shows \<open>\<Gamma>; Search_is_dead s f c \<Turnstile>\<^sub>F Search_is_dead_contract s f c\<close>
+  apply (crush_boot f: Search_is_dead_def contract: Search_is_dead_contract_def)
+  apply (crush_base inline: len_def simp add: true_def false_def)
+  using word64_less_of_nat apply auto
+  done
+
+definition Search_key_true_contract :: \<open>Search \<Rightarrow> 64 word \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
+  \<open>Search_key_true_contract s k \<equiv>
+     make_function_contract (can_alloc_reference) (\<lambda>_. can_alloc_reference)\<close>
+
+lemma Search_key_true_spec:
+  shows \<open>\<Gamma>; Search_key_true s k \<Turnstile>\<^sub>F Search_key_true_contract s k\<close>
+  apply (crush_boot f: Search_key_true_def contract: Search_key_true_contract_def)
+  apply (crush_base inline: NONE_def specs add: Search_lit_true_spec
+      contracts add: Search_lit_true_contract_def simp add: true_def false_def)
+  done
+
 definition Search_enqueue_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow> 64 word \<Rightarrow> bool \<Rightarrow> 64 word \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
   \<open>Search_enqueue_contract r g s v b c \<equiv>
      let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s in
@@ -685,7 +711,7 @@ lemma Search_attach_spec:
   apply (crush_boot f: Search_attach_def contract: Search_attach_contract_def)
   apply (crush_base inline: len_def NONE_def BIG_def Lit_mk_def vec_push_def vec_pop_def vec_truncate_def slice_swap_def specs add: clause_len_spec lit_at_spec key_spec contracts add: clause_len_contract_def lit_at_contract_def key_contract_def
       simp add: true_def false_def)
-  apply (all \<open>(drule word64_less_of_nat_2)?\<close>)
+  apply (all \<open>((drule word64_less_of_nat_2)+)?\<close>)
   apply (simp_all only: word64_less_of_nat big_c)
   apply (all \<open>(frule big_c(1))?, linarith\<close>)
   done
@@ -717,6 +743,20 @@ lemma Search_find_watch_spec:
   done
 
 
+definition Search_unlink_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
+    64 word \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
+  \<open>Search_unlink_contract r g s k p n \<equiv>
+     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s') in
+     make_function_contract pre post\<close>
+
+lemma Search_unlink_spec:
+  shows \<open>\<Gamma>; Search_unlink r k p n \<Turnstile>\<^sub>F Search_unlink_contract r g s k p n\<close>
+  apply (crush_boot f: Search_unlink_def contract: Search_unlink_contract_def)
+  apply (crush_base inline: len_def simp add: true_def false_def)
+  apply (simp_all add: word64_less_of_nat)
+  done
+
 definition Search_propagate_lit_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
     Formula \<Rightarrow> Clause list \<Rightarrow> 64 word \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
   \<open>Search_propagate_lit_contract r g s f L k \<equiv>
@@ -729,10 +769,11 @@ lemma Search_propagate_lit_spec:
   apply (crush_boot f: Search_propagate_lit_def contract: Search_propagate_lit_contract_def)
   apply (crush_base inline: len_def NONE_def BIG_def Lit_mk_def
       specs add: clause_len_spec lit_at_spec key_spec Search_lit_true_spec Search_lit_false_spec
-        Search_find_watch_spec Search_enqueue_spec
+        Search_find_watch_spec Search_enqueue_spec Search_is_dead_spec Search_key_true_spec Search_unlink_spec
       contracts add: clause_len_contract_def lit_at_contract_def key_contract_def
         Search_lit_true_contract_def Search_lit_false_contract_def Search_find_watch_contract_def
-        Search_enqueue_contract_def
+        Search_enqueue_contract_def Search_is_dead_contract_def Search_key_true_contract_def
+          Search_unlink_contract_def
       simp add: true_def false_def)
   subgoal for prev_ref node_ref
     apply (ucincl_discharge\<open>
@@ -741,16 +782,18 @@ lemma Search_propagate_lit_spec:
                node_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> can_alloc_reference\<close> and
         INV'=\<open>\<lambda>k. \<Squnion>gs s' gp p gn n. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> prev_ref \<mapsto>\<langle>\<top>\<rangle> gp\<down>p \<star>
                node_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> can_alloc_reference \<star>
-               \<langle>n < word64_of_nat (length (Search_next s')) \<and> n < word64_of_nat (length (Search_wpos s'))\<rangle>\<close> and
+               \<langle>n < word64_of_nat (length (Search_next s')) \<and> n < word64_of_nat (length (Search_wpos s')) \<and>
+                n < word64_of_nat (length (Search_wkey s'))\<rangle>\<close> and
         \<tau>=\<open>\<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s')\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
     apply (crush_base inline: len_def NONE_def BIG_def Lit_mk_def
         specs add: clause_len_spec lit_at_spec key_spec Search_lit_true_spec Search_lit_false_spec
-          Search_find_watch_spec Search_enqueue_spec
+          Search_find_watch_spec Search_enqueue_spec Search_is_dead_spec Search_key_true_spec Search_unlink_spec
         contracts add: clause_len_contract_def lit_at_contract_def key_contract_def
           Search_lit_true_contract_def Search_lit_false_contract_def Search_find_watch_contract_def
-          Search_enqueue_contract_def
+          Search_enqueue_contract_def Search_is_dead_contract_def Search_key_true_contract_def
+          Search_unlink_contract_def
         simp add: true_def false_def)
     apply (all \<open>(simp only: word64_less_of_nat; fail) | erule word64_less_max\<close>)
     done
@@ -761,16 +804,18 @@ lemma Search_propagate_lit_spec:
                node_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> can_alloc_reference\<close> and
         INV'=\<open>\<lambda>k. \<Squnion>gs s' gp p gn n. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> prev_ref \<mapsto>\<langle>\<top>\<rangle> gp\<down>p \<star>
                node_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> can_alloc_reference \<star>
-               \<langle>n < word64_of_nat (length (Search_next s')) \<and> n < word64_of_nat (length (Search_wpos s'))\<rangle>\<close> and
+               \<langle>n < word64_of_nat (length (Search_next s')) \<and> n < word64_of_nat (length (Search_wpos s')) \<and>
+                n < word64_of_nat (length (Search_wkey s'))\<rangle>\<close> and
         \<tau>=\<open>\<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s')\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
     apply (crush_base inline: len_def NONE_def BIG_def Lit_mk_def
         specs add: clause_len_spec lit_at_spec key_spec Search_lit_true_spec Search_lit_false_spec
-          Search_find_watch_spec Search_enqueue_spec
+          Search_find_watch_spec Search_enqueue_spec Search_is_dead_spec Search_key_true_spec Search_unlink_spec
         contracts add: clause_len_contract_def lit_at_contract_def key_contract_def
           Search_lit_true_contract_def Search_lit_false_contract_def Search_find_watch_contract_def
-          Search_enqueue_contract_def
+          Search_enqueue_contract_def Search_is_dead_contract_def Search_key_true_contract_def
+          Search_unlink_contract_def
         simp add: true_def false_def)
     apply (all \<open>(simp only: word64_less_of_nat; fail) | erule word64_less_max\<close>)
     done
@@ -964,6 +1009,12 @@ proof -
     using assms(3) by simp
 qed
 
+lemma swap_ok2:
+  assumes \<open>(a :: 64 word) < word64_of_nat n\<close> \<open>(b :: 64 word) < word64_of_nat n\<close>
+    \<open>unat a < n \<longrightarrow> \<not> unat b < n\<close>
+  shows False
+  using assms word64_less_of_nat by blast
+
 lemma push_len':
   assumes \<open>length xs \<le> 4611686018427387904\<close>
     \<open>word64_of_nat (length xs) < (0x4000000000000000 :: 64 word)\<close>
@@ -1004,17 +1055,17 @@ lemma big_succ_le:
   using big_c(1)[of c] big_succ[of c] by simp
 
 lemma inc_div:
-  \<open>(x :: 64 word) < 0x4000000000000000 \<Longrightarrow> unat (x div 0x10) < 18446744073709551615\<close>
+  \<open>(x :: 64 word) < 0x4000000000000000 \<Longrightarrow> unat (x div 0x20) < 18446744073709551615\<close>
   using big_c(1)[of x] by (simp add: unat_div)
 
 lemma inc_add:
   assumes \<open>(x :: 64 word) < 0x4000000000000000\<close>
-  shows \<open>unat x + unat (x div 0x10 + 1) < 18446744073709551616\<close>
+  shows \<open>unat x + unat (x div 0x20 + 1) < 18446744073709551616\<close>
 proof -
-  have d: \<open>unat (x div 0x10) \<le> unat x\<close>
+  have d: \<open>unat (x div 0x20) \<le> unat x\<close>
     by (simp add: unat_div)
-  have \<open>unat (x div 0x10 + 1) = Suc (unat (x div 0x10))\<close>
-    using big_c(1)[OF assms] d unat_word_Suc_simp[of \<open>x div 0x10\<close>] by simp
+  have \<open>unat (x div 0x20 + 1) = Suc (unat (x div 0x20))\<close>
+    using big_c(1)[OF assms] d unat_word_Suc_simp[of \<open>x div 0x20\<close>] by simp
   then show ?thesis
     using big_c(1)[OF assms] d by simp
 qed
@@ -1122,6 +1173,115 @@ lemma Search_copy_learnt_spec:
     done
   done
 
+definition Search_redundant_contract :: \<open>Search \<Rightarrow> Formula \<Rightarrow> Clause list \<Rightarrow> 64 word \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
+  \<open>Search_redundant_contract s f L v \<equiv>
+     make_function_contract (can_alloc_reference \<star> \<langle>db_small f L\<rangle>) (\<lambda>_. can_alloc_reference)\<close>
+
+lemma Search_redundant_spec:
+  shows \<open>\<Gamma>; Search_redundant s f L v \<Turnstile>\<^sub>F Search_redundant_contract s f L v\<close>
+  apply (crush_boot f: Search_redundant_def contract: Search_redundant_contract_def)
+  apply (crush_base inline: len_def NONE_def Lit_mk_def
+      specs add: clause_len_spec contracts add: clause_len_contract_def
+      simp add: true_def false_def)
+  apply (all \<open>(erule word64_not_le_of_nat)?\<close>)
+  subgoal for x j_ref
+    apply (ucincl_discharge\<open>
+      rule_tac
+        INV=\<open>\<lambda>k. \<Squnion>g j. j_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>j \<star> can_alloc_reference\<close> and
+        INV'=\<open>\<lambda>k. \<Squnion>g j. j_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>j \<star> can_alloc_reference \<star> \<langle>j < x\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>_. can_alloc_reference\<close> and
+        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_bounded_while_framedI\<close>)
+    apply (crush_base inline: len_def NONE_def Lit_mk_def specs add: lit_at_spec
+        contracts add: lit_at_contract_def simp add: true_def false_def)
+    apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
+        (simp add: word_le_nat_alt word_less_nat_alt; fail) |
+        (rule add_big; assumption) | (frule big_c(1), linarith) |
+        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
+        (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
+        (rule one_lt; assumption))?\<close>)
+    done
+  done
+
+definition Search_compact_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
+    Formula \<Rightarrow> Clause list \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
+  \<open>Search_compact_contract r g s f L \<equiv>
+     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s \<star> \<langle>db_small f L\<rangle> in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s') in
+     make_function_contract pre post\<close>
+
+lemma Search_compact_spec:
+  shows \<open>\<Gamma>; Search_compact r f L \<Turnstile>\<^sub>F Search_compact_contract r g s f L\<close>
+  apply (crush_boot f: Search_compact_def contract: Search_compact_contract_def)
+  apply (crush_base inline: len_def slice_swap_def simp add: true_def false_def)
+  subgoal for i_ref j_ref
+    apply (ucincl_discharge\<open>
+      rule_tac
+        INV=\<open>\<lambda>k. \<Squnion>gs s' gi i gj j. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
+               i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference\<close> and
+        INV'=\<open>\<lambda>k. \<Squnion>gs s' gi i gj j. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
+               i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference \<star>
+               \<langle>j < word64_of_nat (length (Search_learnt s'))\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
+        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_bounded_while_framedI\<close>)
+    apply (crush_base inline: len_def slice_swap_def specs add: Search_redundant_spec
+        contracts add: Search_redundant_contract_def simp add: true_def false_def)
+    apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
+        (simp add: word_le_nat_alt word_less_nat_alt; fail) |
+        (rule add_big; assumption) | (frule big_c(1), linarith) |
+        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
+        (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
+        (rule one_lt; assumption))?\<close>)
+    apply (all \<open>(rule FalseE, rule swap_ok2; assumption)?\<close>)
+    done
+  done
+
+definition Search_unmark_from_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
+    64 word \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
+  \<open>Search_unmark_from_contract r g s i \<equiv>
+     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s') in
+     make_function_contract pre post\<close>
+
+lemma Search_unmark_from_spec:
+  shows \<open>\<Gamma>; Search_unmark_from r i \<Turnstile>\<^sub>F Search_unmark_from_contract r g s i\<close>
+  apply (crush_boot f: Search_unmark_from_def contract: Search_unmark_from_contract_def)
+  apply (crush_base inline: len_def simp add: true_def false_def)
+  subgoal for k_ref
+    apply (ucincl_discharge\<open>
+      rule_tac
+        INV=\<open>\<lambda>k. \<Squnion>gs s' gk kk. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> k_ref \<mapsto>\<langle>\<top>\<rangle> gk\<down>kk \<star> can_alloc_reference\<close> and
+        INV'=\<open>\<lambda>k. \<Squnion>gs s' gk kk. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> k_ref \<mapsto>\<langle>\<top>\<rangle> gk\<down>kk \<star> can_alloc_reference \<star>
+               \<langle>kk < word64_of_nat (length (Search_learnt s'))\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
+        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_bounded_while_framedI\<close>)
+    apply (crush_base inline: len_def simp add: true_def false_def)
+    apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
+        (simp add: word_le_nat_alt word_less_nat_alt; fail) |
+        (rule add_big; assumption) | (frule big_c(1), linarith) |
+        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
+        (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
+        (rule one_lt; assumption))?\<close>)
+    done
+  done
+
+definition Search_minimize_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
+    Formula \<Rightarrow> Clause list \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
+  \<open>Search_minimize_contract r g s f L \<equiv>
+     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s \<star> \<langle>db_small f L\<rangle> in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s') in
+     make_function_contract pre post\<close>
+
+lemma Search_minimize_spec:
+  shows \<open>\<Gamma>; Search_minimize r f L \<Turnstile>\<^sub>F Search_minimize_contract r g s f L\<close>
+  apply (crush_boot f: Search_minimize_def contract: Search_minimize_contract_def)
+  apply (crush_base inline: vec_truncate_def specs add: Search_compact_spec Search_unmark_from_spec
+      contracts add: Search_compact_contract_def Search_unmark_from_contract_def
+      simp add: true_def false_def)
+  done
+
 definition Search_analyze_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
     Formula \<Rightarrow> Clause list \<Rightarrow> 64 word \<Rightarrow> ('s, Lit list, 'abort) function_contract\<close> where
   \<open>Search_analyze_contract r g s f L c \<equiv>
@@ -1153,10 +1313,61 @@ lemma Search_analyze_spec:
       in wp_bounded_while_framedI\<close>)
     apply (crush_base inline: len_def NONE_def BIG_def Lit_mk_def
         specs add: Search_analyze_clause_spec Search_prev_seen_spec Search_finish_learnt_spec
-          Search_copy_learnt_spec
+          Search_copy_learnt_spec Search_minimize_spec
         contracts add: Search_analyze_clause_contract_def Search_prev_seen_contract_def
-          Search_finish_learnt_contract_def Search_copy_learnt_contract_def
+          Search_finish_learnt_contract_def Search_copy_learnt_contract_def Search_minimize_contract_def
         simp add: true_def false_def)
+    apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
+        (simp add: word_le_nat_alt word_less_nat_alt; fail) |
+        (rule add_big; assumption) | (frule big_c(1), linarith) |
+        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
+        (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
+        (rule one_lt; assumption))?\<close>)
+    done
+  done
+
+definition Search_learnt_lbd_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
+    ('s, 64 word, 'abort) function_contract\<close> where
+  \<open>Search_learnt_lbd_contract r g s \<equiv>
+     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s') in
+     make_function_contract pre post\<close>
+
+lemma Search_learnt_lbd_spec:
+  shows \<open>\<Gamma>; Search_learnt_lbd r \<Turnstile>\<^sub>F Search_learnt_lbd_contract r g s\<close>
+  apply (crush_boot f: Search_learnt_lbd_def contract: Search_learnt_lbd_contract_def)
+  apply (crush_base inline: len_def NONE_def simp add: true_def false_def)
+  subgoal for n_ref j_ref
+    apply (ucincl_discharge\<open>
+      rule_tac
+        INV=\<open>\<lambda>k. \<Squnion>gs s' gn n gj j. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
+               n_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference\<close> and
+        INV'=\<open>\<lambda>k. \<Squnion>gs s' gn n gj j. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
+               n_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference \<star>
+               \<langle>j < word64_of_nat (length (Search_learnt s'))\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
+        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_bounded_while_framedI\<close>)
+    apply (crush_base inline: len_def NONE_def simp add: true_def false_def)
+    apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
+        (simp add: word_le_nat_alt word_less_nat_alt; fail) |
+        (rule add_big; assumption) | (frule big_c(1), linarith) |
+        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
+        (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
+        (rule one_lt; assumption))?\<close>)
+    done
+  subgoal for n_ref j_ref
+    apply (ucincl_discharge\<open>
+      rule_tac
+        INV=\<open>\<lambda>k. \<Squnion>gs s' gn n gj j. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
+               n_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference\<close> and
+        INV'=\<open>\<lambda>k. \<Squnion>gs s' gn n gj j. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
+               n_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference \<star>
+               \<langle>j < word64_of_nat (length (Search_learnt s'))\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
+        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_bounded_while_framedI\<close>)
+    apply (crush_base inline: len_def NONE_def simp add: true_def false_def)
     apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
         (simp add: word_le_nat_alt word_less_nat_alt; fail) |
         (rule add_big; assumption) | (frule big_c(1), linarith) |
@@ -1336,9 +1547,9 @@ lemma on_conflict_spec:
   apply (crush_boot f: on_conflict_def contract: on_conflict_contract_def)
   apply (crush_base inline: len_def NONE_def BIG_def vec_push_def Clause_mk_def
       specs add: certify_spec Search_analyze_spec Search_backtrack_spec Search_attach_spec
-        Search_enqueue_spec
+        Search_enqueue_spec Search_learnt_lbd_spec
       contracts add: certify_contract_def Search_analyze_contract_def Search_backtrack_contract_def
-        Search_attach_contract_def Search_enqueue_contract_def
+        Search_attach_contract_def Search_enqueue_contract_def Search_learnt_lbd_contract_def
       simp add: true_def false_def)
   apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
         (simp add: word_le_nat_alt word_less_nat_alt; fail) |
@@ -1351,6 +1562,112 @@ lemma on_conflict_spec:
         (rule db_small_guard; assumption) | (rule db_small_Nil; assumption) | (rule learned_push'; assumption) |
         (rule db_small_push; assumption) | (rule db_index_add'; assumption) | (rule unsat_of_cert; assumption) |
         rule learned_ok_Nil | (rule db_small_of; assumption))?\<close>)
+  done
+
+definition Search_count_live_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
+    ('s, 64 word, 'abort) function_contract\<close> where
+  \<open>Search_count_live_contract r g s \<equiv>
+     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s') in
+     make_function_contract pre post\<close>
+
+lemma Search_count_live_spec:
+  shows \<open>\<Gamma>; Search_count_live r \<Turnstile>\<^sub>F Search_count_live_contract r g s\<close>
+  apply (crush_boot f: Search_count_live_def contract: Search_count_live_contract_def)
+  apply (crush_base inline: len_def NONE_def simp add: true_def false_def)
+  subgoal for live_ref i_ref
+    apply (ucincl_discharge\<open>
+      rule_tac
+        INV=\<open>\<lambda>k. \<Squnion>gs s' gl l gi i. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
+               live_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference\<close> and
+        INV'=\<open>\<lambda>k. \<Squnion>gs s' gl l gi i. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
+               live_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star>
+               \<langle>i < word64_of_nat (length (Search_lbd s')) \<and> i < word64_of_nat (length (Search_dead s'))\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
+        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_bounded_while_framedI\<close>)
+    apply (crush_base inline: len_def NONE_def simp add: true_def false_def)
+    apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
+        (simp add: word_le_nat_alt word_less_nat_alt; fail) |
+        (rule add_big; assumption) | (frule big_c(1), linarith) |
+        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
+        (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
+        (rule one_lt; assumption))?\<close>)
+    done
+  done
+
+definition Search_cut_contract :: \<open>Search \<Rightarrow> 64 word \<Rightarrow> ('s, Cut, 'abort) function_contract\<close> where
+  \<open>Search_cut_contract s live \<equiv> make_function_contract can_alloc_reference (\<lambda>_. can_alloc_reference)\<close>
+
+lemma Search_cut_spec:
+  shows \<open>\<Gamma>; Search_cut s live \<Turnstile>\<^sub>F Search_cut_contract s live\<close>
+  apply (crush_boot f: Search_cut_def contract: Search_cut_contract_def)
+  apply (crush_base inline: len_def Cut_mk_def simp add: true_def false_def)
+  subgoal for left_ref t_ref
+    apply (ucincl_discharge\<open>
+      rule_tac
+        INV=\<open>\<lambda>k. \<Squnion>gl l gt t. left_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star> t_ref \<mapsto>\<langle>\<top>\<rangle> gt\<down>t \<star> can_alloc_reference\<close> and
+        INV'=\<open>\<lambda>k. \<Squnion>gl l gt t. left_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star> t_ref \<mapsto>\<langle>\<top>\<rangle> gt\<down>t \<star> can_alloc_reference \<star>
+               \<langle>3 < t \<and> t - 1 < word64_of_nat (length (Search_hist s)) \<and>
+                Search_hist s ! unat (t - 1) \<le> l\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>_. can_alloc_reference\<close> and
+        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_bounded_while_framedI\<close>)
+    apply (crush_base inline: len_def Cut_mk_def simp add: true_def false_def)
+    apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
+        (simp add: word_le_nat_alt word_less_nat_alt; fail) |
+        (rule add_big; assumption) | (frule big_c(1), linarith) |
+        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
+        (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
+        (rule one_lt; assumption))?\<close>)
+    done
+  done
+
+definition Search_kill_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
+    64 word \<Rightarrow> 64 word \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
+  \<open>Search_kill_contract r g s t left \<equiv>
+     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s') in
+     make_function_contract pre post\<close>
+
+lemma Search_kill_spec:
+  shows \<open>\<Gamma>; Search_kill r t left \<Turnstile>\<^sub>F Search_kill_contract r g s t left\<close>
+  apply (crush_boot f: Search_kill_def contract: Search_kill_contract_def)
+  apply (crush_base inline: len_def simp add: true_def false_def)
+  subgoal for left_ref i_ref
+    apply (ucincl_discharge\<open>
+      rule_tac
+        INV=\<open>\<lambda>k. \<Squnion>gs s' gl l gi i. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
+               left_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference\<close> and
+        INV'=\<open>\<lambda>k. \<Squnion>gs s' gl l gi i. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
+               left_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star>
+               \<langle>i < word64_of_nat (length (Search_lbd s')) \<and> i < word64_of_nat (length (Search_dead s'))\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
+        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_bounded_while_framedI\<close>)
+    apply (crush_base inline: len_def simp add: true_def false_def)
+    apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
+        (simp add: word_le_nat_alt word_less_nat_alt; fail) |
+        (rule add_big; assumption) | (frule big_c(1), linarith) |
+        erule nz_len | (rule push_len; assumption) | (erule counter_add) | (rule push_len'; assumption) | (rule one_le; assumption) | rule le_max | (rule big_succ; assumption) | (rule big_succ[symmetric]; assumption) |
+        (rule big_succ_le; assumption) | (rule inc_div; assumption) | (rule inc_add; assumption) |
+        (rule one_lt; assumption))?\<close>)
+    done
+  done
+
+definition Search_reduce_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
+    ('s, unit, 'abort) function_contract\<close> where
+  \<open>Search_reduce_contract r g s \<equiv>
+     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s') in
+     make_function_contract pre post\<close>
+
+lemma Search_reduce_spec:
+  shows \<open>\<Gamma>; Search_reduce r \<Turnstile>\<^sub>F Search_reduce_contract r g s\<close>
+  apply (crush_boot f: Search_reduce_def contract: Search_reduce_contract_def)
+  apply (crush_base specs add: Search_count_live_spec Search_cut_spec Search_kill_spec
+      contracts add: Search_count_live_contract_def Search_cut_contract_def Search_kill_contract_def
+      simp add: true_def false_def)
   done
 
 definition cdcl_contract :: \<open>Formula \<Rightarrow> ('s, Answer option, 'abort) function_contract\<close> where
@@ -1366,14 +1683,16 @@ lemma cdcl_spec:
       specs add: new_search_spec init_spec
       contracts add: new_search_contract_def init_contract_def
       simp add: true_def false_def)
-  subgoal for x s_ref l_ref y g' z confl_ref k_ref rst_ref st_ref
+  subgoal for x s_ref l_ref y g' z confl_ref k_ref rst_ref sr_ref ra_ref st_ref
     apply (ucincl_discharge\<open>
       rule_tac
-        INV=\<open>\<lambda>k. \<Squnion>gs s' gl L gc c gk kk gr rr gt t. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> l_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>L \<star>
+        INV=\<open>\<lambda>k. \<Squnion>gs s' gl L gc c gk kk gr rr gsr sr gra ra gt t. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> l_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>L \<star>
                confl_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star> k_ref \<mapsto>\<langle>\<top>\<rangle> gk\<down>kk \<star> rst_ref \<mapsto>\<langle>\<top>\<rangle> gr\<down>rr \<star>
+               sr_ref \<mapsto>\<langle>\<top>\<rangle> gsr\<down>sr \<star> ra_ref \<mapsto>\<langle>\<top>\<rangle> gra\<down>ra \<star>
                st_ref \<mapsto>\<langle>\<top>\<rangle> gt\<down>t \<star> can_alloc_reference \<star> \<langle>learned_ok f L\<rangle>\<close> and
-        INV'=\<open>\<lambda>k. \<Squnion>gs s' gl L gc c gk kk gr rr gt t. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> l_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>L \<star>
+        INV'=\<open>\<lambda>k. \<Squnion>gs s' gl L gc c gk kk gr rr gsr sr gra ra gt t. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> l_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>L \<star>
                confl_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star> k_ref \<mapsto>\<langle>\<top>\<rangle> gk\<down>kk \<star> rst_ref \<mapsto>\<langle>\<top>\<rangle> gr\<down>rr \<star>
+               sr_ref \<mapsto>\<langle>\<top>\<rangle> gsr\<down>sr \<star> ra_ref \<mapsto>\<langle>\<top>\<rangle> gra\<down>ra \<star>
                st_ref \<mapsto>\<langle>\<top>\<rangle> gt\<down>t \<star> can_alloc_reference \<star>
                \<langle>learned_ok f L \<and> t < 0xFFFFFFFFFFFFFFFF\<rangle>\<close> and
         \<tau>=\<open>\<lambda>r. can_alloc_reference \<star> \<langle>cdcl_post f r\<rangle>\<close> and
@@ -1381,9 +1700,10 @@ lemma cdcl_spec:
       in wp_bounded_while_framedI\<close>)
     apply (crush_base inline: len_def NONE_def BIG_def vec_push_def Answer_Sat_mk_def Assignments_mk_def
         specs add: Search_propagate_spec on_conflict_spec Search_backtrack_spec Search_enqueue_spec
-          Search_pick_spec model_spec satisfies_spec
+          Search_pick_spec model_spec satisfies_spec Search_reduce_spec
         contracts add: Search_propagate_contract_def on_conflict_contract_def Search_backtrack_contract_def
           Search_enqueue_contract_def Search_pick_contract_def model_contract_def satisfies_contract_def
+          Search_reduce_contract_def
         simp add: true_def false_def)
     apply (all \<open>((simp only: word64_less_of_nat; fail) | erule word64_less_max | erule len_minus_one | rule drop30 |
         (simp add: word_le_nat_alt word_less_nat_alt; fail) |

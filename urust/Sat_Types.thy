@@ -65,6 +65,15 @@ enum Propagated =
 definition "Propagated_Fixpoint_mk" :: \<open>Pasn \<Rightarrow> ('s, Propagated, 'abort, 'i, 'o) function_body\<close> where
   [crush_inline]: \<open>Propagated_Fixpoint_mk \<equiv> \<lambda>a0. FunctionBody (literal (Propagated_Fixpoint a0))\<close>
 
+(* Rust: Cut *)
+scalable_datatype_record Cut =
+  Cut_t :: \<open>64 word\<close>
+  Cut_left :: \<open>64 word\<close>
+micro_rust_record Cut
+
+definition "Cut_mk" :: \<open>(64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, Cut, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>Cut_mk \<equiv> \<lambda>a0 a1. FunctionBody (literal (make_Cut a0 a1))\<close>
+
 (* Rust: Search *)
 scalable_datatype_record Search =
   Search_assign :: \<open>bool list\<close>
@@ -77,14 +86,20 @@ scalable_datatype_record Search =
   Search_head :: \<open>(64 word) list\<close>
   Search_next :: \<open>(64 word) list\<close>
   Search_wpos :: \<open>(64 word) list\<close>
+  Search_wkey :: \<open>(64 word) list\<close>
   Search_phase :: \<open>bool list\<close>
   Search_act :: \<open>(64 word) list\<close>
   Search_inc :: \<open>64 word\<close>
   Search_seen :: \<open>bool list\<close>
   Search_learnt :: \<open>Lit list\<close>
+  Search_dead :: \<open>bool list\<close>
+  Search_lbd :: \<open>(64 word) list\<close>
+  Search_stamp :: \<open>(64 word) list\<close>
+  Search_tick :: \<open>64 word\<close>
+  Search_hist :: \<open>(64 word) list\<close>
 micro_rust_record Search
 
-definition "Search_mk" :: \<open>(bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (bool list) \<Rightarrow> (Lit list) \<Rightarrow> ('s, Search, 'abort, 'i, 'o) function_body\<close> where
-  [crush_inline]: \<open>Search_mk \<equiv> \<lambda>a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14. FunctionBody (literal (make_Search a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14))\<close>
+definition "Search_mk" :: \<open>(bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (bool list) \<Rightarrow> (Lit list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, Search, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>Search_mk \<equiv> \<lambda>a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20. FunctionBody (literal (make_Search a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20))\<close>
 
 end
