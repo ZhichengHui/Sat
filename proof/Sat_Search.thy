@@ -1033,7 +1033,8 @@ lemma Search_restart_due_spec:
   apply (crush_boot f: Search_restart_due_def contract: Search_restart_due_contract_def)
   apply (crush_base inline: len_def BIG_def simp add: true_def false_def)
   apply (all \<open>restart_bound?\<close>)
-  oops
+  apply (all \<open>search_bound\<close>)
+  done
 
 end
 
