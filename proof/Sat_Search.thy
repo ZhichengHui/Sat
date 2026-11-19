@@ -74,6 +74,10 @@ lemma le_max:
   \<open>(w :: 64 word) \<le> 0xFFFFFFFFFFFFFFFF\<close>
   using unat_lt2p[of w] by (simp add: word_le_nat_alt)
 
+lemma not_le_max:
+  \<open>\<not> (y :: 64 word) \<le> x \<Longrightarrow> unat x < 18446744073709551615\<close>
+  using word64_less_max not_le by blast
+
 lemma big_succ:
   \<open>(c :: 64 word) < 0x4000000000000000 \<Longrightarrow> unat (c + 1) = Suc (unat c)\<close>
   using big_c(1)[of c] unat_word_Suc_simp[of c] by simp
@@ -202,6 +206,31 @@ lemma Search_attach_spec:
   done
 
 
+definition Search_free_lit_contract :: \<open>Search \<Rightarrow> Clause \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
+  \<open>Search_free_lit_contract s cl op my \<equiv>
+     make_function_contract can_alloc_reference (\<lambda>_. can_alloc_reference)\<close>
+
+lemma Search_free_lit_spec:
+  shows \<open>\<Gamma>; Search_free_lit s cl op my \<Turnstile>\<^sub>F Search_free_lit_contract s cl op my\<close>
+  apply (crush_boot f: Search_free_lit_def contract: Search_free_lit_contract_def)
+  apply (crush_base inline: len_def specs add: Search_lit_false_spec
+      contracts add: Search_lit_false_contract_def simp add: true_def false_def)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>rename_tac j_ref n_ref\<close>)
+  apply (all \<open>ucincl_discharge\<open>
+    rule_tac
+      INV=\<open>\<lambda>k. \<Squnion>gj j gn n. j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> n_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> can_alloc_reference\<close> and
+      INV'=\<open>\<lambda>k. \<Squnion>gj j gn n. j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> n_ref \<mapsto>\<langle>\<top>\<rangle> gn\<down>n \<star> can_alloc_reference \<star>
+             \<langle>n < word64_of_nat (length (Clause_v0 cl))\<rangle>\<close> and
+      \<tau>=\<open>\<lambda>_. can_alloc_reference\<close> and
+      \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+    in wp_bounded_while_framedI\<close>\<close>)
+  apply (crush_base specs add: Search_lit_false_spec
+      contracts add: Search_lit_false_contract_def simp add: true_def false_def)
+  apply (all \<open>((rule word64_less_max, assumption) | (simp add: not_le word64_less_of_nat; fail) |
+    (simp add: nz_len; fail) | (rule not_le_max, assumption) | search_bound)\<close>)
+  done
+
 definition Search_find_watch_contract :: \<open>Search \<Rightarrow> Formula \<Rightarrow> Clause list \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
   \<open>Search_find_watch_contract s f L c op my \<equiv>
      make_function_contract (can_alloc_reference \<star> \<langle>db_small f L\<rangle>) (\<lambda>_. can_alloc_reference)\<close>
@@ -209,22 +238,9 @@ definition Search_find_watch_contract :: \<open>Search \<Rightarrow> Formula \<R
 lemma Search_find_watch_spec:
   shows \<open>\<Gamma>; Search_find_watch s f L c op my \<Turnstile>\<^sub>F Search_find_watch_contract s f L c op my\<close>
   apply (crush_boot f: Search_find_watch_def contract: Search_find_watch_contract_def)
-  apply (crush_base inline: len_def NONE_def BIG_def Lit_mk_def
-      specs add: clause_len_spec lit_at_spec Search_lit_false_spec
-      contracts add: clause_len_contract_def lit_at_contract_def Search_lit_false_contract_def
-      simp add: true_def false_def)
-  subgoal for n j_ref
-    apply (ucincl_discharge\<open>
-      rule_tac
-        INV=\<open>\<lambda>k. \<Squnion>g j. j_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>j \<star> can_alloc_reference\<close> and
-        INV'=\<open>\<lambda>k. \<Squnion>g j. j_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>j \<star> can_alloc_reference \<star> \<langle>j < n\<rangle>\<close> and
-        \<tau>=\<open>\<lambda>_. can_alloc_reference\<close> and
-        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
-      in wp_bounded_while_framedI\<close>)
-    apply (crush_base specs add: lit_at_spec Search_lit_false_spec
-        contracts add: lit_at_contract_def Search_lit_false_contract_def simp add: true_def false_def)
-    apply (all \<open>erule word64_less_max\<close>)
-    done
+  apply (crush_base inline: len_def specs add: Search_free_lit_spec
+      contracts add: Search_free_lit_contract_def simp add: true_def false_def)
+  apply (all \<open>search_bound\<close>)
   done
 
 
