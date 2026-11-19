@@ -78,13 +78,13 @@ definition "Cut_mk" :: \<open>(64 word) \<Rightarrow> (64 word) \<Rightarrow> ('
 scalable_datatype_record Search =
   Search_assign :: \<open>bool list\<close>
   Search_set :: \<open>bool list\<close>
+  Search_false_lit :: \<open>bool list\<close>
   Search_level :: \<open>(64 word) list\<close>
   Search_reason :: \<open>(64 word) list\<close>
   Search_trail :: \<open>(64 word) list\<close>
   Search_lim :: \<open>(64 word) list\<close>
   Search_qhead :: \<open>64 word\<close>
-  Search_head :: \<open>(64 word) list\<close>
-  Search_next :: \<open>(64 word) list\<close>
+  Search_watches :: \<open>((64 word) list) list\<close>
   Search_wpos :: \<open>(64 word) list\<close>
   Search_wkey :: \<open>(64 word) list\<close>
   Search_phase :: \<open>bool list\<close>
@@ -99,7 +99,7 @@ scalable_datatype_record Search =
   Search_hist :: \<open>(64 word) list\<close>
 micro_rust_record Search
 
-definition "Search_mk" :: \<open>(bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (bool list) \<Rightarrow> (Lit list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, Search, 'abort, 'i, 'o) function_body\<close> where
+definition "Search_mk" :: \<open>(bool list) \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (((64 word) list) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (bool list) \<Rightarrow> (Lit list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> ((64 word) list) \<Rightarrow> ('s, Search, 'abort, 'i, 'o) function_body\<close> where
   [crush_inline]: \<open>Search_mk \<equiv> \<lambda>a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20. FunctionBody (literal (make_Search a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20))\<close>
 
 end
