@@ -242,31 +242,34 @@ struct Cut {
     left: usize,
 }
 
-/// The state of the CDCL search. The partial assignment is `assign`/`set` as in `Pasn`; `trail`
+/// The state of the CDCL search. The partial assignment is `assign`/`set` as in `Pasn`, and
+/// `false_lit[key(v, b)]` holds iff the literal `(v, b)` is false under it; `trail`
 /// lists the assigned variables in order, decision level `d + 1` starts at trail position
 /// `lim[d]`, `level[v]` is the decision level of `v` and `reason[v]` the clause that propagated
 /// `v` (`NONE` for a decision). Clause `c` watches its literals at positions `wpos[2c]` and
-/// `wpos[2c + 1]`; the watch nodes `2c`, `2c + 1` of the literal `(v, b)` form a list through
-/// `next` that starts at `head[key(v, b)]`, and `wkey[node]` is the key of the literal it watches,
-/// so that a visit sees whether the other watched literal is true without reading the clause.
+/// `wpos[2c + 1]`; the watch list `watches[key(v, b)]` of the literal `(v, b)` holds the watch
+/// nodes `2c`, `2c + 1` that watch it, and `wkey[node]` is the key of the literal node `node`
+/// watches, so that a visit sees whether the other watched literal is true without reading the
+/// clause. Each list is a vector of nodes, compacted in place when it is visited.
 /// `qhead` is the first trail position not yet propagated. `phase` is the last value of each
 /// variable, `act` its activity, raised by `inc` whenever it takes part in a conflict; `seen`
 /// marks variables during conflict analysis, and `learnt` collects the literals of the clause it
 /// learns. Learned clause `i` has the literal block distance `lbd[i]` (the number of decision
-/// levels of its literals when it was learned); `reduce` sets `dead[i]` for about half of them, and
-/// a dead clause is dropped from a watch list when the list is visited, so it no longer takes part
+/// levels of its literals when it was learned); `reduce` sets `dead[i]` for about half of them and
+/// the keys of their nodes to `NONE`, and a node whose other node has the key `NONE` is dropped
+/// from a watch list when the list is visited, so a dead clause no longer takes part
 /// in the search (it stays in the clause database). `stamp[l]` is `tick` if level `l` has been
 /// counted by the current `learnt_lbd`; `hist` is the histogram of the distances in `reduce`.
 struct Search {
     assign: Vec<bool>,
     set: Vec<bool>,
+    false_lit: Vec<bool>,
     level: Vec<usize>,
     reason: Vec<usize>,
     trail: Vec<usize>,
     lim: Vec<usize>,
     qhead: usize,
-    head: Vec<usize>,
-    next: Vec<usize>,
+    watches: Vec<Vec<usize>>,
     wpos: Vec<usize>,
     wkey: Vec<usize>,
     phase: Vec<bool>,
@@ -282,14 +285,19 @@ struct Search {
 }
 
 impl Search {
+    /// The literal of the key `k` is false.
+    fn key_false(&self, k: usize) -> bool {
+        k < self.false_lit.len() && self.false_lit[k]
+    }
+
     /// The literal `(v, b)` is true.
     fn lit_true(&self, v: usize, b: bool) -> bool {
-        v < self.set.len() && v < self.assign.len() && self.set[v] && self.assign[v] == b
+        self.key_false(key(v, !b))
     }
 
     /// The literal `(v, b)` is false.
     fn lit_false(&self, v: usize, b: bool) -> bool {
-        v < self.set.len() && v < self.assign.len() && self.set[v] && self.assign[v] != b
+        self.key_false(key(v, b))
     }
 
     /// Assigns `b` to `v` with the reason `r` at the current decision level.
@@ -300,14 +308,16 @@ impl Search {
             self.level[v] = self.lim.len();
             self.reason[v] = r;
             self.trail.push(v);
+            let k = key(v, !b);
+            if k < self.false_lit.len() {
+                self.false_lit[k] = true;
+            }
         }
     }
 
     /// Adds the watch nodes `2c`, `2c + 1` of the new clause `c`, watching its first two
     /// literals if it has two.
     fn attach(&mut self, f: &Formula, learned: &Vec<Clause>, c: usize) {
-        self.next.push(NONE);
-        self.next.push(NONE);
         self.wpos.push(0);
         self.wpos.push(1);
         self.wkey.push(NONE);
@@ -318,13 +328,11 @@ impl Search {
             let l1 = lit_at(f, learned, c, 1);
             let k0 = key(l0.var, l0.value);
             let k1 = key(l1.var, l1.value);
-            if k0 < self.head.len() && k1 < self.head.len() && n0 + 1 < self.next.len() && n0 + 1 < self.wkey.len() {
+            if k0 < self.watches.len() && k1 < self.watches.len() && n0 + 1 < self.wkey.len() {
                 self.wkey[n0] = k0;
                 self.wkey[n0 + 1] = k1;
-                self.next[n0] = self.head[k0];
-                self.head[k0] = n0;
-                self.next[n0 + 1] = self.head[k1];
-                self.head[k1] = n0 + 1;
+                self.watches[k0].push(n0);
+                self.watches[k1].push(n0 + 1);
             }
         }
     }
@@ -362,68 +370,64 @@ impl Search {
         len
     }
 
-    /// Clause `c` is a dead learned clause.
-    fn is_dead(&self, f: &Formula, c: usize) -> bool {
-        let m = f.clauses.len();
-        c >= m && c - m < self.dead.len() && self.dead[c - m]
-    }
-
-    /// The literal with the key `k` is true.
+    /// The literal with the key `k` is true: the literal of the key `k ^ 1` is false.
     fn key_true(&self, k: usize) -> bool {
-        k != NONE && self.lit_true(k / 2, k % 2 == 1)
+        self.key_false(k ^ 1)
     }
 
-    /// Makes `nxt` the successor of the node `prev` of watch list `k`, or the head of the list if
-    /// `prev` is `NONE`: removes the node between them.
-    fn unlink(&mut self, k: usize, prev: usize, nxt: usize) {
-        if prev < self.next.len() {
-            self.next[prev] = nxt;
-        } else if k < self.head.len() {
-            self.head[k] = nxt;
-        }
-    }
-
-    /// Visits the watch list `k` of a literal that has become false: a dead clause is dropped
-    /// from it; each other clause on it gets a new watched literal that is not false, propagates
-    /// its other watched literal, or is false. The index of a false clause, or `NONE`.
+    /// Visits the watch list `k` of a literal that has become false, until a clause is false: a
+    /// node whose other node has the key `NONE` (a dead clause) is dropped from it; each other
+    /// clause on it gets a new watched literal that is not false, propagates its other watched
+    /// literal, or is false. The list is compacted in place: the nodes that stay on it move to the
+    /// front, in order. The index of a false clause, or `NONE`.
     fn propagate_lit(&mut self, f: &Formula, learned: &Vec<Clause>, k: usize) -> usize {
-        let mut prev = NONE;
-        let mut node = if k < self.head.len() { self.head[k] } else { NONE };
-        while node < self.next.len() && node < self.wpos.len() && node < self.wkey.len() {
-            let nxt = self.next[node];
-            let c = node / 2;
+        if k >= self.watches.len() {
+            return NONE;
+        }
+        let mut ws = std::mem::replace(&mut self.watches[k], Vec::new());
+        let mut confl = NONE;
+        let mut i: usize = 0;
+        let mut j: usize = 0;
+        while i < ws.len() && confl == NONE {
+            let node = ws[i];
+            i += 1;
             let other = node ^ 1;
             let okey = if other < self.wkey.len() { self.wkey[other] } else { NONE };
-            if self.is_dead(f, c) {
-                self.unlink(k, prev, nxt);
-                node = nxt;
+            if okey == NONE || node >= self.wpos.len() || node >= self.wkey.len() {
             } else if self.key_true(okey) {
-                prev = node;
-                node = nxt;
+                if j < ws.len() {
+                    ws[j] = node;
+                    j += 1;
+                }
             } else {
+                let c = node / 2;
                 let my = self.wpos[node];
                 let op = if other < self.wpos.len() { self.wpos[other] } else { NONE };
                 let ol = lit_at(f, learned, c, op);
                 let found = self.find_watch(f, learned, c, op, my);
                 let nl = lit_at(f, learned, c, found);
                 let nk = key(nl.var, nl.value);
-                if found < clause_len(f, learned, c) && nk < self.head.len() {
+                if found < clause_len(f, learned, c) && nk < self.watches.len() && nk != k {
                     self.wpos[node] = found;
                     self.wkey[node] = nk;
-                    self.next[node] = self.head[nk];
-                    self.head[nk] = node;
-                    self.unlink(k, prev, nxt);
-                    node = nxt;
-                } else if self.lit_false(ol.var, ol.value) {
-                    return c;
+                    self.watches[nk].push(node);
                 } else {
-                    self.enqueue(ol.var, ol.value, c);
-                    prev = node;
-                    node = nxt;
+                    if j < ws.len() {
+                        ws[j] = node;
+                        j += 1;
+                    }
+                    if self.lit_false(ol.var, ol.value) {
+                        confl = c;
+                    } else {
+                        self.enqueue(ol.var, ol.value, c);
+                    }
                 }
             }
         }
-        NONE
+        if k < self.watches.len() {
+            self.watches[k] = close_gap(ws, i, j);
+        }
+        confl
     }
 
     /// Unit propagation of the trail from `qhead` on; the index of a false clause, or `NONE`.
@@ -640,8 +644,8 @@ impl Search {
     }
 
     /// Marks dead every live learned clause of a distance above `t`, and the first `left` of the
-    /// distance `t`.
-    fn kill(&mut self, t: usize, left: usize) {
+    /// distance `t`; the clause database starts the learned clauses at `m`.
+    fn kill(&mut self, m: usize, t: usize, left: usize) {
         let mut left = left;
         let mut i: usize = 0;
         while i < self.lbd.len() && i < self.dead.len() {
@@ -649,21 +653,35 @@ impl Search {
             if !self.dead[i] && d >= t {
                 if d > t {
                     self.dead[i] = true;
+                    self.unwatch(m, i);
                 } else if left > 0 {
                     self.dead[i] = true;
                     left -= 1;
+                    self.unwatch(m, i);
                 }
             }
             i += 1;
         }
     }
 
+    /// Sets the keys of both watch nodes of learned clause `i` (clause `m + i`) to `NONE`, so that
+    /// the clause is dropped from the watch lists when they are visited.
+    fn unwatch(&mut self, m: usize, i: usize) {
+        if m < BIG && i < BIG {
+            let c = m + i;
+            if c < BIG && 2 * c + 1 < self.wkey.len() {
+                self.wkey[2 * c] = NONE;
+                self.wkey[2 * c + 1] = NONE;
+            }
+        }
+    }
+
     /// Marks about half of the live learned clauses dead: those of the highest literal block
     /// distances, the oldest first among equal ones; clauses of distance 2 or less stay.
-    fn reduce(&mut self) {
+    fn reduce(&mut self, m: usize) {
         let live = self.count_live();
         let c = self.cut(live);
-        self.kill(c.t, c.left);
+        self.kill(m, c.t, c.left);
     }
 
     /// A copy of `learnt`, of at most `BIG` literals.
@@ -732,6 +750,10 @@ impl Search {
                     self.set[v] = false;
                     self.phase[v] = self.assign[v];
                     self.reason[v] = NONE;
+                    let k = key(v, !self.assign[v]);
+                    if k < self.false_lit.len() {
+                        self.false_lit[k] = false;
+                    }
                 }
                 self.trail.pop();
             }
@@ -756,18 +778,35 @@ impl Search {
     }
 }
 
+/// The list `xs` with its elements from position `i` on moved to position `j` on, and the
+/// elements after them dropped.
+fn close_gap(xs: Vec<usize>, i: usize, j: usize) -> Vec<usize> {
+    let mut ys = xs;
+    let mut i = i;
+    let mut j = j;
+    while i < ys.len() && j < i {
+        ys[j] = ys[i];
+        i += 1;
+        j += 1;
+    }
+    if j < i {
+        ys.truncate(j);
+    }
+    ys
+}
+
 /// The empty search state for `n` variables.
 fn new_search(n: usize) -> Search {
     Search {
         assign: vec![false; n],
         set: vec![false; n],
+        false_lit: vec![false; 2 * n],
         level: vec![0; n],
         reason: vec![NONE; n],
         trail: Vec::new(),
         lim: Vec::new(),
         qhead: 0,
-        head: vec![NONE; 2 * n],
-        next: Vec::new(),
+        watches: vec![Vec::new(); 2 * n],
         wpos: Vec::new(),
         wkey: Vec::new(),
         phase: vec![false; n],
@@ -1014,7 +1053,7 @@ pub fn cdcl(f: &Formula) -> Option<Answer> {
                 if reduce_at < BIG {
                     reduce_at += 500;
                 }
-                s.reduce();
+                s.reduce(f.clauses.len());
             }
             if conflicts < restart_at {
                 conflicts += 1;

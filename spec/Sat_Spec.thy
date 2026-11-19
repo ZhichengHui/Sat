@@ -120,20 +120,22 @@ text \<open>The translation bounds every loop without an iteration bound and eve
 locale Sat_heap =
   reference reference_types
   + ref_1: reference_allocatable reference_types _ _ _ _ _ _ _ prism_1 \<comment> \<open>bool list\<close>
-  + ref_2: reference_allocatable reference_types _ _ _ _ _ _ _ prism_2 \<comment> \<open>64 word\<close>
-  + ref_3: reference_allocatable reference_types _ _ _ _ _ _ _ prism_3 \<comment> \<open>Search\<close>
-  + ref_4: reference_allocatable reference_types _ _ _ _ _ _ _ prism_4 \<comment> \<open>Clause list\<close>
-  + ref_5: reference_allocatable reference_types _ _ _ _ _ _ _ prism_5 \<comment> \<open>Lit list\<close>
+  + ref_2: reference_allocatable reference_types _ _ _ _ _ _ _ prism_2 \<comment> \<open>(64 word) list\<close>
+  + ref_3: reference_allocatable reference_types _ _ _ _ _ _ _ prism_3 \<comment> \<open>64 word\<close>
+  + ref_4: reference_allocatable reference_types _ _ _ _ _ _ _ prism_4 \<comment> \<open>Search\<close>
+  + ref_5: reference_allocatable reference_types _ _ _ _ _ _ _ prism_5 \<comment> \<open>Clause list\<close>
+  + ref_6: reference_allocatable reference_types _ _ _ _ _ _ _ prism_6 \<comment> \<open>Lit list\<close>
   for reference_types :: \<open>'s::{sepalg} \<Rightarrow> 'addr \<Rightarrow> 'gv \<Rightarrow> 'abort \<Rightarrow> 'i prompt \<Rightarrow> 'o prompt_output \<Rightarrow> unit\<close>
   and prism_1 :: \<open>('gv, bool list) prism\<close>
-  and prism_2 :: \<open>('gv, 64 word) prism\<close>
-  and prism_3 :: \<open>('gv, Search) prism\<close>
-  and prism_4 :: \<open>('gv, Clause list) prism\<close>
-  and prism_5 :: \<open>('gv, Lit list) prism\<close>
+  and prism_2 :: \<open>('gv, (64 word) list) prism\<close>
+  and prism_3 :: \<open>('gv, 64 word) prism\<close>
+  and prism_4 :: \<open>('gv, Search) prism\<close>
+  and prism_5 :: \<open>('gv, Clause list) prism\<close>
+  and prism_6 :: \<open>('gv, Lit list) prism\<close>
 begin
 
 abbreviation solver :: \<open>nat \<Rightarrow> Formula \<Rightarrow> ('s, Answer, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>solver fuel \<equiv> Sat_ctx.solver update_raw_fun dereference_raw_fun reference_raw_fun prism_1 prism_2 prism_3 prism_4 prism_5 fuel\<close>
+  \<open>solver fuel \<equiv> Sat_ctx.solver update_raw_fun dereference_raw_fun reference_raw_fun prism_1 prism_2 prism_3 prism_4 prism_5 prism_6 fuel\<close>
 
 abbreviation solver_contract :: \<open>Formula \<Rightarrow> ('s, Answer, 'abort) function_contract\<close> where
   \<open>solver_contract \<equiv> Sat_ctx.solver_contract can_alloc_reference\<close>

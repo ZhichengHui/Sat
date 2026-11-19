@@ -216,19 +216,36 @@ definition "key" :: \<open>(64 word) \<Rightarrow> bool \<Rightarrow> ('s, 64 wo
     NONE()
   \<rbrakk>\<close>
 
+(* Rust: close_gap *)
+definition "close_gap" :: \<open>((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, (64 word) list, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>close_gap \<equiv> \<lambda>xs i j. FunctionBody \<lbrakk>
+    let mut ys = { let init_1 = xs; \<llangle>init_1 :: (64 word) list\<rrangle> };
+    let mut i = i;
+    let mut j = j;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while ((* i) < len(* ys)) && ((* j) < (* i)) {
+      * (ys[* j]) = (* ys)[* i];
+      * i += 1_usize;
+      * j += 1_usize;
+    };
+    if (* j) < (* i) {
+      vec_truncate(ys, * j);
+    };
+    * ys
+  \<rbrakk>\<close>
+
 (* Rust: new_search *)
 definition "new_search" :: \<open>(64 word) \<Rightarrow> ('s, Search, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>new_search \<equiv> \<lambda>n. FunctionBody \<lbrakk>
     {
       let fld_10 = vec_from_elem(false, n);
       let fld_11 = vec_from_elem(false, n);
-      let fld_12 = vec_from_elem(0_usize, n);
-      let fld_13 = vec_from_elem(NONE(), n);
-      let fld_14 = { let res_1 = []; \<llangle>res_1 :: (64 word) list\<rrangle> };
-      let fld_15 = { let res_2 = []; \<llangle>res_2 :: (64 word) list\<rrangle> };
-      let fld_16 = 0_usize;
-      let fld_17 = vec_from_elem(NONE(), 2_usize * n);
-      let fld_18 = { let res_3 = []; \<llangle>res_3 :: (64 word) list\<rrangle> };
+      let fld_12 = vec_from_elem(false, 2_usize * n);
+      let fld_13 = vec_from_elem(0_usize, n);
+      let fld_14 = vec_from_elem(NONE(), n);
+      let fld_15 = { let res_1 = []; \<llangle>res_1 :: (64 word) list\<rrangle> };
+      let fld_16 = { let res_2 = []; \<llangle>res_2 :: (64 word) list\<rrangle> };
+      let fld_17 = 0_usize;
+      let fld_18 = vec_from_elem({ let res_3 = []; \<llangle>res_3 :: (64 word) list\<rrangle> }, 2_usize * n);
       let fld_19 = { let res_4 = []; \<llangle>res_4 :: (64 word) list\<rrangle> };
       let fld_20 = { let res_5 = []; \<llangle>res_5 :: (64 word) list\<rrangle> };
       let fld_21 = vec_from_elem(false, n);
@@ -248,8 +265,6 @@ definition "new_search" :: \<open>(64 word) \<Rightarrow> ('s, Search, 'abort, '
 (* Rust: Search::attach *)
 definition "Search_attach" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> Formula \<Rightarrow> (Clause list) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_attach \<equiv> \<lambda>self f learned c. FunctionBody \<lbrakk>
-    vec_push(self.Search_next, NONE());
-    vec_push(self.Search_next, NONE());
     vec_push(self.Search_wpos, 0_usize);
     vec_push(self.Search_wpos, 1_usize);
     vec_push(self.Search_wkey, NONE());
@@ -260,27 +275,31 @@ definition "Search_attach" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<R
       let l1 = lit_at(f, learned, c, 1_usize);
       let k0 = key(l0.Lit_var, l0.Lit_value);
       let k1 = key(l1.Lit_var, l1.Lit_value);
-      if (((k0 < len(* (self.Search_head))) && (k1 < len(* (self.Search_head)))) && ((n0 + 1_usize) < len(* (self.Search_next)))) && ((n0 + 1_usize) < len(* (self.Search_wkey))) {
+      if ((k0 < len(* (self.Search_watches))) && (k1 < len(* (self.Search_watches)))) && ((n0 + 1_usize) < len(* (self.Search_wkey))) {
         * (self.Search_wkey[n0]) = k0;
         * (self.Search_wkey[n0 + 1_usize]) = k1;
-        * (self.Search_next[n0]) = (* (self.Search_head))[k0];
-        * (self.Search_head[k0]) = n0;
-        * (self.Search_next[n0 + 1_usize]) = (* (self.Search_head))[k1];
-        * (self.Search_head[k1]) = n0 + 1_usize;
+        vec_push(self.Search_watches[k0], n0);
+        vec_push(self.Search_watches[k1], n0 + 1_usize);
       }
     }
+  \<rbrakk>\<close>
+
+(* Rust: Search::key_false *)
+definition "Search_key_false" :: \<open>Search \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_key_false \<equiv> \<lambda>self k. FunctionBody \<lbrakk>
+    (k < len(self.Search_false_lit)) && (self.Search_false_lit[k])
   \<rbrakk>\<close>
 
 (* Rust: Search::lit_false *)
 definition "Search_lit_false" :: \<open>Search \<Rightarrow> (64 word) \<Rightarrow> bool \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_lit_false \<equiv> \<lambda>self v b. FunctionBody \<lbrakk>
-    (((v < len(self.Search_set)) && (v < len(self.Search_assign))) && (self.Search_set[v])) && ((self.Search_assign[v]) != b)
+    Search_key_false(self, key(v, b))
   \<rbrakk>\<close>
 
 (* Rust: Search::lit_true *)
 definition "Search_lit_true" :: \<open>Search \<Rightarrow> (64 word) \<Rightarrow> bool \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_lit_true \<equiv> \<lambda>self v b. FunctionBody \<lbrakk>
-    (((v < len(self.Search_set)) && (v < len(self.Search_assign))) && (self.Search_set[v])) && ((self.Search_assign[v]) == b)
+    Search_key_false(self, key(v, !b))
   \<rbrakk>\<close>
 
 (* Rust: Search::enqueue *)
@@ -292,6 +311,10 @@ definition "Search_enqueue" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<
       * (self.Search_level[v]) = len(* (self.Search_lim));
       * (self.Search_reason[v]) = r;
       vec_push(self.Search_trail, v);
+      let k = key(v, !b);
+      if k < len(* (self.Search_false_lit)) {
+        * (self.Search_false_lit[k]) = true;
+      }
     }
   \<rbrakk>\<close>
 
@@ -669,6 +692,10 @@ definition "Search_backtrack" :: \<open>(('addr, 'gv, Search) Global_Store.ref) 
           * (self.Search_set[v]) = false;
           * (self.Search_phase[v]) = (* (self.Search_assign))[v];
           * (self.Search_reason[v]) = NONE();
+          let k = key(v, !((* (self.Search_assign))[v]));
+          if k < len(* (self.Search_false_lit)) {
+            * (self.Search_false_lit[k]) = false;
+          }
         };
         let _ = vec_pop(self.Search_trail);
         ()
@@ -710,29 +737,10 @@ definition "on_conflict" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rig
     0_usize
   \<rbrakk>\<close>
 
-(* Rust: Search::is_dead *)
-definition "Search_is_dead" :: \<open>Search \<Rightarrow> Formula \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>Search_is_dead \<equiv> \<lambda>self f c. FunctionBody \<lbrakk>
-    let m = len(f.Formula_clauses);
-    ((c >= m) && ((c - m) < len(self.Search_dead))) && (self.Search_dead[c - m])
-  \<rbrakk>\<close>
-
-(* Rust: Search::unlink *)
-definition "Search_unlink" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>Search_unlink \<equiv> \<lambda>self k prev nxt. FunctionBody \<lbrakk>
-    if prev < len(* (self.Search_next)) {
-      * (self.Search_next[prev]) = nxt;
-    } else {
-      if k < len(* (self.Search_head)) {
-        * (self.Search_head[k]) = nxt;
-      }
-    }
-  \<rbrakk>\<close>
-
 (* Rust: Search::key_true *)
 definition "Search_key_true" :: \<open>Search \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_key_true \<equiv> \<lambda>self k. FunctionBody \<lbrakk>
-    (k != NONE()) && Search_lit_true(self, k / 2_usize, (k % 2_usize) == 1_usize)
+    Search_key_false(self, k ^ 1_usize)
   \<rbrakk>\<close>
 
 (* Rust: Search::free_lit *)
@@ -778,30 +786,33 @@ definition "Search_find_watch" :: \<open>Search \<Rightarrow> Formula \<Rightarr
 (* Rust: Search::propagate_lit *)
 definition "Search_propagate_lit" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> Formula \<Rightarrow> (Clause list) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_propagate_lit \<equiv> \<lambda>self f learned k. FunctionBody \<lbrakk>
-    let mut prev = NONE();
-    let mut node = if k < len(* (self.Search_head)) {
-      (* (self.Search_head))[k]
-    } else {
-      NONE()
+    if k >= len(* (self.Search_watches)) {
+      return NONE();
     };
-    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (((* node) < len(* (self.Search_next))) && ((* node) < len(* (self.Search_wpos)))) && ((* node) < len(* (self.Search_wkey))) {
-      let nxt = (* (self.Search_next))[* node];
-      let c = (* node) / 2_usize;
-      let other = (* node) ^ 1_usize;
+    let mut ws = { let init_2 = mem_replace(self.Search_watches[k], { let res_1 = []; \<llangle>res_1 :: (64 word) list\<rrangle> }); \<llangle>init_2 :: (64 word) list\<rrangle> };
+    let mut confl = NONE();
+    let mut i = 0_usize;
+    let mut j = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while ((* i) < len(* ws)) && ((* confl) == NONE()) {
+      let node = (* ws)[* i];
+      * i += 1_usize;
+      let other = node ^ 1_usize;
       let okey = if other < len(* (self.Search_wkey)) {
         (* (self.Search_wkey))[other]
       } else {
         NONE()
       };
-      if Search_is_dead(* self, f, c) {
-        Search_unlink(self, k, * prev, nxt);
-        * node = nxt;
+      if ((okey == NONE()) || (node >= len(* (self.Search_wpos)))) || (node >= len(* (self.Search_wkey))) {
+        ()
       } else {
         if Search_key_true(* self, okey) {
-          * prev = * node;
-          * node = nxt;
+          if (* j) < len(* ws) {
+            * (ws[* j]) = node;
+            * j += 1_usize;
+          }
         } else {
-          let my = (* (self.Search_wpos))[* node];
+          let c = node / 2_usize;
+          let my = (* (self.Search_wpos))[node];
           let op_v = if other < len(* (self.Search_wpos)) {
             (* (self.Search_wpos))[other]
           } else {
@@ -811,26 +822,28 @@ definition "Search_propagate_lit" :: \<open>(('addr, 'gv, Search) Global_Store.r
           let found = Search_find_watch(* self, f, learned, c, op_v, my);
           let nl = lit_at(f, learned, c, found);
           let nk = key(nl.Lit_var, nl.Lit_value);
-          if (found < clause_len(f, learned, c)) && (nk < len(* (self.Search_head))) {
-            * (self.Search_wpos[* node]) = found;
-            * (self.Search_wkey[* node]) = nk;
-            * (self.Search_next[* node]) = (* (self.Search_head))[nk];
-            * (self.Search_head[nk]) = * node;
-            Search_unlink(self, k, * prev, nxt);
-            * node = nxt;
+          if ((found < clause_len(f, learned, c)) && (nk < len(* (self.Search_watches)))) && (nk != k) {
+            * (self.Search_wpos[node]) = found;
+            * (self.Search_wkey[node]) = nk;
+            vec_push(self.Search_watches[nk], node);
           } else {
+            if (* j) < len(* ws) {
+              * (ws[* j]) = node;
+              * j += 1_usize;
+            };
             if Search_lit_false(* self, ol.Lit_var, ol.Lit_value) {
-              return c;
+              * confl = c;
             } else {
               Search_enqueue(self, ol.Lit_var, ol.Lit_value, c);
-              * prev = * node;
-              * node = nxt;
             }
           }
         }
       }
     };
-    NONE()
+    if k < len(* (self.Search_watches)) {
+      * (self.Search_watches[k]) = close_gap(* ws, * i, * j);
+    };
+    * confl
   \<rbrakk>\<close>
 
 (* Rust: Search::propagate *)
@@ -884,9 +897,21 @@ definition "Search_cut" :: \<open>Search \<Rightarrow> (64 word) \<Rightarrow> (
     Cut_mk { Cut_t: * t, Cut_left: 0_usize }
   \<rbrakk>\<close>
 
+(* Rust: Search::unwatch *)
+definition "Search_unwatch" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_unwatch \<equiv> \<lambda>self m i. FunctionBody \<lbrakk>
+    if (m < BIG()) && (i < BIG()) {
+      let c = m + i;
+      if (c < BIG()) && (((2_usize * c) + 1_usize) < len(* (self.Search_wkey))) {
+        * (self.Search_wkey[2_usize * c]) = NONE();
+        * (self.Search_wkey[(2_usize * c) + 1_usize]) = NONE();
+      }
+    }
+  \<rbrakk>\<close>
+
 (* Rust: Search::kill *)
-definition "Search_kill" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>Search_kill \<equiv> \<lambda>self t left. FunctionBody \<lbrakk>
+definition "Search_kill" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_kill \<equiv> \<lambda>self m t left. FunctionBody \<lbrakk>
     let mut left = left;
     let mut i = 0_usize;
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while ((* i) < len(* (self.Search_lbd))) && ((* i) < len(* (self.Search_dead))) {
@@ -894,10 +919,12 @@ definition "Search_kill" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rig
       if (!((* (self.Search_dead))[* i])) && (d >= t) {
         if d > t {
           * (self.Search_dead[* i]) = true;
+          Search_unwatch(self, m, * i);
         } else {
           if (* left) > 0_usize {
             * (self.Search_dead[* i]) = true;
             * left -= 1_usize;
+            Search_unwatch(self, m, * i);
           }
         }
       };
@@ -906,11 +933,11 @@ definition "Search_kill" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rig
   \<rbrakk>\<close>
 
 (* Rust: Search::reduce *)
-definition "Search_reduce" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>Search_reduce \<equiv> \<lambda>self. FunctionBody \<lbrakk>
+definition "Search_reduce" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_reduce \<equiv> \<lambda>self m. FunctionBody \<lbrakk>
     let live = Search_count_live(self);
     let c = Search_cut(* self, live);
-    Search_kill(self, c.Cut_t, c.Cut_left);
+    Search_kill(self, m, c.Cut_t, c.Cut_left);
   \<rbrakk>\<close>
 
 (* Rust: Search::pick *)
@@ -966,7 +993,7 @@ definition "cdcl" :: \<open>Formula \<Rightarrow> ('s, Answer option, 'abort, 'i
           if (* reduce_at) < BIG() {
             * reduce_at += 500_usize;
           };
-          Search_reduce(s);
+          Search_reduce(s, len(f.Formula_clauses));
         };
         if (* conflicts) < (* restart_at) {
           * conflicts += 1_usize;
