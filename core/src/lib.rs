@@ -249,14 +249,14 @@ struct Cut {
 /// `wpos[2c + 1]`; the watch nodes `2c`, `2c + 1` of the literal `(v, b)` form a list through
 /// `next` that starts at `head[key(v, b)]`, and `wkey[node]` is the key of the literal it watches,
 /// so that a visit sees whether the other watched literal is true without reading the clause.
-/// `qhead` is the first trail position not yet propagated. `phase` is the last value of each variable, `act` its activity, raised by `inc`
-/// whenever it takes part in a conflict; `seen` marks variables during conflict analysis, and
-/// `learnt` collects the literals of the clause it learns. Learned clause `i` has the literal block
-/// distance `lbd[i]` (the number of decision levels of its literals when it was learned); `reduce`
-/// sets `dead[i]` for about half of them, and a dead clause is dropped from a watch list when the
-/// list is visited, so it no longer takes part in the search (it stays in the clause database).
-/// `stamp[l]` is `tick` if level `l` has been counted by the current `learnt_lbd`; `hist` is the
-/// histogram of the distances in `reduce`.
+/// `qhead` is the first trail position not yet propagated. `phase` is the last value of each
+/// variable, `act` its activity, raised by `inc` whenever it takes part in a conflict; `seen`
+/// marks variables during conflict analysis, and `learnt` collects the literals of the clause it
+/// learns. Learned clause `i` has the literal block distance `lbd[i]` (the number of decision
+/// levels of its literals when it was learned); `reduce` sets `dead[i]` for about half of them, and
+/// a dead clause is dropped from a watch list when the list is visited, so it no longer takes part
+/// in the search (it stays in the clause database). `stamp[l]` is `tick` if level `l` has been
+/// counted by the current `learnt_lbd`; `hist` is the histogram of the distances in `reduce`.
 struct Search {
     assign: Vec<bool>,
     set: Vec<bool>,
@@ -607,8 +607,9 @@ impl Search {
         live
     }
 
-    /// The cut of `reduce` from the histogram `hist` of `live` clauses: about half of them have a
-    /// distance above `t`, or `left` of the distance `t`; `t` is at least 3.
+    /// The cut of `reduce` from the histogram `hist` of `live` clauses: the clauses of a distance
+    /// above `t`, with `left` of those of the distance `t`, are about half of them; `t` is at
+    /// least 3.
     fn cut(&self, live: usize) -> Cut {
         let mut left = live / 2;
         let mut t = self.hist.len();
