@@ -51,29 +51,12 @@ lemma word64_less_max:
   \<open>(x :: 64 word) < y \<Longrightarrow> unat x < 18446744073709551615\<close>
   using word64_unat_less_max word_less_nat_alt by blast
 
-lemma len_word_f:
-  assumes \<open>\<forall>c \<in> set (Formula_clauses f) \<union> set L. length (Clause_v0 c) < 9223372036854775808\<close>
-    \<open>i < length (Formula_clauses f)\<close>
-  shows \<open>unat (word64_of_nat (length (Clause_v0 (Formula_clauses f ! i)))) =
-    length (Clause_v0 (Formula_clauses f ! i))\<close>
+lemma len_word:
+  assumes \<open>\<forall>c \<in> set (db f L). length (Clause_v0 c) < 9223372036854775808\<close> \<open>c \<in> set (db f L)\<close>
+  shows \<open>unat (word64_of_nat (length (Clause_v0 c))) = length (Clause_v0 c)\<close>
 proof -
-  have \<open>length (Clause_v0 (Formula_clauses f ! i)) < 9223372036854775808\<close>
-    using assms(1) nth_mem[OF assms(2)] by blast
-  then have \<open>length (Clause_v0 (Formula_clauses f ! i)) < 2 ^ 64\<close>
-    by simp
-  then show ?thesis
-    by (simp add: unat_of_nat_eq)
-qed
-
-lemma len_word_L:
-  assumes \<open>\<forall>c \<in> set (Formula_clauses f) \<union> set L. length (Clause_v0 c) < 9223372036854775808\<close>
-    \<open>i < length L\<close>
-  shows \<open>unat (word64_of_nat (length (Clause_v0 (L ! i)))) = length (Clause_v0 (L ! i))\<close>
-proof -
-  have \<open>length (Clause_v0 (L ! i)) < 9223372036854775808\<close>
-    using assms(1) nth_mem[OF assms(2)] by blast
-  then have \<open>length (Clause_v0 (L ! i)) < 2 ^ 64\<close>
-    by simp
+  have \<open>length (Clause_v0 c) < 2 ^ 64\<close>
+    using assms by fastforce
   then show ?thesis
     by (simp add: unat_of_nat_eq)
 qed
@@ -141,10 +124,6 @@ lemma add_big:
   assumes \<open>a < (0x4000000000000000 :: 64 word)\<close> \<open>b < (0x4000000000000000 :: 64 word)\<close>
   shows \<open>unat a + unat b < 18446744073709551616\<close>
   using big_c(1)[OF assms(1)] big_c(1)[OF assms(2)] by linarith
-
-lemma unat_of_nat_small:
-  \<open>n < 2^62 \<Longrightarrow> unat (word64_of_nat n) = n\<close>
-  by (simp add: unat_of_nat_eq)
 
 section \<open>Certified learned clauses\<close>
 
@@ -276,13 +255,6 @@ proof -
     using ok n len unfolding learned_ok_def by auto
 qed
 
-text \<open>A certified empty clause: the formula is unsatisfiable.\<close>
-lemma learned_ok_unsat:
-  assumes \<open>learned_ok f L\<close>
-    and \<open>\<forall>a. (\<forall>c \<in> set (db f L). clause_sat a c) \<longrightarrow> (\<exists>l \<in> set ([] :: Lit list). lit_sat a l)\<close>
-  shows \<open>\<not> formula_sat a f\<close>
-  using assms db_sat by fastforce
-
 text \<open>The result of \<^verbatim>\<open>cdcl\<close>: \<^verbatim>\<open>None\<close>, or an answer as in the contract of the solver.\<close>
 definition cdcl_post :: \<open>Formula \<Rightarrow> Answer option \<Rightarrow> bool\<close> where
   \<open>cdcl_post f r \<equiv> case r of
@@ -324,7 +296,7 @@ lemma lit_at_spec:
   apply (crush_boot f: lit_at_def contract: lit_at_contract_def)
   apply (crush_base inline: len_def Lit_mk_def NONE_def simp add: true_def false_def)
   using word64_less_of_nat apply (auto simp add: db_def db_small_def nth_append word_less_nat_alt
-      unat_of_nat_eq unat_sub word_le_nat_alt not_less Lit.expand len_word_f len_word_L)
+      unat_of_nat_eq unat_sub word_le_nat_alt not_less Lit.expand len_word)
   done
 
 definition clause_exists_contract :: \<open>Formula \<Rightarrow> Clause list \<Rightarrow> 64 word \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where

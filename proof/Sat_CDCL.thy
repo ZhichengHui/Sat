@@ -53,16 +53,15 @@ lemma cdcl_post_None:
   \<open>cdcl_post f None\<close>
   unfolding cdcl_post_def by simp
 
-lemma cdcl_post_Unsat:
-  assumes \<open>learned_ok f L\<close>
-    \<open>\<forall>a. (\<forall>c \<in> set (db f L). clause_sat a c) \<longrightarrow> (\<exists>l \<in> set ([] :: Lit list). lit_sat a l)\<close>
-  shows \<open>cdcl_post f (Some Answer_Unsat)\<close>
-  using learned_ok_unsat[OF assms] unfolding cdcl_post_def by simp
-
 lemma cdcl_post_Sat:
   \<open>length m = unat (Formula_num_vars f) \<Longrightarrow> formula_sat m f \<Longrightarrow>
     cdcl_post f (Some (Answer_Sat (make_Assignments m)))\<close>
   unfolding cdcl_post_def by simp
+
+lemma cdcl_post_Unsat:
+  \<open>learned_ok f L \<Longrightarrow> \<forall>a. \<exists>c \<in> set (db f L). \<not> clause_sat a c \<Longrightarrow>
+    cdcl_post f (Some Answer_Unsat)\<close>
+  unfolding cdcl_post_def using db_sat by fastforce
 
 lemma half_add:
   assumes \<open>x < (0x4000000000000000 :: 64 word)\<close>
@@ -74,20 +73,9 @@ proof -
     using big_c(1)[OF assms] by linarith
 qed
 
-
 lemma f_len64:
   \<open>sat_repr_ok f \<Longrightarrow> length (Formula_clauses f) < 18446744073709551616\<close>
   unfolding sat_repr_ok_def by simp
-
-lemma db_small_guard:
-  \<open>sat_repr_ok f \<Longrightarrow> \<not> 0x4000000000000000 \<le> word64_of_nat (length (Formula_clauses f)) \<Longrightarrow>
-    learned_ok f L \<Longrightarrow> db_small f L\<close>
-  using db_small_of f_small by blast
-
-lemma db_small_Nil:
-  \<open>sat_repr_ok f \<Longrightarrow> \<not> 0x4000000000000000 \<le> word64_of_nat (length (Formula_clauses f)) \<Longrightarrow>
-    db_small f []\<close>
-  using db_small_guard learned_ok_Nil by blast
 
 lemma learned_push':
   \<open>learned_ok f L \<Longrightarrow> \<not> 0x4000000000000000 \<le> word64_of_nat (length L) \<Longrightarrow>
@@ -96,45 +84,13 @@ lemma learned_push':
     learned_ok f (L @ [make_Clause x])\<close>
   using learned_ok_push[of f L x] learned_small[of f L] by simp
 
-lemma db_small_push:
-  \<open>sat_repr_ok f \<Longrightarrow> length (Formula_clauses f) < 4611686018427387904 \<Longrightarrow> learned_ok f L \<Longrightarrow>
-    \<not> 0x4000000000000000 \<le> word64_of_nat (length L) \<Longrightarrow> length x \<le> 4611686018427387904 \<Longrightarrow>
-    \<forall>a. (\<forall>c \<in> set (db f L). clause_sat a c) \<longrightarrow> (\<exists>l \<in> set x. lit_sat a l) \<Longrightarrow>
-    db_small f (L @ [make_Clause x])\<close>
-  using db_small_of learned_push' by blast
-
-lemma db_index_add':
-  \<open>length (Formula_clauses f) < 4611686018427387904 \<Longrightarrow> learned_ok f L \<Longrightarrow>
-    \<not> 0x4000000000000000 \<le> word64_of_nat (length L) \<Longrightarrow>
-    unat (word64_of_nat (length (Formula_clauses f))) + unat (word64_of_nat (length L))
-    < 18446744073709551616\<close>
-  using db_index_add learned_small by blast
-
-lemma unsat_of_cert:
-  \<open>learned_ok f L \<Longrightarrow>
-    \<forall>a. (\<forall>c \<in> set (db f L). clause_sat a c) \<longrightarrow> (\<exists>l \<in> set ([] :: Lit list). lit_sat a l) \<Longrightarrow>
-    \<forall>a. \<not> formula_sat a f\<close>
-  using learned_ok_unsat by blast
-
-lemma cdcl_post_Unsat2:
-  \<open>learned_ok f L \<Longrightarrow> \<forall>a. \<exists>c \<in> set (db f L). \<not> clause_sat a c \<Longrightarrow>
-    cdcl_post f (Some Answer_Unsat)\<close>
-  unfolding cdcl_post_def using db_sat by fastforce
-
-lemma cdcl_post_Unsat':
-  \<open>\<forall>a. \<not> formula_sat a f \<Longrightarrow> cdcl_post f (Some Answer_Unsat)\<close>
-  unfolding cdcl_post_def by simp
-
 section \<open>Bounds of the main loop\<close>
 
 method cdcl_bound =
-  (search_bound |
-    rule cdcl_post_None | (rule cdcl_post_Sat; assumption) | (rule cdcl_post_Unsat'; assumption) |
-    (rule cdcl_post_Unsat2; assumption) |
-    (rule half_add; assumption) | (rule f_small; assumption) | (rule f_len64; assumption) |
-    (rule db_small_guard; assumption) | (rule db_small_Nil; assumption) | (rule learned_push'; assumption) |
-    (rule db_small_push; assumption) | (rule db_index_add'; assumption) | (rule unsat_of_cert; assumption) |
-    rule learned_ok_Nil | (rule db_small_of; assumption))
+  (search_bound | rule cdcl_post_None learned_ok_Nil |
+    (rule cdcl_post_Sat cdcl_post_Unsat half_add f_small f_len64 learned_push'; assumption) |
+    (rule db_small_of db_index_add;
+      (assumption | rule learned_ok_Nil | (rule f_small learned_small learned_push'; assumption))))
 
 context Sat_ctx
 begin
