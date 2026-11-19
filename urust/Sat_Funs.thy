@@ -479,6 +479,43 @@ definition "satisfies" :: \<open>Formula \<Rightarrow> (bool list) \<Rightarrow>
     (* i) >= len(f.Formula_clauses)
   \<rbrakk>\<close>
 
+(* Rust: Search::clause_lbd *)
+definition "Search_clause_lbd" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> Formula \<Rightarrow> (Clause list) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_clause_lbd \<equiv> \<lambda>self f learned c. FunctionBody \<lbrakk>
+    if (* (self.Search_tick)) < NONE() {
+      * (self.Search_tick) += 1_usize;
+    };
+    let len_v = clause_len(f, learned, c);
+    let mut n = 0_usize;
+    let mut j = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* j) < len_v {
+      let v = lit_at(f, learned, c, * j).Lit_var;
+      if v < len(* (self.Search_level)) {
+        let lv = (* (self.Search_level))[v];
+        if (lv < len(* (self.Search_stamp))) && (((* (self.Search_stamp))[lv]) != (* (self.Search_tick))) {
+          * (self.Search_stamp[lv]) = * (self.Search_tick);
+          if (* n) < NONE() {
+            * n += 1_usize;
+          }
+        }
+      };
+      * j += 1_usize;
+    };
+    * n
+  \<rbrakk>\<close>
+
+(* Rust: Search::update_lbd *)
+definition "Search_update_lbd" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> Formula \<Rightarrow> (Clause list) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_update_lbd \<equiv> \<lambda>self f learned c. FunctionBody \<lbrakk>
+    let m = len(f.Formula_clauses);
+    if ((c >= m) && ((c - m) < len(* (self.Search_lbd)))) && (((* (self.Search_lbd))[c - m]) > 2_usize) {
+      let n = Search_clause_lbd(self, f, learned, c);
+      if ((c - m) < len(* (self.Search_lbd))) && (n < ((* (self.Search_lbd))[c - m])) {
+        * (self.Search_lbd[c - m]) = n;
+      }
+    }
+  \<rbrakk>\<close>
+
 (* Rust: Search::rescale *)
 definition "Search_rescale" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_rescale \<equiv> \<lambda>self. FunctionBody \<lbrakk>
@@ -506,6 +543,7 @@ definition "Search_bump" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rig
 (* Rust: Search::analyze_clause *)
 definition "Search_analyze_clause" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> Formula \<Rightarrow> (Clause list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_analyze_clause \<equiv> \<lambda>self f learned c p cur. FunctionBody \<lbrakk>
+    Search_update_lbd(self, f, learned, c);
     let len_v = clause_len(f, learned, c);
     let mut count_v = 0_usize;
     let mut j = 0_usize;
