@@ -402,9 +402,10 @@ impl Search {
     }
 
     /// Visits the watch list `k` of a literal that has become false, until a clause is false: a
-    /// node whose other watched key is `NONE` (a dead clause) is dropped from it; each other
-    /// clause on it gets a new watched literal that is not false, propagates its other watched
-    /// literal, or is false. The list is compacted in place: the nodes that stay on it move to the
+    /// node whose other watched key is `NONE` (a dead clause) is dropped from it; a node whose
+    /// other watched literal is true stays; for each other one, `move_watch` gives the clause a
+    /// new watched literal that is not false, propagates its other watched literal, or finds it
+    /// false. The list is compacted in place: the nodes that stay on it move to the
     /// front, in order. The index of a false clause, or `NONE`.
     fn propagate_lit(&mut self, k: usize) -> usize {
         if k >= self.watches.len() {
@@ -418,8 +419,11 @@ impl Search {
             let node = ws[i];
             i += 1;
             let o = node / 2;
-            let side = node % 2;
-            let okey = if o < BIG && o + 5 < self.arena.len() { self.arena[o + 5 - side] } else { NONE };
+            let okey = if o < BIG && o + 5 < self.arena.len() {
+                if node % 2 == 0 { self.arena[o + 5] } else { self.arena[o + 4] }
+            } else {
+                NONE
+            };
             if okey == NONE {
             } else if self.key_true(okey) {
                 if j < ws.len() {
@@ -427,24 +431,14 @@ impl Search {
                     j += 1;
                 }
             } else {
-                let c = self.arena[o];
-                let my = self.arena[o + 2 + side];
-                let op = self.arena[o + 3 - side];
-                let found = self.find_watch(o + 6, self.arena[o + 1], op, my);
-                let nk = if found < self.arena[o + 1] && found < self.arena.len() { self.arena[found] } else { NONE };
-                if nk < self.watches.len() && nk != k {
-                    self.arena[o + 2 + side] = found;
-                    self.arena[o + 4 + side] = nk;
-                    self.watches[nk].push(node);
-                } else {
+                let r = self.move_watch(k, node, okey);
+                if r != 0 {
                     if j < ws.len() {
                         ws[j] = node;
                         j += 1;
                     }
-                    if self.key_false(okey) {
-                        confl = c;
-                    } else {
-                        self.enqueue(okey / 2, okey % 2 == 1, c);
+                    if r == 2 {
+                        confl = if o < self.arena.len() { self.arena[o] } else { NONE };
                     }
                 }
             }
@@ -453,6 +447,34 @@ impl Search {
             self.watches[k] = close_gap(ws, i, j);
         }
         confl
+    }
+
+    /// The watch node `node` of the clause at the arena offset `o = node / 2` watches a literal of
+    /// the key `k` that has become false, and its other watched literal, of the key `okey`, is not
+    /// true: moves the watch to a literal that is not false (0), or keeps it and propagates the
+    /// other watched literal (1) or finds the clause false (2).
+    fn move_watch(&mut self, k: usize, node: usize, okey: usize) -> usize {
+        let o = node / 2;
+        if o >= BIG || o + 5 >= self.arena.len() {
+            return 1;
+        }
+        let mp = if node % 2 == 0 { o + 2 } else { o + 3 };
+        let qp = if node % 2 == 0 { o + 3 } else { o + 2 };
+        let c = self.arena[o];
+        let end = self.arena[o + 1];
+        let found = self.find_watch(o + 6, end, self.arena[qp], self.arena[mp]);
+        let nk = if found < end && found < self.arena.len() { self.arena[found] } else { NONE };
+        if nk < self.watches.len() && nk != k {
+            self.arena[mp] = found;
+            self.arena[mp + 2] = nk;
+            self.watches[nk].push(node);
+            return 0;
+        }
+        if self.key_false(okey) {
+            return 2;
+        }
+        self.enqueue(okey / 2, okey % 2 == 1, c);
+        1
     }
 
     /// Unit propagation of the trail from `qhead` on; the index of a false clause, or `NONE`.

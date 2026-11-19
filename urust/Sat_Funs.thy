@@ -809,6 +809,44 @@ definition "Search_find_watch" :: \<open>Search \<Rightarrow> (64 word) \<Righta
     end_v
   \<rbrakk>\<close>
 
+(* Rust: Search::move_watch *)
+definition "Search_move_watch" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_move_watch \<equiv> \<lambda>self k node okey. FunctionBody \<lbrakk>
+    let o_v = node / 2_usize;
+    if (o_v >= BIG()) || ((o_v + 5_usize) >= len(* (self.Search_arena))) {
+      return 1_usize;
+    };
+    let mp = if (node % 2_usize) == 0_usize {
+      o_v + 2_usize
+    } else {
+      o_v + 3_usize
+    };
+    let qp = if (node % 2_usize) == 0_usize {
+      o_v + 3_usize
+    } else {
+      o_v + 2_usize
+    };
+    let c = (* (self.Search_arena))[o_v];
+    let end_v = (* (self.Search_arena))[o_v + 1_usize];
+    let found = Search_find_watch(* self, o_v + 6_usize, end_v, (* (self.Search_arena))[qp], (* (self.Search_arena))[mp]);
+    let nk = if (found < end_v) && (found < len(* (self.Search_arena))) {
+      (* (self.Search_arena))[found]
+    } else {
+      NONE()
+    };
+    if (nk < len(* (self.Search_watches))) && (nk != k) {
+      * (self.Search_arena[mp]) = found;
+      * (self.Search_arena[mp + 2_usize]) = nk;
+      vec_push(self.Search_watches[nk], node);
+      return 0_usize;
+    };
+    if Search_key_false(* self, okey) {
+      return 2_usize;
+    };
+    Search_enqueue(self, okey / 2_usize, (okey % 2_usize) == 1_usize, c);
+    1_usize
+  \<rbrakk>\<close>
+
 (* Rust: Search::propagate_lit *)
 definition "Search_propagate_lit" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_propagate_lit \<equiv> \<lambda>self k. FunctionBody \<lbrakk>
@@ -823,9 +861,12 @@ definition "Search_propagate_lit" :: \<open>(('addr, 'gv, Search) Global_Store.r
       let node = (* ws)[* i];
       * i += 1_usize;
       let o_v = node / 2_usize;
-      let side = node % 2_usize;
       let okey = if (o_v < BIG()) && ((o_v + 5_usize) < len(* (self.Search_arena))) {
-        (* (self.Search_arena))[(o_v + 5_usize) - side]
+        if (node % 2_usize) == 0_usize {
+          (* (self.Search_arena))[o_v + 5_usize]
+        } else {
+          (* (self.Search_arena))[o_v + 4_usize]
+        }
       } else {
         NONE()
       };
@@ -838,28 +879,18 @@ definition "Search_propagate_lit" :: \<open>(('addr, 'gv, Search) Global_Store.r
             * j += 1_usize;
           }
         } else {
-          let c = (* (self.Search_arena))[o_v];
-          let my = (* (self.Search_arena))[(o_v + 2_usize) + side];
-          let op_v = (* (self.Search_arena))[(o_v + 3_usize) - side];
-          let found = Search_find_watch(* self, o_v + 6_usize, (* (self.Search_arena))[o_v + 1_usize], op_v, my);
-          let nk = if (found < ((* (self.Search_arena))[o_v + 1_usize])) && (found < len(* (self.Search_arena))) {
-            (* (self.Search_arena))[found]
-          } else {
-            NONE()
-          };
-          if (nk < len(* (self.Search_watches))) && (nk != k) {
-            * (self.Search_arena[(o_v + 2_usize) + side]) = found;
-            * (self.Search_arena[(o_v + 4_usize) + side]) = nk;
-            vec_push(self.Search_watches[nk], node);
-          } else {
+          let r = Search_move_watch(self, k, node, okey);
+          if r != 0_usize {
             if (* j) < len(* ws) {
               * (ws[* j]) = node;
               * j += 1_usize;
             };
-            if Search_key_false(* self, okey) {
-              * confl = c;
-            } else {
-              Search_enqueue(self, okey / 2_usize, (okey % 2_usize) == 1_usize, c);
+            if r == 2_usize {
+              * confl = (if o_v < len(* (self.Search_arena)) {
+                (* (self.Search_arena))[o_v]
+              } else {
+                NONE()
+              });
             }
           }
         }
