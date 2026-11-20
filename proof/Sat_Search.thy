@@ -39,18 +39,7 @@ lemma swap_ok2:
 lemma counter_add:
   assumes \<open>\<not> 0xFFFFFFFFFFFFFFFF - c < (a :: 64 word)\<close>
   shows \<open>unat c + unat a < 18446744073709551616\<close>
-proof -
-  have \<open>unat a \<le> unat (0xFFFFFFFFFFFFFFFF - c)\<close>
-    using assms by (simp add: word_le_nat_alt not_less)
-  moreover have le: \<open>c \<le> 0xFFFFFFFFFFFFFFFF\<close>
-    using unat_lt2p[of c] by (simp add: word_le_nat_alt)
-  moreover have \<open>unat (0xFFFFFFFFFFFFFFFF - c) = unat (0xFFFFFFFFFFFFFFFF :: 64 word) - unat c\<close>
-    using le by (rule unat_sub)
-  moreover have \<open>unat c < 18446744073709551616\<close>
-    using unat_lt2p[of c] by simp
-  ultimately show ?thesis
-    by simp
-qed
+  using assms unat_lt2p[of c] by (simp add: word_le_nat_alt not_less unat_sub)
 
 
 lemma one_le:
@@ -74,33 +63,13 @@ text \<open>The frames of the search stack of the minimisation are three words; 
 lemma len_minus:
   assumes \<open>\<not> word64_of_nat n < (3 :: 64 word)\<close> \<open>(1 :: 64 word) \<le> k\<close> \<open>k \<le> 3\<close>
   shows \<open>unat (word64_of_nat n - k) < n\<close>
-proof -
-  have le: \<open>k \<le> word64_of_nat n\<close>
-    using assms by simp
-  then have \<open>unat k \<le> unat (word64_of_nat n :: 64 word)\<close>
-    by (simp add: word_le_nat_alt)
-  moreover have \<open>unat (word64_of_nat n :: 64 word) \<le> n\<close>
-    by (simp add: unat_of_nat)
-  moreover have \<open>0 < unat k\<close>
-    using assms(2) by (simp add: word_le_nat_alt)
-  moreover have \<open>unat (word64_of_nat n - k) = unat (word64_of_nat n :: 64 word) - unat k\<close>
-    using le by (rule unat_sub)
-  ultimately show ?thesis
-    by linarith
-qed
+  using assms by (simp add: word_le_nat_alt word_less_nat_alt unat_sub unat_of_nat)
 
 text \<open>Offsets into the arena: below \<open>2^62\<close>, adding a small constant does not overflow.\<close>
 lemma big_add:
   assumes \<open>(a :: 64 word) < 0x4000000000000000\<close> \<open>(b :: 64 word) \<le> 8\<close>
   shows \<open>unat (a + b) = unat a + unat b\<close>
-proof -
-  have \<open>unat a < 4611686018427387904\<close>
-    using big_c(1)[OF assms(1)] .
-  moreover have \<open>unat b \<le> 8\<close>
-    using assms(2) by (simp add: word_le_nat_alt)
-  ultimately show ?thesis
-    by (simp add: unat_add_lem[symmetric])
-qed
+  using assms by (simp add: word_le_nat_alt word_less_nat_alt unat_add_lem[symmetric])
 
 lemma arena_end:
   assumes \<open>(a :: 64 word) < 0x4000000000000000\<close> \<open>(x :: 64 word) < 0x4000000000000000\<close>
@@ -135,34 +104,13 @@ text \<open>The index of the other watched key of a watch node: \<open>o + 5 - s
 lemma side_ix:
   assumes \<open>(a :: 64 word) < 0x4000000000000000\<close> \<open>a + 5 < word64_of_nat n\<close>
   shows \<open>unat (a + 5 - x mod 2) < n\<close> \<open>x mod 2 \<le> a + 5\<close>
-proof -
-  have m: \<open>unat (x mod 2) \<le> 1\<close>
-    using word_mod_less_divisor[of 2 x] by (simp add: word_less_nat_alt)
-  have u: \<open>unat (a + 5) = unat a + 5\<close>
-    using big_add[OF assms(1), of 5] by simp
-  show le: \<open>x mod 2 \<le> a + 5\<close>
-    using m u by (simp add: word_le_nat_alt)
-  have \<open>unat (a + 5) < n\<close>
-    using assms(2) by (rule word64_less_of_nat)
-  then show \<open>unat (a + 5 - x mod 2) < n\<close>
-    using unat_sub[OF le] by simp
-qed
+  using assms word64_less_of_nat[OF assms(2)] word_mod_less_divisor[of 2 x]
+  by (simp_all add: word_le_nat_alt word_less_nat_alt unat_sub unat_word_ariths)
 
 lemma arena_small:
   assumes \<open>\<not> 0x4000000000000000 \<le> (a :: 64 word)\<close> \<open>b \<le> 8\<close>
   shows \<open>unat (a + b) < 18446744073709551614\<close> \<open>unat (a + b) < 18446744073709551615\<close>
-proof -
-  have a: \<open>a < 0x4000000000000000\<close>
-    using assms(1) by (simp add: not_le)
-  have \<open>unat (a + b) = unat a + unat b\<close>
-    using big_add[OF a assms(2)] .
-  moreover have \<open>unat a < 4611686018427387904\<close>
-    using big_c(1)[OF a] .
-  moreover have \<open>unat b \<le> 8\<close>
-    using assms(2) by (simp add: word_le_nat_alt)
-  ultimately show \<open>unat (a + b) < 18446744073709551614\<close> \<open>unat (a + b) < 18446744073709551615\<close>
-    by simp_all
-qed
+  using assms by (simp_all add: word_le_nat_alt unat_word_ariths)
 
 lemma arena_ix0:
   assumes \<open>\<not> word64_of_nat m \<le> a + c\<close> \<open>\<not> 0x4000000000000000 \<le> (a :: 64 word)\<close> \<open>c \<le> 8\<close>
@@ -188,14 +136,7 @@ lemma inc_div:
 lemma inc_add:
   assumes \<open>(x :: 64 word) < 0x4000000000000000\<close>
   shows \<open>unat x + unat (x div 0x20 + 1) < 18446744073709551616\<close>
-proof -
-  have d: \<open>unat (x div 0x20) \<le> unat x\<close>
-    by (simp add: unat_div)
-  have \<open>unat (x div 0x20 + 1) = Suc (unat (x div 0x20))\<close>
-    using big_c(1)[OF assms] d unat_word_Suc_simp[of \<open>x div 0x20\<close>] by simp
-  then show ?thesis
-    using big_c(1)[OF assms] d by simp
-qed
+  using assms by (simp add: word_less_nat_alt unat_div unat_word_ariths)
 
 lemma one_lt:
   \<open>1 < word64_of_nat n \<Longrightarrow> Suc 0 < n\<close>
@@ -218,7 +159,8 @@ method search_bound =
     erule not_le_max | (rule len_minus; simp; fail) |
     erule max_less | erule word64_less_of_nat | (rule arena_ix, assumption, assumption, simp, simp) |
     (rule arena_small, assumption, simp) | erule big_twice | (erule arena_le, assumption, simp, simp) |
-    (rule arena_ix0, assumption, assumption, simp) | (frule big_nle, linarith))
+    (rule arena_ix0, assumption, assumption, simp) | (frule big_nle, linarith) |
+    (rule side_ix, assumption, assumption))
 
 context Sat_ctx
 begin
@@ -377,7 +319,6 @@ lemma Search_other_key_spec:
   shows \<open>\<Gamma>; Search_other_key s nd \<Turnstile>\<^sub>F Search_other_key_contract s nd\<close>
   apply (crush_boot f: Search_other_key_def contract: Search_other_key_contract_def)
   apply (crush_base inline: len_def NONE_def BIG_def simp add: true_def false_def)
-  apply (all \<open>(rule side_ix, assumption, assumption)?\<close>)
   apply (all \<open>search_bound\<close>)
   done
 
@@ -856,184 +797,6 @@ lemma init_spec:
         simp add: true_def false_def)
     apply (all \<open>search_bound\<close>)
     done
-  done
-
-section \<open>Deletion of learned clauses\<close>
-
-definition Search_count_live_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
-    ('s, 64 word, 'abort) function_contract\<close> where
-  \<open>Search_count_live_contract r g s \<equiv>
-     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s in
-     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s') in
-     make_function_contract pre post\<close>
-
-lemma Search_count_live_spec:
-  shows \<open>\<Gamma>; Search_count_live r \<Turnstile>\<^sub>F Search_count_live_contract r g s\<close>
-  apply (crush_boot f: Search_count_live_def contract: Search_count_live_contract_def)
-  apply (crush_base inline: len_def NONE_def simp add: true_def false_def)
-  subgoal for live_ref i_ref
-    apply (ucincl_discharge\<open>
-      rule_tac
-        INV=\<open>\<lambda>k. \<Squnion>gs s' gl l gi i. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
-               live_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference\<close> and
-        INV'=\<open>\<lambda>k. \<Squnion>gs s' gl l gi i. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
-               live_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star>
-               \<langle>i < word64_of_nat (length (Search_lbd s')) \<and> i < word64_of_nat (length (Search_dead s'))\<rangle>\<close> and
-        \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
-        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
-      in wp_bounded_while_framedI\<close>)
-    apply (crush_base inline: len_def NONE_def simp add: true_def false_def)
-    apply (all \<open>search_bound?\<close>)
-    done
-  done
-
-definition Search_cut_contract :: \<open>Search \<Rightarrow> 64 word \<Rightarrow> ('s, Cut, 'abort) function_contract\<close> where
-  \<open>Search_cut_contract s live \<equiv> make_function_contract can_alloc_reference (\<lambda>_. can_alloc_reference)\<close>
-
-lemma Search_cut_spec:
-  shows \<open>\<Gamma>; Search_cut s live \<Turnstile>\<^sub>F Search_cut_contract s live\<close>
-  apply (crush_boot f: Search_cut_def contract: Search_cut_contract_def)
-  apply (crush_base inline: len_def Cut_mk_def simp add: true_def false_def)
-  subgoal for left_ref t_ref
-    apply (ucincl_discharge\<open>
-      rule_tac
-        INV=\<open>\<lambda>k. \<Squnion>gl l gt t. left_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star> t_ref \<mapsto>\<langle>\<top>\<rangle> gt\<down>t \<star> can_alloc_reference\<close> and
-        INV'=\<open>\<lambda>k. \<Squnion>gl l gt t. left_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star> t_ref \<mapsto>\<langle>\<top>\<rangle> gt\<down>t \<star> can_alloc_reference \<star>
-               \<langle>3 < t \<and> t - 1 < word64_of_nat (length (Search_hist s)) \<and>
-                Search_hist s ! unat (t - 1) \<le> l\<rangle>\<close> and
-        \<tau>=\<open>\<lambda>_. can_alloc_reference\<close> and
-        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
-      in wp_bounded_while_framedI\<close>)
-    apply (crush_base inline: len_def Cut_mk_def simp add: true_def false_def)
-    apply (all \<open>search_bound?\<close>)
-    done
-  done
-
-definition Search_unwatch_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
-    64 word \<Rightarrow> 64 word \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
-  \<open>Search_unwatch_contract r g s m i \<equiv>
-     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s in
-     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s') in
-     make_function_contract pre post\<close>
-
-lemma Search_unwatch_spec:
-  shows \<open>\<Gamma>; Search_unwatch r m i \<Turnstile>\<^sub>F Search_unwatch_contract r g s m i\<close>
-  apply (crush_boot f: Search_unwatch_def contract: Search_unwatch_contract_def)
-  apply (crush_base inline: len_def NONE_def BIG_def simp add: true_def false_def)
-  apply (all \<open>search_bound\<close>)
-  done
-
-definition Search_kill_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
-    64 word \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
-  \<open>Search_kill_contract r g s m t left \<equiv>
-     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s in
-     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s') in
-     make_function_contract pre post\<close>
-
-lemma Search_kill_spec:
-  shows \<open>\<Gamma>; Search_kill r m t left \<Turnstile>\<^sub>F Search_kill_contract r g s m t left\<close>
-  apply (crush_boot f: Search_kill_def contract: Search_kill_contract_def)
-  apply (crush_base inline: len_def specs add: Search_unwatch_spec
-      contracts add: Search_unwatch_contract_def simp add: true_def false_def)
-  subgoal for left_ref i_ref
-    apply (ucincl_discharge\<open>
-      rule_tac
-        INV=\<open>\<lambda>k. \<Squnion>gs s' gl l gi i. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
-               left_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference\<close> and
-        INV'=\<open>\<lambda>k. \<Squnion>gs s' gl l gi i. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
-               left_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star>
-               \<langle>i < word64_of_nat (length (Search_lbd s')) \<and> i < word64_of_nat (length (Search_dead s'))\<rangle>\<close> and
-        \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
-        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
-      in wp_bounded_while_framedI\<close>)
-    apply (crush_base inline: len_def specs add: Search_unwatch_spec
-        contracts add: Search_unwatch_contract_def simp add: true_def false_def)
-    apply (all \<open>search_bound?\<close>)
-    done
-  done
-
-definition Search_reduce_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
-    64 word \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
-  \<open>Search_reduce_contract r g s m \<equiv>
-     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s in
-     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s') in
-     make_function_contract pre post\<close>
-
-lemma Search_reduce_spec:
-  shows \<open>\<Gamma>; Search_reduce r m \<Turnstile>\<^sub>F Search_reduce_contract r g s m\<close>
-  apply (crush_boot f: Search_reduce_def contract: Search_reduce_contract_def)
-  apply (crush_base specs add: Search_count_live_spec Search_cut_spec Search_kill_spec
-      contracts add: Search_count_live_contract_def Search_cut_contract_def Search_kill_contract_def
-      simp add: true_def false_def)
-  done
-
-lemma restart_avg:
-  assumes \<open>\<not> 0x20000000000 \<le> (a :: 64 word)\<close>
-  shows \<open>unat (a * 0x10000 div n) * 5 < 18446744073709551616\<close>
-proof -
-  have a: \<open>unat a < 0x20000000000\<close>
-    using assms by (simp add: word_le_nat_alt)
-  then have \<open>unat (a * 0x10000) = unat a * 65536\<close>
-    using unat_mult_lem[of a \<open>0x10000 :: 64 word\<close>] by simp
-  moreover have \<open>unat (a * 0x10000 div n) \<le> unat (a * 0x10000)\<close>
-    by (simp add: unat_div)
-  ultimately show ?thesis
-    using a by linarith
-qed
-
-lemma restart_avg2:
-  \<open>\<not> 0x20000000000 \<le> (a :: 64 word) + l \<Longrightarrow>
-    unat ((a * 0x10000 + l * 0x10000) div n) * 5 < 18446744073709551616\<close>
-  using restart_avg[of \<open>a + l\<close> n] by (simp add: distrib_right)
-
-lemma restart_lt:
-  \<open>\<not> 0x20000000000 \<le> (a :: 64 word) \<Longrightarrow> unat a < 281474976710656\<close>
-  \<open>unat (x :: 64 word) < 18446744073709551616\<close>
-  by (simp_all add: word_le_nat_alt unat_lt2p[of x, simplified])
-
-lemma restart_mul:
-  \<open>\<not> 0x2000000000 \<le> (x :: 64 word) \<Longrightarrow> unat x * 3 < 18446744073709551616\<close>
-  \<open>(x :: 64 word) < 0x100000 \<Longrightarrow> unat x * 2048 < 18446744073709551616\<close>
-  by (simp_all add: word_le_nat_alt word_less_nat_alt)
-
-lemma restart_div_le:
-  \<open>(x :: 64 word) div 0x20 \<le> x\<close>
-  by (simp add: word_le_nat_alt unat_div)
-
-lemma restart_add:
-  assumes \<open>(f :: 64 word) < 0x1000000000\<close> and \<open>(l :: 64 word) < 0x100000\<close>
-  shows \<open>unat (f - f div 0x20) + unat (l * 0x800) < 18446744073709551616\<close>
-proof -
-  have \<open>unat (f - f div 0x20) \<le> unat f\<close>
-    by (simp add: word_sub_le restart_div_le word_le_nat_alt[symmetric])
-  moreover have \<open>unat (l * 0x800) = unat l * 2048\<close>
-    using assms(2) unat_mult_lem[of l \<open>0x800 :: 64 word\<close>] by (simp add: word_less_nat_alt)
-  ultimately show ?thesis
-    using assms by (simp add: word_less_nat_alt)
-qed
-
-lemma restart_sum:
-  \<open>(a :: 64 word) < 0x10000000000 \<Longrightarrow> (l :: 64 word) < 0x100000 \<Longrightarrow> unat a + unat l < 18446744073709551616\<close>
-  by (simp add: word_less_nat_alt)
-
-method restart_bound =
-  (rule restart_div_le restart_lt(2) |
-    (rule restart_avg restart_avg2 restart_lt(1) restart_mul restart_add restart_sum; assumption) |
-    (simp add: word_less_nat_alt; fail))
-
-definition Search_restart_due_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
-    ('s, bool, 'abort) function_contract\<close> where
-  \<open>Search_restart_due_contract r g s \<equiv>
-     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s in
-     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s') in
-     make_function_contract pre post\<close>
-
-lemma Search_restart_due_spec:
-  shows \<open>\<Gamma>; Search_restart_due r \<Turnstile>\<^sub>F Search_restart_due_contract r g s\<close>
-  apply (crush_boot f: Search_restart_due_def contract: Search_restart_due_contract_def)
-  apply (crush_base inline: len_def BIG_def simp add: true_def false_def)
-  apply (all \<open>restart_bound?\<close>)
-  apply (all \<open>search_bound\<close>)
   done
 
 end

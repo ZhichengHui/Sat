@@ -599,7 +599,8 @@ impl Search {
         }
     }
 
-    /// The number of decision levels of the literals of clause `c`.
+    /// The number of decision levels of the literals of clause `c`; stamps those levels with a new
+    /// `tick`, as `learnt_lbd` does.
     fn clause_lbd(&mut self, f: &Formula, learned: &Vec<Clause>, c: usize) -> usize {
         if self.tick < NONE {
             self.tick += 1;
@@ -810,7 +811,8 @@ impl Search {
         self.learnt.truncate(i);
     }
 
-    /// The number of decision levels of the literals of `learnt`.
+    /// The number of decision levels of the literals of `learnt`; stamps those levels with a new
+    /// `tick` (the level filter of `lit_redundant`).
     fn learnt_lbd(&mut self) -> usize {
         if self.tick < NONE {
             self.tick += 1;
@@ -911,10 +913,11 @@ impl Search {
 
     /// Glucose's dynamic restarts, after a conflict: adds the literal block distance `l` of the
     /// clause learned last (the last of `lbd`) to a fast moving average (`fast`, weight 1/32,
-    /// scaled by `2^16`) and to the average over all conflicts (`lbd_sum` / `nconf`), unless `l`
-    /// or the sum is out of range (`l >= 2^20`, `lbd_sum >= 2^40`); true, and the count `since`
-    /// starts again, when at least 50 conflicts after the last restart the fast average times
-    /// K = 0.6 exceeds the overall one.
+    /// scaled by `2^16`) and to the average over all conflicts (`lbd_sum` / `nconf`), unless a
+    /// value is out of range (`l >= 2^20`, `lbd_sum >= 2^40`, `nconf >= BIG`, `fast >= 2^36`);
+    /// true, and the count `since` starts again, when at least 50 conflicts after the last restart
+    /// the fast average times K = 0.6 exceeds the overall one (false if `lbd_sum >= 2^41` or
+    /// `fast >= 2^37`, where the comparison could overflow).
     fn restart_due(&mut self) -> bool {
         let n = self.lbd.len();
         let l = if n > 0 { self.lbd[n - 1] } else { 0 };
