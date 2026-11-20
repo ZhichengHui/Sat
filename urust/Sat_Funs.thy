@@ -827,7 +827,7 @@ definition "Search_analyze" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<
     };
     * (self.Search_learnt[0_usize]) = Lit_mk { Lit_var: * p, Lit_value: !((* (self.Search_assign))[* p]) };
     if (* (self.Search_inc)) < BIG() {
-      * (self.Search_inc) += ((* (self.Search_inc)) / 32_usize) + 1_usize;
+      * (self.Search_inc) += ((* (self.Search_inc)) / 512_usize) + 1_usize;
     };
     Search_minimize(self);
     Search_finish_learnt(self);

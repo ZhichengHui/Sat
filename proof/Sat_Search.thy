@@ -130,12 +130,12 @@ lemma big_succ_le:
   using big_c(1)[of c] succ_less[of c] by simp
 
 lemma inc_div:
-  \<open>(x :: 64 word) < 0x4000000000000000 \<Longrightarrow> unat (x div 0x20) < 18446744073709551615\<close>
+  \<open>(x :: 64 word) < 0x4000000000000000 \<Longrightarrow> unat (x div 0x200) < 18446744073709551615\<close>
   using big_c(1)[of x] by (simp add: unat_div)
 
 lemma inc_add:
   assumes \<open>(x :: 64 word) < 0x4000000000000000\<close>
-  shows \<open>unat x + unat (x div 0x20 + 1) < 18446744073709551616\<close>
+  shows \<open>unat x + unat (x div 0x200 + 1) < 18446744073709551616\<close>
   using assms by (simp add: word_less_nat_alt unat_div unat_word_ariths)
 
 lemma one_lt:
