@@ -988,7 +988,7 @@ impl Search {
         }
         self.learnt[0] = Lit { var: p, value: !self.assign[p] };
         if self.inc < BIG {
-            self.inc += self.inc / 32 + 1;
+            self.inc += self.inc / 512 + 1;
         }
         self.minimize();
         self.finish_learnt();
