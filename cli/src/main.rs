@@ -14,10 +14,14 @@ use std::process::ExitCode;
 
 /// Parses DIMACS CNF text: comment lines (`c ...`), one header `p cnf VARS CLAUSES`, then the
 /// clauses as integers, each clause ended by `0`. A `%` line ends the input (as in SATLIB files).
+/// An empty clause (a `0` that ends no literal) read after the header's number of clauses is
+/// ignored with a warning: the SATLIB pret files end with such a lone `0`. Within that number it
+/// is an empty clause, and the formula is unsatisfiable.
 fn parse(src: &str) -> Result<Formula, String> {
     let mut header: Option<(usize, usize)> = None;
     let mut clauses = Vec::new();
     let mut cur = Vec::new();
+    let mut ignored = 0;
     for line in src.lines() {
         let t = line.trim();
         if t.starts_with('%') {
@@ -39,10 +43,14 @@ fn parse(src: &str) -> Result<Formula, String> {
             header = Some((n, m));
             continue;
         }
-        let (n, _) = header.ok_or("clause before the header")?;
+        let (n, m) = header.ok_or("clause before the header")?;
         for tok in t.split_whitespace() {
             let x: i64 = tok.parse().map_err(|_| format!("bad literal: {tok}"))?;
             if x == 0 {
+                if cur.is_empty() && clauses.len() >= m {
+                    ignored += 1;
+                    continue;
+                }
                 clauses.push(Clause(std::mem::take(&mut cur)));
                 continue;
             }
@@ -54,6 +62,9 @@ fn parse(src: &str) -> Result<Formula, String> {
         }
     }
     let (n, m) = header.ok_or("no header line")?;
+    if ignored > 0 {
+        eprintln!("warning: ignored {ignored} empty clause(s) after the header's {m} clauses");
+    }
     if !cur.is_empty() {
         clauses.push(Clause(cur));
     }
@@ -106,5 +117,37 @@ fn main() -> ExitCode {
             eprintln!("error: {e}");
             ExitCode::from(1)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn lens(f: &Formula) -> Vec<usize> {
+        f.clauses.iter().map(|c| c.0.len()).collect()
+    }
+
+    #[test]
+    fn trailing_zero_after_the_count_is_ignored() {
+        let f = parse("c pret\np cnf 3 2\n1 -2 0\n2 3 0\n0\n").unwrap();
+        assert_eq!(f.num_vars, 3);
+        assert_eq!(lens(&f), vec![2, 2]);
+    }
+
+    #[test]
+    fn empty_clause_within_the_count_is_kept() {
+        let f = parse("p cnf 2 3\n1 0\n0\n-2 0\n").unwrap();
+        assert_eq!(lens(&f), vec![1, 0, 1]);
+        let f = parse("p cnf 1 1\n0\n").unwrap();
+        assert_eq!(lens(&f), vec![0]);
+    }
+
+    #[test]
+    fn percent_line_ends_the_input() {
+        let f = parse("p cnf 2 2\n1 2 0\n-1 0\n%\n0\n\n").unwrap();
+        assert_eq!(lens(&f), vec![2, 1]);
+        let f = parse("p cnf 2 1\n1 2 0\n%\n-1 0\n").unwrap();
+        assert_eq!(lens(&f), vec![2]);
     }
 }
