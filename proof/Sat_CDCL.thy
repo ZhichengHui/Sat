@@ -87,6 +87,48 @@ lemma learned_push':
   using learned_ok_push[of f L \<open>make_Clause x\<close> \<open>the (rvec_append_val L [make_Clause x])\<close>]
     learned_small[of f L] push_ok(3)[of L24 L \<open>[make_Clause x]\<close>] cap_max_big(4) by simp
 
+text \<open>\<^verbatim>\<open>on_conflict\<close> pushes onto \<^verbatim>\<open>lbd\<close> and \<^verbatim>\<open>dead\<close>, both shorter than \<^verbatim>\<open>BIG\<close>.\<close>
+lemma sok_lbd_dead:
+  assumes s: \<open>sok s\<close>
+    and l: \<open>word64_of_nat (rvec_length (Search_lbd s)) < (0x100000000000000 :: 64 word)\<close>
+    and d: \<open>word64_of_nat (rvec_length (Search_dead s)) < (0x100000000000000 :: 64 word)\<close>
+  shows \<open>\<exists>y. rvec_append_val (Search_dead s) [False] = Some y\<close>
+    \<open>\<exists>y. rvec_append_val (Search_lbd s) [x] = Some y\<close>
+    \<open>sok_in (update_Search_dead (\<lambda>_. the (rvec_append_val (Search_dead s) [False]))
+       (update_Search_lbd (\<lambda>_. the (rvec_append_val (Search_lbd s) [x])) s))\<close>
+proof -
+  have v: \<open>vok L1 (Search_dead s)\<close> \<open>vok L8 (Search_lbd s)\<close>
+    using s unfolding sok_def by simp_all
+  note pd = push_ok[of L1 \<open>Search_dead s\<close> \<open>[False]\<close>, OF v(1) d cap_max_big(1)]
+  note pl = push_ok[of L8 \<open>Search_lbd s\<close> \<open>[x]\<close>, OF v(2) l cap_max_big(2)]
+  show \<open>\<exists>y. rvec_append_val (Search_dead s) [False] = Some y\<close>
+    using pd(1) by simp
+  show \<open>\<exists>y. rvec_append_val (Search_lbd s) [x] = Some y\<close>
+    using pl(1) by simp
+  have \<open>vok L1 (the (rvec_append_val (Search_dead s) [False]))\<close>
+    \<open>vok L8 (the (rvec_append_val (Search_lbd s) [x]))\<close>
+    using pd(2) pl(2) by simp_all
+  then show \<open>sok_in (update_Search_dead (\<lambda>_. the (rvec_append_val (Search_dead s) [False]))
+       (update_Search_lbd (\<lambda>_. the (rvec_append_val (Search_lbd s) [x])) s))\<close>
+    using s unfolding sok_in_def sok_def by simp
+qed
+
+text \<open>\<^verbatim>\<open>cdcl\<close> pushes onto \<^verbatim>\<open>lim\<close>, shorter than \<^verbatim>\<open>BIG\<close>.\<close>
+lemma sok_lim_push:
+  assumes s: \<open>sok_in s\<close>
+    and l: \<open>word64_of_nat (rvec_length (Search_lim s)) < (0x100000000000000 :: 64 word)\<close>
+  shows \<open>\<exists>y. rvec_append_val (Search_lim s) [x] = Some y\<close>
+    \<open>sok_in (update_Search_lim (\<lambda>_. the (rvec_append_val (Search_lim s) [x])) s)\<close>
+proof -
+  have v: \<open>vok L8 (Search_lim s)\<close>
+    using s unfolding sok_in_def sok_def by simp
+  note p = push_ok[of L8 \<open>Search_lim s\<close> \<open>[x]\<close>, OF v l cap_max_big(2)]
+  show \<open>\<exists>y. rvec_append_val (Search_lim s) [x] = Some y\<close>
+    using p(1) by simp
+  show \<open>sok_in (update_Search_lim (\<lambda>_. the (rvec_append_val (Search_lim s) [x])) s)\<close>
+    using p(2) s unfolding sok_in_def sok_def by simp
+qed
+
 section \<open>Bounds of the main loop\<close>
 
 method cdcl_bound =
@@ -128,6 +170,7 @@ lemma on_conflict_spec:
       simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
   apply (all \<open>cdcl_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (all \<open>(rule sok_lbd_dead; (assumption | (simp add: not_le; fail)))?\<close>)
   done
 
 definition cdcl_contract :: \<open>Formula \<Rightarrow> ('s, Answer option, 'abort) function_contract\<close> where
@@ -144,7 +187,7 @@ lemma cdcl_spec:
       contracts add: new_search_contract_def init_contract_def
       simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
   apply (all \<open>search_bound?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (all \<open>((unfold sok_in_def)?, assumption)?\<close>)
   subgoal for _ s_ref l_ref _ _ _ confl_ref sr_ref ra_ref st_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -169,10 +212,13 @@ lemma cdcl_spec:
           Search_reduce_contract_def Search_restart_due_contract_def
         simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
     apply (all \<open>cdcl_bound?\<close>)
-    apply (all \<open>(sok_tac; fail)?\<close>)
+    apply (all \<open>((unfold sok_in_def)?, assumption)?\<close>)
+    apply (all \<open>(rule sok_lim_push; (((unfold sok_in_def)?, assumption) | (simp add: not_le; fail)))?\<close>)
+    apply (all \<open>(rule vok_new)?\<close>)
     done
   apply (all \<open>cdcl_bound?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (all \<open>((unfold sok_in_def)?, assumption)?\<close>)
+  apply (all \<open>(rule vok_new)?\<close>)
   done
 
 end
