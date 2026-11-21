@@ -916,7 +916,7 @@ impl Search {
     /// scaled by `2^16`) and to the average over all conflicts (`lbd_sum` / `nconf`), unless a
     /// value is out of range (`l >= 2^20`, `lbd_sum >= 2^40`, `nconf >= BIG`, `fast >= 2^36`);
     /// true, and the count `since` starts again, when at least 50 conflicts after the last restart
-    /// the fast average times K = 0.6 exceeds the overall one (false if `lbd_sum >= 2^41` or
+    /// the fast average times K = 0.7 exceeds the overall one (false if `lbd_sum >= 2^41` or
     /// `fast >= 2^37`, where the comparison could overflow).
     fn restart_due(&mut self) -> bool {
         let n = self.lbd.len();
@@ -932,7 +932,7 @@ impl Search {
         if self.since < 50 || self.nconf == 0 || self.lbd_sum >= 0x20000000000 || self.fast >= 0x2000000000 {
             return false;
         }
-        if self.fast * 3 > self.lbd_sum * 65536 / self.nconf * 5 {
+        if self.fast * 7 > self.lbd_sum * 65536 / self.nconf * 10 {
             self.since = 0;
             return true;
         }
