@@ -301,6 +301,9 @@ definition "Search_watch" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Ri
 (* Rust: Search::attach *)
 definition "Search_attach" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> Formula \<Rightarrow> (Clause rvec) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_attach \<equiv> \<lambda>self f learned c. FunctionBody \<lbrakk>
+    if ((rvec_len(* (self.Search_arena)) % 2_usize) == 1_usize) && (rvec_len(* (self.Search_arena)) < BIG()) {
+      rvec_push(self.Search_arena, NONE());
+    };
     let o_v = rvec_len(* (self.Search_arena));
     if rvec_len(* (self.Search_start)) < BIG() {
       rvec_push(self.Search_start, o_v);
@@ -312,8 +315,8 @@ definition "Search_attach" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<R
       if (k0 < rvec_len(* (self.Search_watches))) && (k1 < rvec_len(* (self.Search_watches))) {
         * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_arena)[o_v + 4_usize]) = k0;
         * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_arena)[o_v + 5_usize]) = k1;
-        Search_watch(self, k0, 2_usize * o_v);
-        Search_watch(self, k1, (2_usize * o_v) + 1_usize);
+        Search_watch(self, k0, o_v + 5_usize);
+        Search_watch(self, k1, o_v + 4_usize);
       }
     }
   \<rbrakk>\<close>
@@ -909,9 +912,8 @@ definition "on_conflict" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rig
 (* Rust: Search::other_key *)
 definition "Search_other_key" :: \<open>Search \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_other_key \<equiv> \<lambda>self node. FunctionBody \<lbrakk>
-    let o_v = node / 2_usize;
-    if (o_v < BIG()) && ((o_v + 5_usize) < rvec_len(self.Search_arena)) {
-      \<llangle>rvec_elems\<rrangle>\<^sub>1(self.Search_arena)[(o_v + 5_usize) - (node % 2_usize)]
+    if node < rvec_len(self.Search_arena) {
+      \<llangle>rvec_elems\<rrangle>\<^sub>1(self.Search_arena)[node]
     } else {
       NONE()
     }
@@ -985,16 +987,19 @@ definition "Search_find_watch" :: \<open>Search \<Rightarrow> (64 word) \<Righta
 (* Rust: Search::move_watch *)
 definition "Search_move_watch" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_move_watch \<equiv> \<lambda>self k node okey. FunctionBody \<lbrakk>
-    let o_v = node / 2_usize;
-    if (o_v >= BIG()) || ((o_v + 5_usize) >= rvec_len(* (self.Search_arena))) {
+    if (node < 4_usize) || (node >= rvec_len(* (self.Search_arena))) {
       return 1_usize;
     };
-    let mp = if (node % 2_usize) == 0_usize {
+    let o_v = (node - (node % 2_usize)) - 4_usize;
+    if (o_v + 5_usize) >= rvec_len(* (self.Search_arena)) {
+      return 1_usize;
+    };
+    let mp = if (node % 2_usize) == 1_usize {
       o_v + 2_usize
     } else {
       o_v + 3_usize
     };
-    let qp = if (node % 2_usize) == 0_usize {
+    let qp = if (node % 2_usize) == 1_usize {
       o_v + 3_usize
     } else {
       o_v + 2_usize
@@ -1053,7 +1058,11 @@ definition "Search_propagate_lit" :: \<open>(('addr, 'gv, Search) Global_Store.r
               * j += 1_usize;
             };
             if r == 2_usize {
-              let o_v = node / 2_usize;
+              let o_v = if node >= 4_usize {
+                (node - (node % 2_usize)) - 4_usize
+              } else {
+                NONE()
+              };
               * confl = (if o_v < rvec_len(* (self.Search_arena)) {
                 \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_arena))[o_v]
               } else {
