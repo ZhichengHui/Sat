@@ -4,6 +4,7 @@ session "Sat_Proof" = "Sat_Spec" +
     Sat_Partial
     Sat_Proof
     Sat_Certify
+    Sat_Vectors
     Sat_Search
     Sat_Minimize
     Sat_Reduce

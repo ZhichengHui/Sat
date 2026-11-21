@@ -21,21 +21,21 @@ definition Search_count_live_contract :: \<open>('addr, 'gv, Search) Global_Stor
 lemma Search_count_live_spec:
   shows \<open>\<Gamma>; Search_count_live r \<Turnstile>\<^sub>F Search_count_live_contract r g s\<close>
   apply (crush_boot f: Search_count_live_def contract: Search_count_live_contract_def)
-  apply (crush_base inline: NONE_def BIG_def simp add: true_def false_def rvec_elems_focus_modify)
+  apply (crush_base inline: NONE_def BIG_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for live_ref i_ref
     apply (ucincl_discharge\<open>
       rule_tac
         INV=\<open>\<lambda>k. \<Squnion>gs s' gl l gi i. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
-               live_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star> \<langle>sok s'\<rangle>\<close> and
+               live_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star> \<langle>sok_in s'\<rangle>\<close> and
         INV'=\<open>\<lambda>k. \<Squnion>gs s' gl l gi i. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
                live_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star>
-               \<langle>sok s' \<and> i < word64_of_nat (rvec_length (Search_lbd s')) \<and> i < word64_of_nat (rvec_length (Search_dead s'))\<rangle>\<close> and
+               \<langle>sok_in s' \<and> i < word64_of_nat (rvec_length (Search_lbd s')) \<and> i < word64_of_nat (rvec_length (Search_dead s'))\<rangle>\<close> and
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base inline: NONE_def simp add: true_def false_def rvec_elems_focus_modify)
+    apply (crush_base inline: BIG_def ACT_def NONE_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
     apply (all \<open>search_bound?\<close>)
     apply (all \<open>(sok_tac; fail)?\<close>)
     done
@@ -47,7 +47,7 @@ definition Search_cut_contract :: \<open>Search \<Rightarrow> 64 word \<Rightarr
 lemma Search_cut_spec:
   shows \<open>\<Gamma>; Search_cut s live \<Turnstile>\<^sub>F Search_cut_contract s live\<close>
   apply (crush_boot f: Search_cut_def contract: Search_cut_contract_def)
-  apply (crush_base inline: Cut_mk_def simp add: true_def false_def rvec_elems_focus_modify)
+  apply (crush_base inline: BIG_def ACT_def Cut_mk_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for left_ref t_ref
@@ -60,7 +60,7 @@ lemma Search_cut_spec:
         \<tau>=\<open>\<lambda>_. can_alloc_reference\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base inline: Cut_mk_def simp add: true_def false_def rvec_elems_focus_modify)
+    apply (crush_base inline: BIG_def ACT_def Cut_mk_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
     apply (all \<open>search_bound?\<close>)
     apply (all \<open>(sok_tac; fail)?\<close>)
     done
@@ -76,7 +76,7 @@ definition Search_unwatch_contract :: \<open>('addr, 'gv, Search) Global_Store.r
 lemma Search_unwatch_spec:
   shows \<open>\<Gamma>; Search_unwatch r m i \<Turnstile>\<^sub>F Search_unwatch_contract r g s m i\<close>
   apply (crush_boot f: Search_unwatch_def contract: Search_unwatch_contract_def)
-  apply (crush_base inline: NONE_def BIG_def simp add: true_def false_def rvec_elems_focus_modify)
+  apply (crush_base inline: NONE_def BIG_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   done
@@ -91,23 +91,23 @@ definition Search_kill_contract :: \<open>('addr, 'gv, Search) Global_Store.ref 
 lemma Search_kill_spec:
   shows \<open>\<Gamma>; Search_kill r m t left \<Turnstile>\<^sub>F Search_kill_contract r g s m t left\<close>
   apply (crush_boot f: Search_kill_def contract: Search_kill_contract_def)
-  apply (crush_base specs add: Search_unwatch_spec
-      contracts add: Search_unwatch_contract_def simp add: true_def false_def rvec_elems_focus_modify)
+  apply (crush_base inline: BIG_def ACT_def specs add: Search_unwatch_spec
+      contracts add: Search_unwatch_contract_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for left_ref i_ref
     apply (ucincl_discharge\<open>
       rule_tac
         INV=\<open>\<lambda>k. \<Squnion>gs s' gl l gi i. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
-               left_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star> \<langle>sok s'\<rangle>\<close> and
+               left_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star> \<langle>sok_in s'\<rangle>\<close> and
         INV'=\<open>\<lambda>k. \<Squnion>gs s' gl l gi i. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
                left_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star>
-               \<langle>sok s' \<and> i < word64_of_nat (rvec_length (Search_lbd s')) \<and> i < word64_of_nat (rvec_length (Search_dead s'))\<rangle>\<close> and
+               \<langle>sok_in s' \<and> i < word64_of_nat (rvec_length (Search_lbd s')) \<and> i < word64_of_nat (rvec_length (Search_dead s'))\<rangle>\<close> and
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base specs add: Search_unwatch_spec
-        contracts add: Search_unwatch_contract_def simp add: true_def false_def rvec_elems_focus_modify)
+    apply (crush_base inline: BIG_def ACT_def specs add: Search_unwatch_spec
+        contracts add: Search_unwatch_contract_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
     apply (all \<open>search_bound?\<close>)
     apply (all \<open>(sok_tac; fail)?\<close>)
     done
@@ -123,9 +123,9 @@ definition Search_reduce_contract :: \<open>('addr, 'gv, Search) Global_Store.re
 lemma Search_reduce_spec:
   shows \<open>\<Gamma>; Search_reduce r m \<Turnstile>\<^sub>F Search_reduce_contract r g s m\<close>
   apply (crush_boot f: Search_reduce_def contract: Search_reduce_contract_def)
-  apply (crush_base specs add: Search_count_live_spec Search_cut_spec Search_kill_spec
+  apply (crush_base inline: BIG_def ACT_def specs add: Search_count_live_spec Search_cut_spec Search_kill_spec
       contracts add: Search_count_live_contract_def Search_cut_contract_def Search_kill_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify)
+      simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
   apply (all \<open>(sok_tac; fail)?\<close>)
   done
 
@@ -133,7 +133,7 @@ section \<open>Restarts\<close>
 
 text \<open>The moving averages of the literal block distances, scaled by \<open>2^16\<close>, stay below \<open>2^64\<close>
   because \<^verbatim>\<open>restart_due\<close> checks the range of every operand; the word lemmas below are the
-  bounds that \<open>crush_base\<close> leaves.\<close>
+  bounds that \<open>crush_base inline: BIG_def ACT_def\<close> leaves.\<close>
 
 lemma restart_avg:
   assumes \<open>\<not> 0x20000000000 \<le> (a :: 64 word)\<close>
@@ -173,7 +173,7 @@ definition Search_restart_due_contract :: \<open>('addr, 'gv, Search) Global_Sto
 lemma Search_restart_due_spec:
   shows \<open>\<Gamma>; Search_restart_due r \<Turnstile>\<^sub>F Search_restart_due_contract r g s\<close>
   apply (crush_boot f: Search_restart_due_def contract: Search_restart_due_contract_def)
-  apply (crush_base inline: BIG_def simp add: true_def false_def rvec_elems_focus_modify)
+  apply (crush_base inline: BIG_def ACT_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
   apply (all \<open>restart_bound?\<close>)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)

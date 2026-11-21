@@ -762,7 +762,8 @@ definition "Search_unmark_from" :: \<open>(('addr, 'gv, Search) Global_Store.ref
         * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_seen)[v]) = false;
       };
       * k += 1_usize;
-    }
+    };
+    rvec_truncate(self.Search_learnt, i);
   \<rbrakk>\<close>
 
 (* Rust: Search::minimize *)
@@ -772,7 +773,6 @@ definition "Search_minimize" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \
     let i = Search_compact(self);
     Search_clear_marks(self);
     Search_unmark_from(self, i);
-    rvec_truncate(self.Search_learnt, i);
   \<rbrakk>\<close>
 
 (* Rust: Search::finish_learnt *)

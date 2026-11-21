@@ -125,7 +125,7 @@ lemma on_conflict_spec:
         Search_enqueue_spec Search_learnt_lbd_spec
       contracts add: certify_contract_def Search_analyze_contract_def Search_backtrack_contract_def
         Search_attach_contract_def Search_enqueue_contract_def Search_learnt_lbd_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify)
+      simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
   apply (all \<open>cdcl_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   done
@@ -142,7 +142,7 @@ lemma cdcl_spec:
   apply (crush_base inline: NONE_def BIG_def
       specs add: new_search_spec init_spec
       contracts add: new_search_contract_def init_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify)
+      simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for _ s_ref l_ref _ _ _ confl_ref sr_ref ra_ref st_ref
@@ -152,12 +152,12 @@ lemma cdcl_spec:
                confl_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star>
                sr_ref \<mapsto>\<langle>\<top>\<rangle> gsr\<down>sr \<star> ra_ref \<mapsto>\<langle>\<top>\<rangle> gra\<down>ra \<star>
                st_ref \<mapsto>\<langle>\<top>\<rangle> gt\<down>t \<star> can_alloc_reference \<star>
-               \<langle>sok s' \<and> learned_ok f L \<and> vok L24 L\<rangle>\<close> and
+               \<langle>sok_in s' \<and> learned_ok f L \<and> vok L24 L\<rangle>\<close> and
         INV'=\<open>\<lambda>k. \<Squnion>gs s' gl L gc c gsr sr gra ra gt t. s_ref \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> l_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>L \<star>
                confl_ref \<mapsto>\<langle>\<top>\<rangle> gc\<down>c \<star>
                sr_ref \<mapsto>\<langle>\<top>\<rangle> gsr\<down>sr \<star> ra_ref \<mapsto>\<langle>\<top>\<rangle> gra\<down>ra \<star>
                st_ref \<mapsto>\<langle>\<top>\<rangle> gt\<down>t \<star> can_alloc_reference \<star>
-               \<langle>sok s' \<and> learned_ok f L \<and> vok L24 L \<and> t < 0xFFFFFFFFFFFFFFFF\<rangle>\<close> and
+               \<langle>sok_in s' \<and> learned_ok f L \<and> vok L24 L \<and> t < 0xFFFFFFFFFFFFFFFF\<rangle>\<close> and
         \<tau>=\<open>\<lambda>r. can_alloc_reference \<star> \<langle>cdcl_post f r\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
@@ -167,7 +167,7 @@ lemma cdcl_spec:
         contracts add: Search_propagate_contract_def on_conflict_contract_def Search_backtrack_contract_def
           Search_enqueue_contract_def Search_pick_contract_def model_contract_def satisfies_contract_def
           Search_reduce_contract_def Search_restart_due_contract_def
-        simp add: true_def false_def rvec_elems_focus_modify)
+        simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
     apply (all \<open>cdcl_bound?\<close>)
     apply (all \<open>(sok_tac; fail)?\<close>)
     done

@@ -816,7 +816,8 @@ impl Search {
         self.toclear.clear();
     }
 
-    /// Clears the marks of the variables of the literals of `learnt` from position `i` on.
+    /// Clears the marks of the variables of the literals of `learnt` from position `i` on, and
+    /// truncates `learnt` to `i` literals.
     fn unmark_from(&mut self, i: usize) {
         let mut k = i;
         while k < self.learnt.len() {
@@ -826,6 +827,7 @@ impl Search {
             }
             k += 1;
         }
+        self.learnt.truncate(i);
     }
 
     /// Removes from `learnt` the literals after the first that are `lit_redundant`, and clears
@@ -836,7 +838,6 @@ impl Search {
         let i = self.compact();
         self.clear_marks();
         self.unmark_from(i);
-        self.learnt.truncate(i);
     }
 
     /// The number of decision levels of the literals of `learnt`; stamps those levels with a new
