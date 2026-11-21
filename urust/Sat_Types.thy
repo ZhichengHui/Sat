@@ -8,10 +8,10 @@ declare [[urust_ground_body_types]]
 
 (* Rust: Assignments *)
 scalable_datatype_record Assignments =
-  Assignments_v0 :: \<open>bool list\<close>
+  Assignments_v0 :: \<open>bool rvec\<close>
 micro_rust_record Assignments
 
-definition "Assignments_mk" :: \<open>(bool list) \<Rightarrow> ('s, Assignments, 'abort, 'i, 'o) function_body\<close> where
+definition "Assignments_mk" :: \<open>(bool rvec) \<Rightarrow> ('s, Assignments, 'abort, 'i, 'o) function_body\<close> where
   [crush_inline]: \<open>Assignments_mk \<equiv> \<lambda>a0. FunctionBody (literal (make_Assignments a0))\<close>
 
 (* Rust: Lit *)
@@ -25,28 +25,28 @@ definition "Lit_mk" :: \<open>(64 word) \<Rightarrow> bool \<Rightarrow> ('s, Li
 
 (* Rust: Clause *)
 scalable_datatype_record Clause =
-  Clause_v0 :: \<open>Lit list\<close>
+  Clause_v0 :: \<open>Lit rvec\<close>
 micro_rust_record Clause
 
-definition "Clause_mk" :: \<open>(Lit list) \<Rightarrow> ('s, Clause, 'abort, 'i, 'o) function_body\<close> where
+definition "Clause_mk" :: \<open>(Lit rvec) \<Rightarrow> ('s, Clause, 'abort, 'i, 'o) function_body\<close> where
   [crush_inline]: \<open>Clause_mk \<equiv> \<lambda>a0. FunctionBody (literal (make_Clause a0))\<close>
 
 (* Rust: Pasn *)
 scalable_datatype_record Pasn =
   Pasn_assign :: \<open>Assignments\<close>
-  Pasn_set :: \<open>bool list\<close>
+  Pasn_set :: \<open>bool rvec\<close>
 micro_rust_record Pasn
 
-definition "Pasn_mk" :: \<open>Assignments \<Rightarrow> (bool list) \<Rightarrow> ('s, Pasn, 'abort, 'i, 'o) function_body\<close> where
+definition "Pasn_mk" :: \<open>Assignments \<Rightarrow> (bool rvec) \<Rightarrow> ('s, Pasn, 'abort, 'i, 'o) function_body\<close> where
   [crush_inline]: \<open>Pasn_mk \<equiv> \<lambda>a0 a1. FunctionBody (literal (make_Pasn a0 a1))\<close>
 
 (* Rust: Formula *)
 scalable_datatype_record Formula =
-  Formula_clauses :: \<open>Clause list\<close>
+  Formula_clauses :: \<open>Clause rvec\<close>
   Formula_num_vars :: \<open>64 word\<close>
 micro_rust_record Formula
 
-definition "Formula_mk" :: \<open>(Clause list) \<Rightarrow> (64 word) \<Rightarrow> ('s, Formula, 'abort, 'i, 'o) function_body\<close> where
+definition "Formula_mk" :: \<open>(Clause rvec) \<Rightarrow> (64 word) \<Rightarrow> ('s, Formula, 'abort, 'i, 'o) function_body\<close> where
   [crush_inline]: \<open>Formula_mk \<equiv> \<lambda>a0 a1. FunctionBody (literal (make_Formula a0 a1))\<close>
 
 (* Rust: Answer *)
@@ -76,37 +76,37 @@ definition "Cut_mk" :: \<open>(64 word) \<Rightarrow> (64 word) \<Rightarrow> ('
 
 (* Rust: Search *)
 scalable_datatype_record Search =
-  Search_assign :: \<open>bool list\<close>
-  Search_set :: \<open>bool list\<close>
-  Search_false_lit :: \<open>bool list\<close>
-  Search_level :: \<open>(64 word) list\<close>
-  Search_reason :: \<open>(64 word) list\<close>
-  Search_trail :: \<open>(64 word) list\<close>
-  Search_lim :: \<open>(64 word) list\<close>
+  Search_assign :: \<open>bool rvec\<close>
+  Search_set :: \<open>bool rvec\<close>
+  Search_false_lit :: \<open>bool rvec\<close>
+  Search_level :: \<open>(64 word) rvec\<close>
+  Search_reason :: \<open>(64 word) rvec\<close>
+  Search_trail :: \<open>(64 word) rvec\<close>
+  Search_lim :: \<open>(64 word) rvec\<close>
   Search_qhead :: \<open>64 word\<close>
-  Search_watches :: \<open>((64 word) list) list\<close>
-  Search_arena :: \<open>(64 word) list\<close>
-  Search_start :: \<open>(64 word) list\<close>
-  Search_phase :: \<open>bool list\<close>
-  Search_act :: \<open>(64 word) list\<close>
+  Search_watches :: \<open>((64 word) rvec) rvec\<close>
+  Search_arena :: \<open>(64 word) rvec\<close>
+  Search_start :: \<open>(64 word) rvec\<close>
+  Search_phase :: \<open>bool rvec\<close>
+  Search_act :: \<open>(64 word) rvec\<close>
   Search_inc :: \<open>64 word\<close>
-  Search_seen :: \<open>bool list\<close>
-  Search_learnt :: \<open>Lit list\<close>
-  Search_dead :: \<open>bool list\<close>
-  Search_lbd :: \<open>(64 word) list\<close>
-  Search_stamp :: \<open>(64 word) list\<close>
+  Search_seen :: \<open>bool rvec\<close>
+  Search_learnt :: \<open>Lit rvec\<close>
+  Search_dead :: \<open>bool rvec\<close>
+  Search_lbd :: \<open>(64 word) rvec\<close>
+  Search_stamp :: \<open>(64 word) rvec\<close>
   Search_tick :: \<open>64 word\<close>
-  Search_hist :: \<open>(64 word) list\<close>
-  Search_fail :: \<open>bool list\<close>
-  Search_stack :: \<open>(64 word) list\<close>
-  Search_toclear :: \<open>(64 word) list\<close>
+  Search_hist :: \<open>(64 word) rvec\<close>
+  Search_fail :: \<open>bool rvec\<close>
+  Search_stack :: \<open>(64 word) rvec\<close>
+  Search_toclear :: \<open>(64 word) rvec\<close>
   Search_fast :: \<open>64 word\<close>
   Search_lbd_sum :: \<open>64 word\<close>
   Search_nconf :: \<open>64 word\<close>
   Search_since :: \<open>64 word\<close>
 micro_rust_record Search
 
-definition "Search_mk" :: \<open>(bool list) \<Rightarrow> (bool list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (((64 word) list) list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (bool list) \<Rightarrow> (Lit list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> ((64 word) list) \<Rightarrow> (bool list) \<Rightarrow> ((64 word) list) \<Rightarrow> ((64 word) list) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, Search, 'abort, 'i, 'o) function_body\<close> where
+definition "Search_mk" :: \<open>(bool rvec) \<Rightarrow> (bool rvec) \<Rightarrow> (bool rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (64 word) \<Rightarrow> (((64 word) rvec) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (bool rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (64 word) \<Rightarrow> (bool rvec) \<Rightarrow> (Lit rvec) \<Rightarrow> (bool rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (64 word) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (bool rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, Search, 'abort, 'i, 'o) function_body\<close> where
   [crush_inline]: \<open>Search_mk \<equiv> \<lambda>a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20 a21 a22 a23 a24 a25 a26 a27. FunctionBody (literal (make_Search a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20 a21 a22 a23 a24 a25 a26 a27))\<close>
 
 end
