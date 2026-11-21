@@ -180,6 +180,34 @@ lemma Search_minimize_spec:
 
 section \<open>Conflict analysis\<close>
 
+text \<open>\<^verbatim>\<open>analyze\<close> clears \<^verbatim>\<open>learnt\<close> and pushes one literal.\<close>
+lemma vok_clear_push:
+  assumes \<open>vok l v\<close> \<open>288230376151711760 \<le> rvec_cap_max l\<close>
+  shows \<open>\<exists>y. rvec_append_val (update_rvec_elems (\<lambda>_. []) v) [x] = Some y\<close>
+    \<open>vok l (the (rvec_append_val (update_rvec_elems (\<lambda>_. []) v) [x]))\<close>
+proof -
+  have c: \<open>vok l (update_rvec_elems (\<lambda>_. []) v)\<close>
+    using assms(1) by (rule vok_update) simp
+  show \<open>\<exists>y. rvec_append_val (update_rvec_elems (\<lambda>_. []) v) [x] = Some y\<close>
+    \<open>vok l (the (rvec_append_val (update_rvec_elems (\<lambda>_. []) v) [x]))\<close>
+    using push_ok(1,2)[OF c _ assms(2), of \<open>[x]\<close>] by simp_all
+qed
+
+lemma sok_learnt_reset:
+  assumes \<open>sok_in s\<close>
+  shows \<open>sok_in (update_Search_learnt
+    (\<lambda>a. the (rvec_append_val (update_rvec_elems (\<lambda>_. []) (Search_learnt s)) [x])) s)\<close>
+proof -
+  have \<open>vok L16 (Search_learnt s)\<close>
+    using assms unfolding sok_in_def sok_def by simp
+  then have \<open>vok L16 (the (rvec_append_val (update_rvec_elems (\<lambda>_. []) (Search_learnt s)) [x]))\<close>
+    by (rule vok_clear_push(2)[OF _ cap_max_big(3)])
+  then show ?thesis
+    using assms unfolding sok_in_def sok_def by simp
+qed
+
+
+
 definition Search_analyze_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
     Formula \<Rightarrow> Clause rvec \<Rightarrow> 64 word \<Rightarrow> ('s, Lit rvec, 'abort) function_contract\<close> where
   \<open>Search_analyze_contract r g s f L c \<equiv>
@@ -191,10 +219,12 @@ definition Search_analyze_contract :: \<open>('addr, 'gv, Search) Global_Store.r
 lemma Search_analyze_spec:
   shows \<open>\<Gamma>; Search_analyze r f L c \<Turnstile>\<^sub>F Search_analyze_contract r g s f L c\<close>
   apply (crush_boot f: Search_analyze_def contract: Search_analyze_contract_def)
-  apply (crush_base inline: NONE_def BIG_def Lit_mk_def
+  apply (crush_base inline: ACT_def NONE_def BIG_def Lit_mk_def
       simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (all \<open>(erule sok_learnt_reset; fail)?\<close>)
+  apply (all \<open>(auto simp add: sok_def sok_in_def vok_clear_push cap_max_big; fail)?\<close>)
   subgoal for counter_ref p_ref idx_ref c_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -211,7 +241,7 @@ lemma Search_analyze_spec:
                \<langle>rvec_length res \<le> 4611686018427387904\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base inline: NONE_def BIG_def Lit_mk_def
+    apply (crush_base inline: ACT_def NONE_def BIG_def Lit_mk_def
         specs add: Search_analyze_clause_spec Search_prev_seen_spec Search_finish_learnt_spec
           Search_copy_learnt_spec Search_minimize_spec
         contracts add: Search_analyze_clause_contract_def Search_prev_seen_contract_def
@@ -219,6 +249,7 @@ lemma Search_analyze_spec:
         simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
     apply (all \<open>search_bound?\<close>)
     apply (all \<open>(sok_tac; fail)?\<close>)
+    apply (all \<open>(erule sok_learnt_reset)?\<close>)
     done
   done
 

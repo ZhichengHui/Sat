@@ -21,10 +21,10 @@ definition Search_count_live_contract :: \<open>('addr, 'gv, Search) Global_Stor
 lemma Search_count_live_spec:
   shows \<open>\<Gamma>; Search_count_live r \<Turnstile>\<^sub>F Search_count_live_contract r g s\<close>
   apply (crush_boot f: Search_count_live_def contract: Search_count_live_contract_def)
-  apply (crush_base inline: NONE_def BIG_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+  apply (crush_base inline: ACT_def NONE_def BIG_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
-  subgoal for live_ref i_ref
+  subgoal for hv live_ref i_ref
     apply (ucincl_discharge\<open>
       rule_tac
         INV=\<open>\<lambda>k. \<Squnion>gs s' gl l gi i. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star>
@@ -39,6 +39,7 @@ lemma Search_count_live_spec:
     apply (all \<open>search_bound?\<close>)
     apply (all \<open>(sok_tac; fail)?\<close>)
     done
+  apply (all \<open>(rule new_cap(2), simp add: not_le)?\<close>)
   done
 
 definition Search_cut_contract :: \<open>Search \<Rightarrow> 64 word \<Rightarrow> ('s, Cut, 'abort) function_contract\<close> where
@@ -76,7 +77,7 @@ definition Search_unwatch_contract :: \<open>('addr, 'gv, Search) Global_Store.r
 lemma Search_unwatch_spec:
   shows \<open>\<Gamma>; Search_unwatch r m i \<Turnstile>\<^sub>F Search_unwatch_contract r g s m i\<close>
   apply (crush_boot f: Search_unwatch_def contract: Search_unwatch_contract_def)
-  apply (crush_base inline: NONE_def BIG_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+  apply (crush_base inline: ACT_def NONE_def BIG_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   done

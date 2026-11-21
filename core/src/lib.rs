@@ -1292,8 +1292,6 @@ fn on_conflict(s: &mut Search, f: &Formula, learned: &mut Vec<Clause>, confl: us
     let learnt = s.analyze(f, learned, confl);
     if learnt.len() == 0
         || learned.len() >= BIG
-        || s.lbd.len() >= BIG
-        || s.dead.len() >= BIG
         || !certify(f, learned, &s.assign, &s.trail, &s.reason, confl, &learnt)
     {
         return 2;
@@ -1303,6 +1301,9 @@ fn on_conflict(s: &mut Search, f: &Formula, learned: &mut Vec<Clause>, confl: us
     let bj = if learnt.len() > 1 && learnt[1].var < s.level.len() { s.level[learnt[1].var] } else { 0 };
     let lbd = s.learnt_lbd();
     s.backtrack(bj);
+    if s.lbd.len() >= BIG || s.dead.len() >= BIG {
+        return 2;
+    }
     let c = f.clauses.len() + learned.len();
     learned.push(Clause(learnt));
     s.lbd.push(lbd);

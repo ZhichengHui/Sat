@@ -888,7 +888,7 @@ definition "on_conflict" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rig
       return 2_usize;
     };
     let learnt = Search_analyze(s, f, * learned, confl);
-    if ((((rvec_len(learnt) == 0_usize) || (rvec_len(* learned) >= BIG())) || (rvec_len(* (s.Search_lbd)) >= BIG())) || (rvec_len(* (s.Search_dead)) >= BIG())) || (!certify(f, * learned, * (s.Search_assign), * (s.Search_trail), * (s.Search_reason), confl, learnt)) {
+    if ((rvec_len(learnt) == 0_usize) || (rvec_len(* learned) >= BIG())) || (!certify(f, * learned, * (s.Search_assign), * (s.Search_trail), * (s.Search_reason), confl, learnt)) {
       return 2_usize;
     };
     let v = \<llangle>rvec_elems\<rrangle>\<^sub>1(learnt)[0_usize].Lit_var;
@@ -900,6 +900,9 @@ definition "on_conflict" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rig
     };
     let lbd = Search_learnt_lbd(s);
     Search_backtrack(s, bj);
+    if (rvec_len(* (s.Search_lbd)) >= BIG()) || (rvec_len(* (s.Search_dead)) >= BIG()) {
+      return 2_usize;
+    };
     let c = rvec_len(f.Formula_clauses) + rvec_len(* learned);
     rvec_push(learned, Clause_mk(learnt));
     rvec_push(s.Search_lbd, lbd);

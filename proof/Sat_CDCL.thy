@@ -120,7 +120,7 @@ definition on_conflict_contract :: \<open>('addr, 'gv, Search) Global_Store.ref 
 lemma on_conflict_spec:
   shows \<open>\<Gamma>; on_conflict r f lref c \<Turnstile>\<^sub>F on_conflict_contract r g s f lref gl L c\<close>
   apply (crush_boot f: on_conflict_def contract: on_conflict_contract_def)
-  apply (crush_base inline: NONE_def BIG_def Clause_mk_def
+  apply (crush_base inline: ACT_def NONE_def BIG_def Clause_mk_def
       specs add: certify_spec Search_analyze_spec Search_backtrack_spec Search_attach_spec
         Search_enqueue_spec Search_learnt_lbd_spec
       contracts add: certify_contract_def Search_analyze_contract_def Search_backtrack_contract_def
@@ -139,7 +139,7 @@ definition cdcl_contract :: \<open>Formula \<Rightarrow> ('s, Answer option, 'ab
 lemma cdcl_spec:
   shows \<open>\<Gamma>; cdcl f \<Turnstile>\<^sub>F cdcl_contract f\<close>
   apply (crush_boot f: cdcl_def contract: cdcl_contract_def)
-  apply (crush_base inline: NONE_def BIG_def
+  apply (crush_base inline: ACT_def NONE_def BIG_def
       specs add: new_search_spec init_spec
       contracts add: new_search_contract_def init_contract_def
       simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
@@ -161,7 +161,7 @@ lemma cdcl_spec:
         \<tau>=\<open>\<lambda>r. can_alloc_reference \<star> \<langle>cdcl_post f r\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base inline: NONE_def BIG_def Answer_Sat_mk_def Assignments_mk_def
+    apply (crush_base inline: ACT_def NONE_def BIG_def Answer_Sat_mk_def Assignments_mk_def
         specs add: Search_propagate_spec on_conflict_spec Search_backtrack_spec Search_enqueue_spec
           Search_pick_spec model_spec satisfies_spec Search_reduce_spec Search_restart_due_spec
         contracts add: Search_propagate_contract_def on_conflict_contract_def Search_backtrack_contract_def
