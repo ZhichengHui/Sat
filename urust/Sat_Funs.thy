@@ -290,6 +290,14 @@ definition "Search_push_clause" :: \<open>(('addr, 'gv, Search) Global_Store.ref
     }
   \<rbrakk>\<close>
 
+(* Rust: Search::watch *)
+definition "Search_watch" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_watch \<equiv> \<lambda>self k node. FunctionBody \<lbrakk>
+    if (k < rvec_len(* (self.Search_watches))) && (rvec_len(\<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_watches))[k]) < BIG()) {
+      rvec_push(\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_watches)[k], node);
+    }
+  \<rbrakk>\<close>
+
 (* Rust: Search::attach *)
 definition "Search_attach" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> Formula \<Rightarrow> (Clause rvec) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_attach \<equiv> \<lambda>self f learned c. FunctionBody \<lbrakk>
@@ -304,12 +312,8 @@ definition "Search_attach" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<R
       if (k0 < rvec_len(* (self.Search_watches))) && (k1 < rvec_len(* (self.Search_watches))) {
         * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_arena)[o_v + 4_usize]) = k0;
         * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_arena)[o_v + 5_usize]) = k1;
-        if rvec_len(\<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_watches))[k0]) < BIG() {
-          rvec_push(\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_watches)[k0], 2_usize * o_v);
-        };
-        if rvec_len(\<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_watches))[k1]) < BIG() {
-          rvec_push(\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_watches)[k1], (2_usize * o_v) + 1_usize);
-        }
+        Search_watch(self, k0, 2_usize * o_v);
+        Search_watch(self, k1, (2_usize * o_v) + 1_usize);
       }
     }
   \<rbrakk>\<close>
@@ -1006,9 +1010,7 @@ definition "Search_move_watch" :: \<open>(('addr, 'gv, Search) Global_Store.ref)
     if (nk < rvec_len(* (self.Search_watches))) && (nk != k) {
       * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_arena)[mp]) = found;
       * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_arena)[mp + 2_usize]) = nk;
-      if rvec_len(\<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_watches))[nk]) < BIG() {
-        rvec_push(\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_watches)[nk], node);
-      };
+      Search_watch(self, nk, node);
       return 0_usize;
     };
     if Search_key_false(* self, okey) {

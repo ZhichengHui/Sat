@@ -359,13 +359,16 @@ impl Search {
             if k0 < self.watches.len() && k1 < self.watches.len() {
                 self.arena[o + 4] = k0;
                 self.arena[o + 5] = k1;
-                if self.watches[k0].len() < BIG {
-                    self.watches[k0].push(2 * o);
-                }
-                if self.watches[k1].len() < BIG {
-                    self.watches[k1].push(2 * o + 1);
-                }
+                self.watch(k0, 2 * o);
+                self.watch(k1, 2 * o + 1);
             }
+        }
+    }
+
+    /// Adds the node `node` to the watch list `k`, if there is one and it is shorter than `BIG`.
+    fn watch(&mut self, k: usize, node: usize) {
+        if k < self.watches.len() && self.watches[k].len() < BIG {
+            self.watches[k].push(node);
         }
     }
 
@@ -522,9 +525,7 @@ impl Search {
         if nk < self.watches.len() && nk != k {
             self.arena[mp] = found;
             self.arena[mp + 2] = nk;
-            if self.watches[nk].len() < BIG {
-                self.watches[nk].push(node);
-            }
+            self.watch(nk, node);
             return 0;
         }
         if self.key_false(okey) {
