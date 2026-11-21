@@ -55,6 +55,11 @@ abbreviation lits :: \<open>Clause \<Rightarrow> Lit list\<close> where
 abbreviation asg :: \<open>Assignments \<Rightarrow> bool list\<close> where
   \<open>asg a \<equiv> rvec_elems (Assignments_v0 a)\<close>
 
+text \<open>AutoCorrode has no rule for a modification through the focus on the elements of a vector.\<close>
+lemma rvec_elems_focus_modify:
+  shows \<open>\<nabla>{rvec_elems_focus} f v = update_rvec_elems f v\<close>
+  by (simp add: focus_modify_def' focus_components rvec.expand)
+
 section \<open>Satisfaction by index\<close>
 
 
