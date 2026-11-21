@@ -216,6 +216,10 @@ lemma push_ok:
     \<open>rvec_elems (the (rvec_append_val v xs)) = rvec_elems v @ xs\<close>
   using vok_append[OF assms(1) vok_bound[OF assms(1,2)] assms(4,3)] by auto
 
+lemma in_set_update:
+  \<open>x \<in> set (xs[k := y]) \<Longrightarrow> x = y \<or> x \<in> set xs\<close>
+  using set_update_subset_insert by fastforce
+
 lemma all_set_update:
   \<open>(\<forall>w \<in> set xs. P w) \<Longrightarrow> P y \<Longrightarrow> \<forall>w \<in> set (xs[k := y]). P w\<close>
   using set_update_subset_insert by fastforce
@@ -256,7 +260,7 @@ lemma rvec_elems_focus_modify_fun:
 text \<open>The goals of the invariant that \<open>crush_base\<close> leaves.\<close>
 method sok_tac =
   (auto simp add: sok_def sok_in_def vok_new cap_max_big push_ok rvec_elems_focus_modify_fun
-    intro!: vok_update all_set_update)
+    intro!: vok_update all_set_update dest!: in_set_update)
 
 text \<open>\<^verbatim>\<open>BIG\<close> is \<open>2^56\<close>; the bounds below \<open>2^62\<close> of the word lemmas hold below it.\<close>
 lemma big56_lt:
@@ -632,7 +636,7 @@ text \<open>\<^verbatim>\<open>propagate_lit\<close> takes the watch list \<open
 lemma sok_watch_new:
   \<open>sok_in s \<Longrightarrow> sok (update_Search_watches (\<nabla>{rvec_elems_focus} (\<lambda>xs. xs[k := rvec_new_val L8])) s)\<close>
   unfolding sok_in_def sok_def rvec_elems_focus_modify_fun
-  by (auto intro!: all_set_update vok_new)
+  by (auto simp add: vok_new dest!: in_set_update)
 
 lemma sok_watch_get:
   \<open>sok_in s \<Longrightarrow> \<not> word64_of_nat (rvec_length (Search_watches s)) \<le> k \<Longrightarrow>
