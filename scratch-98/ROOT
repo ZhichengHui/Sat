@@ -1,0 +1,4 @@
+session "SatProto98" = "AutoCorrode" +
+  options [document = false]
+  sessions "Sat"
+  theories Rvec_Proto
