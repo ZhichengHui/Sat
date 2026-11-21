@@ -1,0 +1,97 @@
+diff -u a/Formula_Types.thy b/Formula_Types.thy
+--- a/Formula_Types.thy	2026-11-21 05:33:47.768671920 +0000
++++ b/Formula_Types.thy	2026-11-21 05:33:47.785671820 +0000
+@@ -26,21 +26,21 @@
+ text \<open>\<^typ>\<open>Clause\<close> is a record with exactly these fields.\<close>
+ lemma Clause_shape:
+   fixes x y :: Clause
+-  shows \<open>x = y \<longleftrightarrow> (CONST Clause_v0 x :: Lit list) = Clause_v0 y\<close>
++  shows \<open>x = y \<longleftrightarrow> (CONST Clause_v0 x :: Lit rvec) = Clause_v0 y\<close>
+   by (cases x; cases y) simp
+ 
+ text \<open>\<^typ>\<open>Formula\<close> is a record with exactly these fields.\<close>
+ lemma Formula_shape:
+   fixes x y :: Formula
+   shows \<open>x = y \<longleftrightarrow>
+-     (CONST Formula_clauses x :: Clause list) = Formula_clauses y \<and>
++     (CONST Formula_clauses x :: Clause rvec) = Formula_clauses y \<and>
+      (CONST Formula_num_vars x :: 64 word) = Formula_num_vars y\<close>
+   by (cases x; cases y) simp
+ 
+ text \<open>\<^typ>\<open>Assignments\<close> is a record with exactly these fields.\<close>
+ lemma Assignments_shape:
+   fixes x y :: Assignments
+-  shows \<open>x = y \<longleftrightarrow> (CONST Assignments_v0 x :: bool list) = Assignments_v0 y\<close>
++  shows \<open>x = y \<longleftrightarrow> (CONST Assignments_v0 x :: bool rvec) = Assignments_v0 y\<close>
+   by (cases x; cases y) simp
+ 
+ text \<open>\<^typ>\<open>Answer\<close> has exactly these constructors.\<close>
+diff -u a/Sat_Spec.thy b/Sat_Spec.thy
+--- a/Sat_Spec.thy	2026-11-21 05:33:47.768671920 +0000
++++ b/Sat_Spec.thy	2026-11-21 05:33:47.786671814 +0000
+@@ -55,24 +55,24 @@
+ 
+ text \<open>\<^verbatim>\<open>Clause::sat\<close>: some literal of the clause is satisfied.\<close>
+ definition clause_sat :: \<open>bool list \<Rightarrow> Clause \<Rightarrow> bool\<close> where
+-  \<open>clause_sat a c \<equiv> \<exists>l \<in> set (Clause_v0 c). lit_sat a l\<close>
++  \<open>clause_sat a c \<equiv> \<exists>l \<in> set (rvec_elems (Clause_v0 c)). lit_sat a l\<close>
+ 
+ text \<open>\<^verbatim>\<open>Formula::sat\<close>: every clause of the formula is satisfied.\<close>
+ definition formula_sat :: \<open>bool list \<Rightarrow> Formula \<Rightarrow> bool\<close> where
+-  \<open>formula_sat a f \<equiv> \<forall>c \<in> set (Formula_clauses f). clause_sat a c\<close>
++  \<open>formula_sat a f \<equiv> \<forall>c \<in> set (rvec_elems (Formula_clauses f)). clause_sat a c\<close>
+ 
+ text \<open>\<^verbatim>\<open>Formula::invariant\<close>, with \<^verbatim>\<open>Clause::vars_in_range\<close> and
+   \<^verbatim>\<open>Lit::var_in_range\<close>: every literal's variable is below the number of variables.\<close>
+ definition formula_invariant :: \<open>Formula \<Rightarrow> bool\<close> where
+   \<open>formula_invariant f \<equiv>
+-     \<forall>c \<in> set (Formula_clauses f). \<forall>l \<in> set (Clause_v0 c). unat (Lit_var l) < unat (Formula_num_vars f)\<close>
++     \<forall>c \<in> set (rvec_elems (Formula_clauses f)). \<forall>l \<in> set (rvec_elems (Clause_v0 c)). unat (Lit_var l) < unat (Formula_num_vars f)\<close>
+ 
+ text \<open>Every list in the formula has fewer than \<open>2^63\<close> elements. This holds for every value of a
+   Rust program (a \<^verbatim>\<open>Vec\<close> has at most \<^verbatim>\<open>isize::MAX\<close> elements); HOL lists have no such
+   bound, so the precondition states it.\<close>
+ definition sat_repr_ok :: \<open>Formula \<Rightarrow> bool\<close> where
+   \<open>sat_repr_ok f \<equiv>
+-     length (Formula_clauses f) < 2 ^ 63 \<and> (\<forall>c \<in> set (Formula_clauses f). length (Clause_v0 c) < 2 ^ 63)\<close>
++     rvec_length (Formula_clauses f) < 2 ^ 63 \<and> unat (Formula_num_vars f) < 2 ^ 63 \<and> (\<forall>c \<in> set (rvec_elems (Formula_clauses f)). rvec_length (Clause_v0 c) < 2 ^ 63)\<close>
+ 
+ subsection \<open>The contract\<close>
+ 
+@@ -85,7 +85,7 @@
+      let post = \<lambda>r. can_alloc_reference \<star>
+         \<langle>case r of
+            Answer_Sat a \<Rightarrow>
+-             length (Assignments_v0 a) = unat (Formula_num_vars f) \<and> formula_sat (Assignments_v0 a) f
++             rvec_length (Assignments_v0 a) = unat (Formula_num_vars f) \<and> formula_sat (rvec_elems (Assignments_v0 a)) f
+          | Answer_Unsat \<Rightarrow> (\<forall>a. length a = unat (Formula_num_vars f) \<longrightarrow> \<not> formula_sat a f)\<rangle> in
+      make_function_contract pre post\<close>
+ 
+@@ -119,19 +119,19 @@
+ 
+ locale Sat_heap =
+   reference reference_types
+-  + ref_1: reference_allocatable reference_types _ _ _ _ _ _ _ prism_1 \<comment> \<open>bool list\<close>
+-  + ref_2: reference_allocatable reference_types _ _ _ _ _ _ _ prism_2 \<comment> \<open>(64 word) list\<close>
++  + ref_1: reference_allocatable reference_types _ _ _ _ _ _ _ prism_1 \<comment> \<open>bool rvec\<close>
++  + ref_2: reference_allocatable reference_types _ _ _ _ _ _ _ prism_2 \<comment> \<open>(64 word) rvec\<close>
+   + ref_3: reference_allocatable reference_types _ _ _ _ _ _ _ prism_3 \<comment> \<open>64 word\<close>
+   + ref_4: reference_allocatable reference_types _ _ _ _ _ _ _ prism_4 \<comment> \<open>Search\<close>
+-  + ref_5: reference_allocatable reference_types _ _ _ _ _ _ _ prism_5 \<comment> \<open>Clause list\<close>
+-  + ref_6: reference_allocatable reference_types _ _ _ _ _ _ _ prism_6 \<comment> \<open>Lit list\<close>
++  + ref_5: reference_allocatable reference_types _ _ _ _ _ _ _ prism_5 \<comment> \<open>Clause rvec\<close>
++  + ref_6: reference_allocatable reference_types _ _ _ _ _ _ _ prism_6 \<comment> \<open>Lit rvec\<close>
+   for reference_types :: \<open>'s::{sepalg} \<Rightarrow> 'addr \<Rightarrow> 'gv \<Rightarrow> 'abort \<Rightarrow> 'i prompt \<Rightarrow> 'o prompt_output \<Rightarrow> unit\<close>
+-  and prism_1 :: \<open>('gv, bool list) prism\<close>
+-  and prism_2 :: \<open>('gv, (64 word) list) prism\<close>
++  and prism_1 :: \<open>('gv, bool rvec) prism\<close>
++  and prism_2 :: \<open>('gv, (64 word) rvec) prism\<close>
+   and prism_3 :: \<open>('gv, 64 word) prism\<close>
+   and prism_4 :: \<open>('gv, Search) prism\<close>
+-  and prism_5 :: \<open>('gv, Clause list) prism\<close>
+-  and prism_6 :: \<open>('gv, Lit list) prism\<close>
++  and prism_5 :: \<open>('gv, Clause rvec) prism\<close>
++  and prism_6 :: \<open>('gv, Lit rvec) prism\<close>
+ begin
+ 
+ abbreviation solver :: \<open>nat \<Rightarrow> Formula \<Rightarrow> ('s, Answer, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where

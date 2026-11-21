@@ -1,0 +1,4 @@
+session "SatTrial_ce12551e" = "AutoCorrode" +
+  options [document = false]
+  sessions "Sat"
+  theories Trial_Rvec
