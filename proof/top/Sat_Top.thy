@@ -10,17 +10,25 @@ text \<open>The fuel that suffices for a formula: more than twice the number of 
   literals).\<close>
 definition fuel_top :: \<open>Formula \<Rightarrow> nat\<close> where
   \<open>fuel_top f \<equiv>
-     Suc (2 * unat (Formula_num_vars f)) + length (Formula_clauses f) +
-     sum_list (List.map (\<lambda>c. length (Clause_v0 c)) (Formula_clauses f))\<close>
+     Suc (2 * unat (Formula_num_vars f)) + length (cls f) +
+     sum_list (List.map (\<lambda>c. length (lits c)) (cls f))\<close>
 
 lemma fuel_top_clause:
-  assumes \<open>c \<in> set (Formula_clauses f)\<close>
-  shows \<open>length (Clause_v0 c) \<le> fuel_top f\<close>
+  assumes \<open>c \<in> set (cls f)\<close>
+  shows \<open>length (lits c) \<le> fuel_top f\<close>
 proof -
-  have \<open>length (Clause_v0 c) \<le> sum_list (List.map (\<lambda>c. length (Clause_v0 c)) (Formula_clauses f))\<close>
+  have \<open>length (lits c) \<le> sum_list (List.map (\<lambda>c. length (lits c)) (cls f))\<close>
     using assms by (simp add: member_le_sum_list)
   then show ?thesis by (simp add: fuel_top_def)
 qed
+
+text \<open>The answer of \<^verbatim>\<open>solve\<close> from the assignment of \<^verbatim>\<open>vec![false; n]\<close>.\<close>
+lemma sol_start_rvec:
+  assumes \<open>rvec_from_elem_val l False n = Some x\<close> \<open>sol f (rvec_elems x) (rvec_elems x) r\<close>
+  shows \<open>case r of
+     Answer_Sat a \<Rightarrow> length (asg a) = n \<and> formula_sat (asg a) f
+   | Answer_Unsat \<Rightarrow> (\<forall>a. length a = n \<longrightarrow> \<not> formula_sat a f)\<close>
+  using sol_start[of f n r] assms(2) rvec_from_elem_val_Some(2)[OF assms(1)] by simp
 
 context Sat_ctx
 begin
@@ -33,18 +41,18 @@ lemma dpll_spec:
   assumes \<open>fuel_top f \<le> urust_fuel\<close>
   shows \<open>\<Gamma>; dpll f \<Turnstile>\<^sub>F solver_contract f\<close>
   apply (crush_boot f: dpll_def contract: solver_contract_def)
-  apply (crush_base inline: vec_from_elem_def Pasn_mk_def Assignments_mk_def
+  apply (crush_base inline: Pasn_mk_def Assignments_mk_def
       specs add: solve_spec contracts add: solve_contract_def
       simp add: true_def false_def unat_lt2p formula_wf_def)
   subgoal \<comment> \<open>the answer of \<^verbatim>\<open>solve\<close> from the empty assignment\<close>
-    by (erule sol_start)
+    by (erule (1) sol_start_rvec)
   subgoal \<comment> \<open>the fuel of the recursion of \<^verbatim>\<open>solve\<close>\<close>
     using assms unset_le_length[of \<open>replicate (unat (Formula_num_vars f)) False\<close>]
-    by (simp add: fuel_top_def)
+    by (drule_tac rvec_from_elem_val_Some(2)) (simp add: fuel_top_def)
   subgoal \<comment> \<open>the fuel of the recursion of \<^verbatim>\<open>propagate\<close>\<close>
-    using assms by (simp add: fuel_top_def)
+    using assms by (drule_tac rvec_from_elem_val_Some(2)) (simp add: fuel_top_def)
   subgoal \<comment> \<open>\<open>formula_wf\<close>: every variable is below the number of variables\<close>
-    unfolding formula_invariant_def by blast
+    by (drule rvec_from_elem_val_Some(2)) (auto simp add: formula_invariant_def)
   subgoal \<comment> \<open>\<open>formula_wf\<close>: every clause is shorter than \<open>2^63\<close>\<close>
     by (auto simp add: sat_repr_ok_def)
   subgoal \<comment> \<open>the fuel of the loops over a clause's literals\<close>
@@ -53,6 +61,10 @@ lemma dpll_spec:
     by (simp add: sat_repr_ok_def)
   subgoal \<comment> \<open>the fuel of the loops over the clauses\<close>
     using assms by (simp add: fuel_top_def)
+  subgoal \<comment> \<open>\<^verbatim>\<open>vec![false; num_vars]\<close> fits a \<^verbatim>\<open>Vec<bool>\<close>\<close>
+    by (simp add: sat_sizes_ok_def cap_max_bool)
+  subgoal
+    by (simp add: sat_sizes_ok_def cap_max_bool)
   done
 
 text \<open>With enough fuel the solver satisfies the contract of the specification: the answer of
@@ -99,7 +111,7 @@ theorem solver_correct:
   shows \<open>solver_correct \<Gamma>\<close>
 proof (unfold solver_correct_def, intro allI impI)
   fix f :: Formula
-  assume \<open>formula_invariant f \<and> sat_repr_ok f\<close>
+  assume \<open>formula_invariant f \<and> sat_repr_ok f \<and> sat_sizes_ok f\<close>
   have \<open>\<Gamma>; solver fuel f \<Turnstile>\<^sub>F solver_contract f\<close> if \<open>fuel_top f \<le> fuel\<close> for fuel
     by (rule Sat_ctx.solver_spec[OF Sat_ctxI that])
   then show \<open>\<exists>N. \<forall>fuel \<ge> N. \<Gamma>; solver fuel f \<Turnstile>\<^sub>F solver_contract f\<close>

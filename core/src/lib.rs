@@ -182,17 +182,22 @@ fn solve(f: &Formula, pa: Pasn) -> Answer {
 }
 
 // Conflict-driven clause learning (CDCL). The search below is not trusted: every index is checked
-// before use, so it never panics, and its answers are checked before they are returned. A `Sat`
-// answer is an assignment that `satisfies` checks against the formula; an `Unsat` answer is a
-// learned empty clause. Every learned clause is first certified by `certify` to follow from the
-// formula and the clauses learned before. When a check fails, or a loop runs out of fuel, `cdcl`
-// gives up and `solver` falls back to `solve`.
+// before use, and a vector grows only while it is shorter than `BIG` (elsewhere the step is
+// skipped, or the search gives up), so it never panics; its answers are checked before they are
+// returned. A `Sat` answer is an assignment that `satisfies` checks against the formula; an
+// `Unsat` answer is a learned empty clause. Every learned clause is first certified by `certify`
+// to follow from the formula and the clauses learned before. When a check fails, or a loop runs
+// out of fuel, `cdcl` gives up and `solver` falls back to `solve`.
 
 /// No clause, node or variable: the largest `usize`.
 const NONE: usize = 18446744073709551615;
-/// A bound on the number of variables and clauses for which the search runs (`2^62`), so that
-/// `2 * v + 1` and `2 * c + 1` do not overflow.
-const BIG: usize = 4611686018427387904;
+/// A bound on the number of variables and clauses for which the search runs, and on the length of
+/// every vector it grows (`2^56`): `2 * v + 1` and `2 * c + 1` do not overflow, and a vector of
+/// fewer than `2^56` elements of at most 24 bytes grows by a few elements without exceeding the
+/// largest capacity of a `Vec` (`isize::MAX` bytes).
+const BIG: usize = 72057594037927936;
+/// A bound on the activities and their increment (`2^62`), so that their sum does not overflow.
+const ACT: usize = 4611686018427387904;
 
 /// The number of literals of clause `c` of the clause database: the formula's clauses followed by
 /// the learned ones; 0 if there is no such clause.
@@ -253,11 +258,13 @@ struct Cut {
 /// `v` (`NONE` for a decision). The clauses are copied into the flat `arena`, clause `c` at
 /// offset `o = start[c]`: `arena[o]` is `c`, `arena[o + 1]` the end of the entry, `arena[o + 2]`
 /// and `arena[o + 3]` the arena positions of its two watched literals, `arena[o + 4]` and
-/// `arena[o + 5]` their keys, and from `o + 6` on the keys of its literals. The watch nodes of the
-/// clause are `2o` and `2o + 1`; the watch list `watches[key(v, b)]` of the literal `(v, b)` holds
-/// the nodes that watch it. A visit finds whether the other watched literal is true, and the
-/// literals to scan, in one place of the arena. Each list is a vector of nodes, compacted in place
-/// when it is visited.
+/// `arena[o + 5]` their keys, and from `o + 6` on the keys of its literals. Each entry starts at an
+/// even offset (`attach` pads the arena with a `NONE`). The watch node of a watched literal is the
+/// arena position of the key of the other one: `o + 5` for the first, `o + 4` for the second, so
+/// that a node's parity tells which one it watches; the watch list `watches[key(v, b)]` of the
+/// literal `(v, b)` holds the nodes that watch it. A visit reads whether the other watched literal
+/// is true at the node itself, and finds the literals to scan in the same place of the arena. Each
+/// list is a vector of nodes, compacted in place when it is visited.
 /// `qhead` is the first trail position not yet propagated. `phase` is the last value of each
 /// variable, `act` its activity, raised by `inc` whenever it takes part in a conflict; `seen`
 /// marks variables during conflict analysis, and `learnt` collects the literals of the clause it
@@ -322,7 +329,12 @@ impl Search {
 
     /// Assigns `b` to `v` with the reason `r` at the current decision level.
     fn enqueue(&mut self, v: usize, b: bool, r: usize) {
-        if v < self.assign.len() && v < self.set.len() && v < self.level.len() && v < self.reason.len() {
+        if v < self.assign.len()
+            && v < self.set.len()
+            && v < self.level.len()
+            && v < self.reason.len()
+            && self.trail.len() < BIG
+        {
             self.assign[v] = b;
             self.set[v] = true;
             self.level[v] = self.lim.len();
@@ -335,11 +347,16 @@ impl Search {
         }
     }
 
-    /// Adds the new clause `c` to the arena and, if it has at least two literals, its watch nodes
-    /// `2o`, `2o + 1` watching its first two literals.
+    /// Adds the new clause `c` to the arena at an even offset `o` and, if it has at least two
+    /// literals, its watch nodes `o + 5`, `o + 4` watching its first two literals.
     fn attach(&mut self, f: &Formula, learned: &Vec<Clause>, c: usize) {
+        if self.arena.len() % 2 == 1 && self.arena.len() < BIG {
+            self.arena.push(NONE);
+        }
         let o = self.arena.len();
-        self.start.push(o);
+        if self.start.len() < BIG {
+            self.start.push(o);
+        }
         self.push_clause(f, learned, c);
         if o < BIG && o + 7 < self.arena.len() && self.arena[o + 1] >= o + 8 {
             let k0 = self.arena[o + 6];
@@ -347,9 +364,16 @@ impl Search {
             if k0 < self.watches.len() && k1 < self.watches.len() {
                 self.arena[o + 4] = k0;
                 self.arena[o + 5] = k1;
-                self.watches[k0].push(2 * o);
-                self.watches[k1].push(2 * o + 1);
+                self.watch(k0, o + 5);
+                self.watch(k1, o + 4);
             }
+        }
+    }
+
+    /// Adds the node `node` to the watch list `k`, if there is one and it is shorter than `BIG`.
+    fn watch(&mut self, k: usize, node: usize) {
+        if k < self.watches.len() && self.watches[k].len() < BIG {
+            self.watches[k].push(node);
         }
     }
 
@@ -359,16 +383,13 @@ impl Search {
         let len = clause_len(f, learned, c);
         let o = self.arena.len();
         if o < BIG && len < BIG {
-            self.arena.push(c);
-            self.arena.push(o + 6 + len);
-            self.arena.push(o + 6);
-            self.arena.push(o + 7);
-            self.arena.push(NONE);
-            self.arena.push(NONE);
+            self.arena.extend_from_slice(&[c, o + 6 + len, o + 6, o + 7, NONE, NONE]);
             let mut j: usize = 0;
             while j < len {
                 let l = lit_at(f, learned, c, j);
-                self.arena.push(key(l.var, l.value));
+                if self.arena.len() < BIG {
+                    self.arena.push(key(l.var, l.value));
+                }
                 j += 1;
             }
         }
@@ -457,7 +478,7 @@ impl Search {
                             j += 1;
                         }
                         if r == 2 {
-                            let o = node / 2;
+                            let o = if node >= 4 { node - node % 2 - 4 } else { NONE };
                             confl = if o < self.arena.len() { self.arena[o] } else { NONE };
                         }
                     }
@@ -480,28 +501,31 @@ impl Search {
         p
     }
 
-    /// The key of the other watched literal of the watch node `node`; `NONE` if the node is not
-    /// in the arena.
+    /// The key of the other watched literal of the watch node `node`: the arena at `node`; `NONE`
+    /// if the node is not in the arena.
     fn other_key(&self, node: usize) -> usize {
-        let o = node / 2;
-        if o < BIG && o + 5 < self.arena.len() {
-            self.arena[o + 5 - node % 2]
+        if node < self.arena.len() {
+            self.arena[node]
         } else {
             NONE
         }
     }
 
-    /// The watch node `node` of the clause at the arena offset `o = node / 2` watches a literal of
-    /// the key `k` that has become false, and its other watched literal, of the key `okey`, is not
-    /// true: moves the watch to a literal that is not false (0), or keeps it and propagates the
-    /// other watched literal (1) or finds the clause false (2).
+    /// The watch node `node` of the clause at the arena offset `o = node - node % 2 - 4` watches a
+    /// literal of the key `k` that has become false (its first watched literal if `node` is odd),
+    /// and its other watched literal, of the key `okey`, is not true: moves the watch to a literal
+    /// that is not false (0), or keeps it and propagates the other watched literal (1) or finds the
+    /// clause false (2).
     fn move_watch(&mut self, k: usize, node: usize, okey: usize) -> usize {
-        let o = node / 2;
-        if o >= BIG || o + 5 >= self.arena.len() {
+        if node < 4 || node >= self.arena.len() {
             return 1;
         }
-        let mp = if node % 2 == 0 { o + 2 } else { o + 3 };
-        let qp = if node % 2 == 0 { o + 3 } else { o + 2 };
+        let o = node - node % 2 - 4;
+        if o + 5 >= self.arena.len() {
+            return 1;
+        }
+        let mp = if node % 2 == 1 { o + 2 } else { o + 3 };
+        let qp = if node % 2 == 1 { o + 3 } else { o + 2 };
         let c = self.arena[o];
         let end = self.arena[o + 1];
         let found = self.find_watch(o + 6, end, self.arena[qp], self.arena[mp]);
@@ -509,7 +533,7 @@ impl Search {
         if nk < self.watches.len() && nk != k {
             self.arena[mp] = found;
             self.arena[mp + 2] = nk;
-            self.watches[nk].push(node);
+            self.watch(nk, node);
             return 0;
         }
         if self.key_false(okey) {
@@ -549,10 +573,10 @@ impl Search {
     /// Raises the activity of `v` by `inc`.
     fn bump(&mut self, v: usize) {
         if v < self.act.len() {
-            if self.act[v] < BIG && self.inc < BIG {
+            if self.act[v] < ACT && self.inc < ACT {
                 self.act[v] += self.inc;
             }
-            if self.act[v] >= BIG / 2 {
+            if self.act[v] >= ACT / 2 {
                 self.rescale();
             }
         }
@@ -577,7 +601,7 @@ impl Search {
                     if count < NONE {
                         count += 1;
                     }
-                } else {
+                } else if self.learnt.len() < BIG {
                     self.learnt.push(q);
                 }
             }
@@ -673,9 +697,9 @@ impl Search {
                 }
             }
         }
-        self.stack.push(v);
-        self.stack.push(from);
-        self.stack.push(end);
+        if self.stack.len() < BIG {
+            self.stack.extend_from_slice(&[v, from, end]);
+        }
     }
 
     /// One step of the search of `lit_redundant` on its top frame `(v, j, end)`, `j` the arena
@@ -709,11 +733,15 @@ impl Search {
         let lq = self.level[q];
         if self.fail[q] || self.reason[q] == NONE || lq >= self.stamp.len() || self.stamp[lq] != self.tick {
             self.fail[q] = true;
-            self.toclear.push(q);
+            if self.toclear.len() < BIG {
+                self.toclear.push(q);
+            }
             return 1;
         }
         self.seen[q] = true;
-        self.toclear.push(q);
+        if self.toclear.len() < BIG {
+            self.toclear.push(q);
+        }
         self.push_frame(q);
         0
     }
@@ -788,7 +816,8 @@ impl Search {
         self.toclear.clear();
     }
 
-    /// Clears the marks of the variables of the literals of `learnt` from position `i` on.
+    /// Clears the marks of the variables of the literals of `learnt` from position `i` on, and
+    /// truncates `learnt` to `i` literals.
     fn unmark_from(&mut self, i: usize) {
         let mut k = i;
         while k < self.learnt.len() {
@@ -798,6 +827,7 @@ impl Search {
             }
             k += 1;
         }
+        self.learnt.truncate(i);
     }
 
     /// Removes from `learnt` the literals after the first that are `lit_redundant`, and clears
@@ -808,7 +838,6 @@ impl Search {
         let i = self.compact();
         self.clear_marks();
         self.unmark_from(i);
-        self.learnt.truncate(i);
     }
 
     /// The number of decision levels of the literals of `learnt`; stamps those levels with a new
@@ -836,9 +865,12 @@ impl Search {
     }
 
     /// Sets `hist` to the histogram of the literal block distances of the live learned clauses
-    /// (below the length of `stamp`); their number.
+    /// (below the length of `stamp`); their number. 0 if `stamp` has `BIG` or more entries.
     fn count_live(&mut self) -> usize {
         let size = self.stamp.len();
+        if size >= BIG {
+            return 0;
+        }
         self.hist = vec![0; size];
         let mut live: usize = 0;
         let mut i: usize = 0;
@@ -939,11 +971,11 @@ impl Search {
         false
     }
 
-    /// A copy of `learnt`, of at most `BIG` literals.
+    /// A copy of `learnt`, of fewer than `BIG` literals.
     fn copy_learnt(&self) -> Vec<Lit> {
         let mut out: Vec<Lit> = Vec::new();
         let mut i: usize = 0;
-        while i < self.learnt.len() && i < BIG {
+        while i < self.learnt.len() && out.len() < BIG {
             out.push(Lit { var: self.learnt[i].var, value: self.learnt[i].value });
             i += 1;
         }
@@ -987,7 +1019,7 @@ impl Search {
             return Vec::new();
         }
         self.learnt[0] = Lit { var: p, value: !self.assign[p] };
-        if self.inc < BIG {
+        if self.inc < ACT {
             self.inc += self.inc / 512 + 1;
         }
         self.minimize();
@@ -1192,7 +1224,7 @@ fn force_trail(
 /// under `assign`, and the reasons of the trail, from the negation of `learnt`, force the values
 /// of `assign` that falsify clause `confl`. Every assignment that satisfies the clauses and
 /// falsifies `learnt` agrees with `assign` on the marked variables, so it falsifies clause `confl`:
-/// there is none.
+/// there is none. False if `assign` has `BIG` or more entries.
 fn certify(
     f: &Formula,
     learned: &Vec<Clause>,
@@ -1202,7 +1234,7 @@ fn certify(
     confl: usize,
     learnt: &Vec<Lit>,
 ) -> bool {
-    if !all_false(learnt, assign) {
+    if assign.len() >= BIG || !all_false(learnt, assign) {
         return false;
     }
     let forced = force_trail(f, learned, assign, trail, reason, mark(learnt, assign.len()));
@@ -1269,6 +1301,9 @@ fn on_conflict(s: &mut Search, f: &Formula, learned: &mut Vec<Clause>, confl: us
     let bj = if learnt.len() > 1 && learnt[1].var < s.level.len() { s.level[learnt[1].var] } else { 0 };
     let lbd = s.learnt_lbd();
     s.backtrack(bj);
+    if s.lbd.len() >= BIG || s.dead.len() >= BIG {
+        return 2;
+    }
     let c = f.clauses.len() + learned.len();
     learned.push(Clause(learnt));
     s.lbd.push(lbd);
@@ -1325,6 +1360,9 @@ pub fn cdcl(f: &Formula) -> Option<Answer> {
                 if satisfies(f, &m) {
                     return Some(Answer::Sat(Assignments(m)));
                 }
+                return None;
+            }
+            if s.lim.len() >= BIG {
                 return None;
             }
             s.lim.push(s.trail.len());

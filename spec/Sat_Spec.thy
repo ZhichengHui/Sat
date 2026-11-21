@@ -26,8 +26,9 @@ text \<open>
   formula (instead of only stating that one exists), and \<^verbatim>\<open>Unsat\<close> keeps Friday's meaning.
   The statement \<open>solver_correct\<close> at the end of this theory: for every formula that satisfies the
   precondition there is a bound \<open>N\<close> such that, with any fuel at least \<open>N\<close>, \<^verbatim>\<open>solver\<close>
-  satisfies its contract. The solver answers \<^verbatim>\<open>Sat\<close> or \<^verbatim>\<open>Unsat\<close> for every formula: it has no
-  answer \<^verbatim>\<open>Unknown\<close>, so there is no input range.
+  satisfies its contract. The precondition bounds the number of variables below \<open>2^63\<close>
+  (\<open>sat_sizes_ok\<close>); the solver answers \<^verbatim>\<open>Sat\<close> or \<^verbatim>\<open>Unsat\<close> for every formula of the
+  precondition.
 
   Trusted, not proved here:
   \<^item> The translation (AutoCorrode) gives the Rust program its meaning. The theorem is about the
@@ -45,6 +46,10 @@ subsection \<open>Formulas and their semantics\<close>
 text \<open>Transcription of the Creusot logic functions:
   \<^item> \<^verbatim>\<open>Assignments\<close> is \<^verbatim>\<open>Vec<bool>\<close>; its model \<^verbatim>\<open>a@\<close> is the sequence of booleans, so
     assignments are quantified as @{typ \<open>bool list\<close>}.
+  \<^item> The translation models a \<^verbatim>\<open>Vec<T>\<close> as a \<^typ>\<open>'a rvec\<close>: its elements
+    \<^term>\<open>rvec_elems v\<close> (a list, the Creusot model \<^verbatim>\<open>v@\<close>), its capacity and its
+    memory layout. The semantics below reads only the elements; \<^term>\<open>rvec_length v\<close> is the
+    length of \<^term>\<open>rvec_elems v\<close>.
   \<^item> Creusot's mathematical integers (\<^verbatim>\<open>x@\<close> of a \<^verbatim>\<open>usize\<close>) are \<^term>\<open>unat\<close> of the word.
   \<^item> \<^verbatim>\<open>s[i]\<close> on a Creusot sequence and \<^term>\<open>xs ! i\<close> in HOL are both unspecified out of
     bounds; \<open>formula_invariant\<close> makes every literal's variable a valid index.\<close>
@@ -55,24 +60,36 @@ definition lit_sat :: \<open>bool list \<Rightarrow> Lit \<Rightarrow> bool\<clo
 
 text \<open>\<^verbatim>\<open>Clause::sat\<close>: some literal of the clause is satisfied.\<close>
 definition clause_sat :: \<open>bool list \<Rightarrow> Clause \<Rightarrow> bool\<close> where
-  \<open>clause_sat a c \<equiv> \<exists>l \<in> set (Clause_v0 c). lit_sat a l\<close>
+  \<open>clause_sat a c \<equiv> \<exists>l \<in> set (rvec_elems (Clause_v0 c)). lit_sat a l\<close>
 
 text \<open>\<^verbatim>\<open>Formula::sat\<close>: every clause of the formula is satisfied.\<close>
 definition formula_sat :: \<open>bool list \<Rightarrow> Formula \<Rightarrow> bool\<close> where
-  \<open>formula_sat a f \<equiv> \<forall>c \<in> set (Formula_clauses f). clause_sat a c\<close>
+  \<open>formula_sat a f \<equiv> \<forall>c \<in> set (rvec_elems (Formula_clauses f)). clause_sat a c\<close>
 
 text \<open>\<^verbatim>\<open>Formula::invariant\<close>, with \<^verbatim>\<open>Clause::vars_in_range\<close> and
   \<^verbatim>\<open>Lit::var_in_range\<close>: every literal's variable is below the number of variables.\<close>
 definition formula_invariant :: \<open>Formula \<Rightarrow> bool\<close> where
   \<open>formula_invariant f \<equiv>
-     \<forall>c \<in> set (Formula_clauses f). \<forall>l \<in> set (Clause_v0 c). unat (Lit_var l) < unat (Formula_num_vars f)\<close>
+     \<forall>c \<in> set (rvec_elems (Formula_clauses f)). \<forall>l \<in> set (rvec_elems (Clause_v0 c)). unat (Lit_var l) < unat (Formula_num_vars f)\<close>
 
-text \<open>Every list in the formula has fewer than \<open>2^63\<close> elements. This holds for every value of a
-  Rust program (a \<^verbatim>\<open>Vec\<close> has at most \<^verbatim>\<open>isize::MAX\<close> elements); HOL lists have no such
-  bound, so the precondition states it.\<close>
+text \<open>Every \<^verbatim>\<open>Vec\<close> in the formula has fewer than \<open>2^63\<close> elements. This holds for every value
+  of a Rust program (a \<^verbatim>\<open>Vec\<close> has at most \<^verbatim>\<open>isize::MAX\<close> elements); the model of a
+  \<^verbatim>\<open>Vec\<close> has no such bound, so the precondition states it.\<close>
 definition sat_repr_ok :: \<open>Formula \<Rightarrow> bool\<close> where
   \<open>sat_repr_ok f \<equiv>
-     length (Formula_clauses f) < 2 ^ 63 \<and> (\<forall>c \<in> set (Formula_clauses f). length (Clause_v0 c) < 2 ^ 63)\<close>
+     rvec_length (Formula_clauses f) < 2 ^ 63 \<and>
+     (\<forall>c \<in> set (rvec_elems (Formula_clauses f)). rvec_length (Clause_v0 c) < 2 ^ 63)\<close>
+
+subsection \<open>The size of the problem\<close>
+
+text \<open>The number of variables is below \<open>2^63\<close>. This is a bound on the size of the problem, not a
+  fact of the representation: \<^verbatim>\<open>num_vars\<close> is a \<^verbatim>\<open>u64\<close>, and a value of \<open>2^63\<close> or more
+  is a valid Rust value. But the solver allocates vectors of \<^verbatim>\<open>num_vars\<close> entries, and an
+  answer \<^verbatim>\<open>Sat(a)\<close> must carry an \<^verbatim>\<open>Assignments\<close> vector of length \<^verbatim>\<open>num_vars\<close>, which
+  no \<^verbatim>\<open>Vec<bool>\<close> has above \<^verbatim>\<open>isize::MAX\<close>. Above the bound the compiled program panics
+  (capacity overflow).\<close>
+definition sat_sizes_ok :: \<open>Formula \<Rightarrow> bool\<close> where
+  \<open>sat_sizes_ok f \<equiv> unat (Formula_num_vars f) < 2 ^ 63\<close>
 
 subsection \<open>The contract\<close>
 
@@ -81,18 +98,20 @@ begin
 
 definition solver_contract :: \<open>Formula \<Rightarrow> ('s, Answer, 'abort) function_contract\<close> where
   \<open>solver_contract f \<equiv>
-     let pre = can_alloc_reference \<star> \<langle>formula_invariant f \<and> sat_repr_ok f\<rangle> in
+     let pre = can_alloc_reference \<star> \<langle>formula_invariant f \<and> sat_repr_ok f \<and> sat_sizes_ok f\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
         \<langle>case r of
            Answer_Sat a \<Rightarrow>
-             length (Assignments_v0 a) = unat (Formula_num_vars f) \<and> formula_sat (Assignments_v0 a) f
+             rvec_length (Assignments_v0 a) = unat (Formula_num_vars f) \<and>
+             formula_sat (rvec_elems (Assignments_v0 a)) f
          | Answer_Unsat \<Rightarrow> (\<forall>a. length a = unat (Formula_num_vars f) \<longrightarrow> \<not> formula_sat a f)\<rangle> in
      make_function_contract pre post\<close>
 
 text \<open>\<^const>\<open>solver_contract\<close> \<open>f\<close>:
   \<^item> Precondition: every literal's variable is below the number of variables
-    (\<^const>\<open>formula_invariant\<close>), and every list in \<open>f\<close> has fewer than \<open>2^63\<close> elements
-    (\<^const>\<open>sat_repr_ok\<close>).
+    (\<^const>\<open>formula_invariant\<close>); every \<^verbatim>\<open>Vec\<close> in \<open>f\<close> has fewer than \<open>2^63\<close> elements
+    (\<^const>\<open>sat_repr_ok\<close>); and the number of variables is below \<open>2^63\<close>
+    (\<^const>\<open>sat_sizes_ok\<close>).
   \<^item> \<^verbatim>\<open>Sat(a)\<close>: \<open>a\<close> assigns a value to each of the formula's variables (its length is the
     number of variables) and satisfies \<open>f\<close>. \<^verbatim>\<open>Unsat\<close>: no assignment of the formula's
     variables satisfies \<open>f\<close>.
@@ -119,19 +138,19 @@ text \<open>The translation bounds every loop without an iteration bound and eve
 
 locale Sat_heap =
   reference reference_types
-  + ref_1: reference_allocatable reference_types _ _ _ _ _ _ _ prism_1 \<comment> \<open>bool list\<close>
-  + ref_2: reference_allocatable reference_types _ _ _ _ _ _ _ prism_2 \<comment> \<open>(64 word) list\<close>
+  + ref_1: reference_allocatable reference_types _ _ _ _ _ _ _ prism_1 \<comment> \<open>bool rvec\<close>
+  + ref_2: reference_allocatable reference_types _ _ _ _ _ _ _ prism_2 \<comment> \<open>(64 word) rvec\<close>
   + ref_3: reference_allocatable reference_types _ _ _ _ _ _ _ prism_3 \<comment> \<open>64 word\<close>
   + ref_4: reference_allocatable reference_types _ _ _ _ _ _ _ prism_4 \<comment> \<open>Search\<close>
-  + ref_5: reference_allocatable reference_types _ _ _ _ _ _ _ prism_5 \<comment> \<open>Clause list\<close>
-  + ref_6: reference_allocatable reference_types _ _ _ _ _ _ _ prism_6 \<comment> \<open>Lit list\<close>
+  + ref_5: reference_allocatable reference_types _ _ _ _ _ _ _ prism_5 \<comment> \<open>Clause rvec\<close>
+  + ref_6: reference_allocatable reference_types _ _ _ _ _ _ _ prism_6 \<comment> \<open>Lit rvec\<close>
   for reference_types :: \<open>'s::{sepalg} \<Rightarrow> 'addr \<Rightarrow> 'gv \<Rightarrow> 'abort \<Rightarrow> 'i prompt \<Rightarrow> 'o prompt_output \<Rightarrow> unit\<close>
-  and prism_1 :: \<open>('gv, bool list) prism\<close>
-  and prism_2 :: \<open>('gv, (64 word) list) prism\<close>
+  and prism_1 :: \<open>('gv, bool rvec) prism\<close>
+  and prism_2 :: \<open>('gv, (64 word) rvec) prism\<close>
   and prism_3 :: \<open>('gv, 64 word) prism\<close>
   and prism_4 :: \<open>('gv, Search) prism\<close>
-  and prism_5 :: \<open>('gv, Clause list) prism\<close>
-  and prism_6 :: \<open>('gv, Lit list) prism\<close>
+  and prism_5 :: \<open>('gv, Clause rvec) prism\<close>
+  and prism_6 :: \<open>('gv, Lit rvec) prism\<close>
 begin
 
 abbreviation solver :: \<open>nat \<Rightarrow> Formula \<Rightarrow> ('s, Answer, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
@@ -142,7 +161,8 @@ abbreviation solver_contract :: \<open>Formula \<Rightarrow> ('s, Answer, 'abort
 
 definition solver_correct where
   \<open>solver_correct \<Gamma> \<equiv>
-     \<forall>f. formula_invariant f \<and> sat_repr_ok f \<longrightarrow> (\<exists>N. \<forall>fuel \<ge> N. \<Gamma>; solver fuel f \<Turnstile>\<^sub>F solver_contract f)\<close>
+     \<forall>f. formula_invariant f \<and> sat_repr_ok f \<and> sat_sizes_ok f \<longrightarrow>
+       (\<exists>N. \<forall>fuel \<ge> N. \<Gamma>; solver fuel f \<Turnstile>\<^sub>F solver_contract f)\<close>
 
 text \<open>\<^const>\<open>solver_correct\<close> \<open>\<Gamma>\<close> is the top-level statement: for every formula that satisfies the
   precondition of \<^const>\<open>Sat_ctx.solver_contract\<close> there is a bound \<open>N\<close> such that, with any

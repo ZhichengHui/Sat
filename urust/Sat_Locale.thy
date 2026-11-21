@@ -9,19 +9,19 @@ Loops without an iteration bound and recursive functions use the fuel \<^verbati
 
 locale Sat_ctx =
   reference reference_types
-  + ref_1: reference_allocatable reference_types _ _ _ _ _ _ _ prism_1 \<comment> \<open>bool list\<close>
-  + ref_2: reference_allocatable reference_types _ _ _ _ _ _ _ prism_2 \<comment> \<open>(64 word) list\<close>
+  + ref_1: reference_allocatable reference_types _ _ _ _ _ _ _ prism_1 \<comment> \<open>bool rvec\<close>
+  + ref_2: reference_allocatable reference_types _ _ _ _ _ _ _ prism_2 \<comment> \<open>(64 word) rvec\<close>
   + ref_3: reference_allocatable reference_types _ _ _ _ _ _ _ prism_3 \<comment> \<open>64 word\<close>
   + ref_4: reference_allocatable reference_types _ _ _ _ _ _ _ prism_4 \<comment> \<open>Search\<close>
-  + ref_5: reference_allocatable reference_types _ _ _ _ _ _ _ prism_5 \<comment> \<open>Clause list\<close>
-  + ref_6: reference_allocatable reference_types _ _ _ _ _ _ _ prism_6 \<comment> \<open>Lit list\<close>
+  + ref_5: reference_allocatable reference_types _ _ _ _ _ _ _ prism_5 \<comment> \<open>Clause rvec\<close>
+  + ref_6: reference_allocatable reference_types _ _ _ _ _ _ _ prism_6 \<comment> \<open>Lit rvec\<close>
   for reference_types :: \<open>'s::{sepalg} \<Rightarrow> 'addr \<Rightarrow> 'gv \<Rightarrow> 'abort \<Rightarrow> 'i prompt \<Rightarrow> 'o prompt_output \<Rightarrow> unit\<close>
-  and prism_1 :: \<open>('gv, bool list) prism\<close>
-  and prism_2 :: \<open>('gv, (64 word) list) prism\<close>
+  and prism_1 :: \<open>('gv, bool rvec) prism\<close>
+  and prism_2 :: \<open>('gv, (64 word) rvec) prism\<close>
   and prism_3 :: \<open>('gv, 64 word) prism\<close>
   and prism_4 :: \<open>('gv, Search) prism\<close>
-  and prism_5 :: \<open>('gv, Clause list) prism\<close>
-  and prism_6 :: \<open>('gv, Lit list) prism\<close>
+  and prism_5 :: \<open>('gv, Clause rvec) prism\<close>
+  and prism_6 :: \<open>('gv, Lit rvec) prism\<close>
   + fixes urust_fuel :: nat
 begin
 

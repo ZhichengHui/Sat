@@ -26,21 +26,21 @@ lemma Lit_shape:
 text \<open>\<^typ>\<open>Clause\<close> is a record with exactly these fields.\<close>
 lemma Clause_shape:
   fixes x y :: Clause
-  shows \<open>x = y \<longleftrightarrow> (CONST Clause_v0 x :: Lit list) = Clause_v0 y\<close>
+  shows \<open>x = y \<longleftrightarrow> (CONST Clause_v0 x :: Lit rvec) = Clause_v0 y\<close>
   by (cases x; cases y) simp
 
 text \<open>\<^typ>\<open>Formula\<close> is a record with exactly these fields.\<close>
 lemma Formula_shape:
   fixes x y :: Formula
   shows \<open>x = y \<longleftrightarrow>
-     (CONST Formula_clauses x :: Clause list) = Formula_clauses y \<and>
+     (CONST Formula_clauses x :: Clause rvec) = Formula_clauses y \<and>
      (CONST Formula_num_vars x :: 64 word) = Formula_num_vars y\<close>
   by (cases x; cases y) simp
 
 text \<open>\<^typ>\<open>Assignments\<close> is a record with exactly these fields.\<close>
 lemma Assignments_shape:
   fixes x y :: Assignments
-  shows \<open>x = y \<longleftrightarrow> (CONST Assignments_v0 x :: bool list) = Assignments_v0 y\<close>
+  shows \<open>x = y \<longleftrightarrow> (CONST Assignments_v0 x :: bool rvec) = Assignments_v0 y\<close>
   by (cases x; cases y) simp
 
 text \<open>\<^typ>\<open>Answer\<close> has exactly these constructors.\<close>

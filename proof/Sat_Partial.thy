@@ -42,16 +42,39 @@ ML \<open>
   in List.app warm ["Lit", "Pasn", "Formula", "Cut", "Search"] end
 \<close>
 
+section \<open>The elements of the vectors\<close>
+
+text \<open>The translation models a \<^verbatim>\<open>Vec\<close> as an \<^typ>\<open>'a rvec\<close>; the proofs reason about
+  its elements.\<close>
+abbreviation cls :: \<open>Formula \<Rightarrow> Clause list\<close> where
+  \<open>cls f \<equiv> rvec_elems (Formula_clauses f)\<close>
+
+abbreviation lits :: \<open>Clause \<Rightarrow> Lit list\<close> where
+  \<open>lits c \<equiv> rvec_elems (Clause_v0 c)\<close>
+
+abbreviation asg :: \<open>Assignments \<Rightarrow> bool list\<close> where
+  \<open>asg a \<equiv> rvec_elems (Assignments_v0 a)\<close>
+
+text \<open>AutoCorrode has no rule for a modification through the focus on the elements of a vector.\<close>
+lemma rvec_elems_focus_modify:
+  shows \<open>\<nabla>{rvec_elems_focus} f v = update_rvec_elems f v\<close>
+  by (simp add: focus_modify_def' focus_components rvec.expand)
+
+text \<open>A \<^verbatim>\<open>Vec<bool>\<close> has at most \<open>2^63 - 1\<close> elements.\<close>
+lemma cap_max_bool:
+  \<open>rvec_cap_max (make_elem_layout (Suc 0) (Suc 0)) = 9223372036854775807\<close>
+  by (simp add: rvec_cap_max_def isize_max_def)
+
 section \<open>Satisfaction by index\<close>
 
 
 lemma clause_sat_iff_nth:
   \<open>clause_sat a c \<longleftrightarrow>
-     (\<exists>j < length (Clause_v0 c). a ! unat (Lit_var (Clause_v0 c ! j)) = Lit_value (Clause_v0 c ! j))\<close>
+     (\<exists>j < length (lits c). a ! unat (Lit_var (lits c ! j)) = Lit_value (lits c ! j))\<close>
   unfolding clause_sat_def lit_sat_def Bex_def in_set_conv_nth by blast
 
 lemma formula_sat_iff_nth:
-  \<open>formula_sat a f \<longleftrightarrow> (\<forall>j < length (Formula_clauses f). clause_sat a (Formula_clauses f ! j))\<close>
+  \<open>formula_sat a f \<longleftrightarrow> (\<forall>j < length (cls f). clause_sat a (cls f ! j))\<close>
   unfolding formula_sat_def by (simp add: all_set_conv_all_nth)
 
 section \<open>Partial assignments and their extensions\<close>
@@ -149,8 +172,8 @@ text \<open>The answer \<open>r\<close> is right for the subproblem of the parti
   \<^verbatim>\<open>Unsat\<close> means that there is none.\<close>
 definition sol :: \<open>Formula \<Rightarrow> bool list \<Rightarrow> bool list \<Rightarrow> Answer \<Rightarrow> bool\<close> where
   \<open>sol f a d r \<equiv> case r of
-     Answer_Sat m \<Rightarrow> length (Assignments_v0 m) = length a \<and> agree d a (Assignments_v0 m) \<and>
-       formula_sat (Assignments_v0 m) f
+     Answer_Sat m \<Rightarrow> length (asg m) = length a \<and> agree d a (asg m) \<and>
+       formula_sat (asg m) f
    | Answer_Unsat \<Rightarrow> \<not> ext_sat f a d\<close>
 
 lemma sol_step:
@@ -184,7 +207,7 @@ qed
 lemma sol_start:
   assumes \<open>sol f (replicate n False) (replicate n False) r\<close>
   shows \<open>case r of
-     Answer_Sat a \<Rightarrow> length (Assignments_v0 a) = n \<and> formula_sat (Assignments_v0 a) f
+     Answer_Sat a \<Rightarrow> length (asg a) = n \<and> formula_sat (asg a) f
    | Answer_Unsat \<Rightarrow> (\<forall>a. length a = n \<longrightarrow> \<not> formula_sat a f)\<close>
   using assms by (cases r) (auto simp add: sol_def ext_sat_start)
 
@@ -193,25 +216,25 @@ section \<open>False, true and unit clauses\<close>
 text \<open>The clause is false under the partial assignment: every literal's variable is assigned and
   has the other value.\<close>
 definition clause_false :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> Clause \<Rightarrow> bool\<close> where
-  \<open>clause_false a d c \<equiv> \<forall>l \<in> set (Clause_v0 c). d ! unat (Lit_var l) \<and> \<not> lit_sat a l\<close>
+  \<open>clause_false a d c \<equiv> \<forall>l \<in> set (lits c). d ! unat (Lit_var l) \<and> \<not> lit_sat a l\<close>
 
 text \<open>Some clause of the formula is false under that partial assignment.\<close>
 definition conflict :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> Formula \<Rightarrow> bool\<close> where
-  \<open>conflict a d f \<equiv> \<exists>c \<in> set (Formula_clauses f). clause_false a d c\<close>
+  \<open>conflict a d f \<equiv> \<exists>c \<in> set (cls f). clause_false a d c\<close>
 
 lemma clause_false_iff_nth:
   \<open>clause_false a d c \<longleftrightarrow>
-     (\<forall>j < length (Clause_v0 c). d ! unat (Lit_var (Clause_v0 c ! j)) \<and>
-        a ! unat (Lit_var (Clause_v0 c ! j)) \<noteq> Lit_value (Clause_v0 c ! j))\<close>
+     (\<forall>j < length (lits c). d ! unat (Lit_var (lits c ! j)) \<and>
+        a ! unat (Lit_var (lits c ! j)) \<noteq> Lit_value (lits c ! j))\<close>
   unfolding clause_false_def lit_sat_def by (simp add: all_set_conv_all_nth)
 
 lemma conflict_iff_nth:
-  \<open>conflict a d f \<longleftrightarrow> (\<exists>j < length (Formula_clauses f). clause_false a d (Formula_clauses f ! j))\<close>
+  \<open>conflict a d f \<longleftrightarrow> (\<exists>j < length (cls f). clause_false a d (cls f ! j))\<close>
   unfolding conflict_def by (simp add: Bex_def in_set_conv_nth) blast
 
 text \<open>Every literal's variable of the formula is below \<open>n\<close>.\<close>
 definition vars_below :: \<open>Formula \<Rightarrow> nat \<Rightarrow> bool\<close> where
-  \<open>vars_below f n \<equiv> \<forall>c \<in> set (Formula_clauses f). \<forall>l \<in> set (Clause_v0 c). unat (Lit_var l) < n\<close>
+  \<open>vars_below f n \<equiv> \<forall>c \<in> set (cls f). \<forall>l \<in> set (lits c). unat (Lit_var l) < n\<close>
 
 text \<open>A conflict of the partial assignment excludes all its extensions.\<close>
 lemma conflict_not_ext_sat:
@@ -221,7 +244,7 @@ proof
   assume \<open>ext_sat f a d\<close>
   then obtain a' where a': \<open>agree d a a'\<close> \<open>formula_sat a' f\<close>
     unfolding ext_sat_def by blast
-  obtain c where c: \<open>c \<in> set (Formula_clauses f)\<close> \<open>clause_false a d c\<close>
+  obtain c where c: \<open>c \<in> set (cls f)\<close> \<open>clause_false a d c\<close>
     using assms unfolding conflict_def by blast
   have \<open>\<not> clause_sat a' c\<close>
     using c assms(2) a'(1)
@@ -233,28 +256,28 @@ qed
 text \<open>Some literal of the clause is assigned its value.\<close>
 definition clause_true :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> Clause \<Rightarrow> bool\<close> where
   \<open>clause_true a d c \<equiv>
-     \<exists>j < length (Clause_v0 c). d ! unat (Lit_var (Clause_v0 c ! j)) \<and> lit_sat a (Clause_v0 c ! j)\<close>
+     \<exists>j < length (lits c). d ! unat (Lit_var (lits c ! j)) \<and> lit_sat a (lits c ! j)\<close>
 
 text \<open>If every clause has a true literal, the assignment satisfies the formula.\<close>
 lemma all_clause_true_formula_sat:
-  assumes \<open>\<forall>j < length (Formula_clauses f). clause_true a d (Formula_clauses f ! j)\<close>
+  assumes \<open>\<forall>j < length (cls f). clause_true a d (cls f ! j)\<close>
   shows \<open>formula_sat a f\<close>
   using assms unfolding formula_sat_iff_nth clause_true_def clause_sat_iff_nth lit_sat_def by blast
 
 text \<open>A clause without a true literal whose literals are all assigned is false.\<close>
 lemma no_unset_conflict:
-  assumes \<open>j < length (Formula_clauses f)\<close> \<open>\<not> clause_true a d (Formula_clauses f ! j)\<close>
-    \<open>\<forall>i < length (Clause_v0 (Formula_clauses f ! j)).
-       d ! unat (Lit_var (Clause_v0 (Formula_clauses f ! j) ! i))\<close>
+  assumes \<open>j < length (cls f)\<close> \<open>\<not> clause_true a d (cls f ! j)\<close>
+    \<open>\<forall>i < length (lits (cls f ! j)).
+       d ! unat (Lit_var (lits (cls f ! j) ! i))\<close>
   shows \<open>conflict a d f\<close>
   using assms unfolding conflict_iff_nth clause_false_iff_nth clause_true_def lit_sat_def by blast
 
 text \<open>The clause is unit under the partial assignment, with \<open>k\<close> the index of its only
   unassigned literal: every other literal is assigned and false.\<close>
 definition unit_at :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> Clause \<Rightarrow> nat \<Rightarrow> bool\<close> where
-  \<open>unit_at a d c k \<equiv> k < length (Clause_v0 c) \<and> \<not> d ! unat (Lit_var (Clause_v0 c ! k)) \<and>
-     (\<forall>j < length (Clause_v0 c). j \<noteq> k \<longrightarrow>
-        d ! unat (Lit_var (Clause_v0 c ! j)) \<and> \<not> lit_sat a (Clause_v0 c ! j))\<close>
+  \<open>unit_at a d c k \<equiv> k < length (lits c) \<and> \<not> d ! unat (Lit_var (lits c ! k)) \<and>
+     (\<forall>j < length (lits c). j \<noteq> k \<longrightarrow>
+        d ! unat (Lit_var (lits c ! j)) \<and> \<not> lit_sat a (lits c ! j))\<close>
 
 lemma clause_true_not_unit:
   assumes \<open>clause_true a d c\<close>
@@ -262,17 +285,17 @@ lemma clause_true_not_unit:
   using assms unfolding clause_true_def unit_at_def by blast
 
 lemma all_set_not_unit:
-  assumes \<open>\<forall>j < length (Clause_v0 c). d ! unat (Lit_var (Clause_v0 c ! j))\<close>
+  assumes \<open>\<forall>j < length (lits c). d ! unat (Lit_var (lits c ! j))\<close>
   shows \<open>\<not> unit_at a d c k\<close>
   using assms unfolding unit_at_def by blast
 
 lemma two_unset_not_unit:
-  assumes \<open>k1 < k2\<close> \<open>k2 < length (Clause_v0 c)\<close>
-    \<open>\<not> d ! unat (Lit_var (Clause_v0 c ! k1))\<close> \<open>\<not> d ! unat (Lit_var (Clause_v0 c ! k2))\<close>
+  assumes \<open>k1 < k2\<close> \<open>k2 < length (lits c)\<close>
+    \<open>\<not> d ! unat (Lit_var (lits c ! k1))\<close> \<open>\<not> d ! unat (Lit_var (lits c ! k2))\<close>
   shows \<open>\<not> unit_at a d c k\<close>
 proof
   assume u: \<open>unit_at a d c k\<close>
-  have \<open>k1 < length (Clause_v0 c)\<close> using assms(1,2) by simp
+  have \<open>k1 < length (lits c)\<close> using assms(1,2) by simp
   then have \<open>k1 = k\<close> using u assms(3) unfolding unit_at_def by blast
   moreover have \<open>k2 = k\<close> using u assms(2,4) unfolding unit_at_def by blast
   ultimately show False using assms(1) by simp
@@ -285,7 +308,7 @@ definition settled :: \<open>bool list \<Rightarrow> bool list \<Rightarrow> Cla
 
 text \<open>If every clause is settled, there is no conflict.\<close>
 lemma settled_no_conflict:
-  assumes \<open>\<forall>j < length (Formula_clauses f). settled a d (Formula_clauses f ! j)\<close>
+  assumes \<open>\<forall>j < length (cls f). settled a d (cls f ! j)\<close>
   shows \<open>\<not> conflict a d f\<close>
   using assms unfolding conflict_iff_nth settled_def by blast
 
@@ -308,14 +331,14 @@ lemma prop_rel_trans:
 
 text \<open>Assigning the remaining literal of a unit clause keeps the extensions that satisfy \<open>f\<close>.\<close>
 lemma prop_rel_unit:
-  assumes \<open>c \<in> set (Formula_clauses f)\<close> \<open>unit_at a d c k\<close> \<open>vars_below f (length a)\<close>
+  assumes \<open>c \<in> set (cls f)\<close> \<open>unit_at a d c k\<close> \<open>vars_below f (length a)\<close>
     \<open>length d = length a\<close>
-  shows \<open>prop_rel f a d (a[unat (Lit_var (Clause_v0 c ! k)) := Lit_value (Clause_v0 c ! k)])
-    (d[unat (Lit_var (Clause_v0 c ! k)) := True])\<close>
+  shows \<open>prop_rel f a d (a[unat (Lit_var (lits c ! k)) := Lit_value (lits c ! k)])
+    (d[unat (Lit_var (lits c ! k)) := True])\<close>
 proof -
-  define v where \<open>v = unat (Lit_var (Clause_v0 c ! k))\<close>
-  define b where \<open>b = Lit_value (Clause_v0 c ! k)\<close>
-  have k: \<open>k < length (Clause_v0 c)\<close> \<open>\<not> d ! v\<close>
+  define v where \<open>v = unat (Lit_var (lits c ! k))\<close>
+  define b where \<open>b = Lit_value (lits c ! k)\<close>
+  have k: \<open>k < length (lits c)\<close> \<open>\<not> d ! v\<close>
     using assms(2) unfolding unit_at_def v_def by simp_all
   have v: \<open>v < length a\<close>
     using assms(1,3) k(1) unfolding vars_below_def v_def by (meson nth_mem)
@@ -329,15 +352,15 @@ proof -
       using h unfolding ext_sat_def by blast
     have \<open>clause_sat a' c\<close>
       using a'(3) assms(1) unfolding formula_sat_def by blast
-    then obtain j where j: \<open>j < length (Clause_v0 c)\<close> \<open>lit_sat a' (Clause_v0 c ! j)\<close>
+    then obtain j where j: \<open>j < length (lits c)\<close> \<open>lit_sat a' (lits c ! j)\<close>
       using clause_sat_iff_nth[of a' c] unfolding lit_sat_def by blast
     have \<open>j = k\<close>
     proof (rule ccontr)
       assume \<open>j \<noteq> k\<close>
-      then have \<open>d ! unat (Lit_var (Clause_v0 c ! j))\<close> \<open>\<not> lit_sat a (Clause_v0 c ! j)\<close>
+      then have \<open>d ! unat (Lit_var (lits c ! j))\<close> \<open>\<not> lit_sat a (lits c ! j)\<close>
         using assms(2) j(1) unfolding unit_at_def by auto
-      moreover have \<open>unat (Lit_var (Clause_v0 c ! j)) < length d\<close>
-        using assms(1,3,4) j(1) nth_mem[of j \<open>Clause_v0 c\<close>] unfolding vars_below_def by auto
+      moreover have \<open>unat (Lit_var (lits c ! j)) < length d\<close>
+        using assms(1,3,4) j(1) nth_mem[of j \<open>lits c\<close>] unfolding vars_below_def by auto
       ultimately show False
         using a'(2) j(2) unfolding agree_def lit_sat_def by simp
     qed
@@ -359,12 +382,12 @@ lemma sol_prop_rel:
   shows \<open>sol f a d r\<close>
 proof (cases r)
   case (Answer_Sat m)
-  have m: \<open>length (Assignments_v0 m) = length a'\<close> \<open>agree d' a' (Assignments_v0 m)\<close>
-    \<open>formula_sat (Assignments_v0 m) f\<close>
+  have m: \<open>length (asg m) = length a'\<close> \<open>agree d' a' (asg m)\<close>
+    \<open>formula_sat (asg m) f\<close>
     using assms(2) Answer_Sat by (simp_all add: sol_def)
   have p: \<open>length a' = length a\<close> \<open>more_set d d'\<close> \<open>agree d a a'\<close>
     using assms(1) unfolding prop_rel_def by simp_all
-  have \<open>agree d a (Assignments_v0 m)\<close>
+  have \<open>agree d a (asg m)\<close>
     using agree_trans[OF p(3) agree_more_set[OF p(2) m(2)]] .
   then show ?thesis
     using Answer_Sat m p by (simp add: sol_def)
