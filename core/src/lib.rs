@@ -253,11 +253,13 @@ struct Cut {
 /// `v` (`NONE` for a decision). The clauses are copied into the flat `arena`, clause `c` at
 /// offset `o = start[c]`: `arena[o]` is `c`, `arena[o + 1]` the end of the entry, `arena[o + 2]`
 /// and `arena[o + 3]` the arena positions of its two watched literals, `arena[o + 4]` and
-/// `arena[o + 5]` their keys, and from `o + 6` on the keys of its literals. The watch nodes of the
-/// clause are `2o` and `2o + 1`; the watch list `watches[key(v, b)]` of the literal `(v, b)` holds
-/// the nodes that watch it. A visit finds whether the other watched literal is true, and the
-/// literals to scan, in one place of the arena. Each list is a vector of nodes, compacted in place
-/// when it is visited.
+/// `arena[o + 5]` their keys, and from `o + 6` on the keys of its literals. Each entry starts at an
+/// even offset (`attach` pads the arena with a `NONE`). The watch node of a watched literal is the
+/// arena position of the key of the other one: `o + 5` for the first, `o + 4` for the second, so
+/// that a node's parity tells which one it watches; the watch list `watches[key(v, b)]` of the
+/// literal `(v, b)` holds the nodes that watch it. A visit reads whether the other watched literal
+/// is true at the node itself, and finds the literals to scan in the same place of the arena. Each
+/// list is a vector of nodes, compacted in place when it is visited.
 /// `qhead` is the first trail position not yet propagated. `phase` is the last value of each
 /// variable, `act` its activity, raised by `inc` whenever it takes part in a conflict; `seen`
 /// marks variables during conflict analysis, and `learnt` collects the literals of the clause it
@@ -335,9 +337,12 @@ impl Search {
         }
     }
 
-    /// Adds the new clause `c` to the arena and, if it has at least two literals, its watch nodes
-    /// `2o`, `2o + 1` watching its first two literals.
+    /// Adds the new clause `c` to the arena at an even offset `o` and, if it has at least two
+    /// literals, its watch nodes `o + 5`, `o + 4` watching its first two literals.
     fn attach(&mut self, f: &Formula, learned: &Vec<Clause>, c: usize) {
+        if self.arena.len() % 2 == 1 {
+            self.arena.push(NONE);
+        }
         let o = self.arena.len();
         self.start.push(o);
         self.push_clause(f, learned, c);
@@ -347,8 +352,8 @@ impl Search {
             if k0 < self.watches.len() && k1 < self.watches.len() {
                 self.arena[o + 4] = k0;
                 self.arena[o + 5] = k1;
-                self.watches[k0].push(2 * o);
-                self.watches[k1].push(2 * o + 1);
+                self.watches[k0].push(o + 5);
+                self.watches[k1].push(o + 4);
             }
         }
     }
@@ -457,7 +462,7 @@ impl Search {
                             j += 1;
                         }
                         if r == 2 {
-                            let o = node / 2;
+                            let o = if node >= 4 { node - node % 2 - 4 } else { NONE };
                             confl = if o < self.arena.len() { self.arena[o] } else { NONE };
                         }
                     }
@@ -480,28 +485,31 @@ impl Search {
         p
     }
 
-    /// The key of the other watched literal of the watch node `node`; `NONE` if the node is not
-    /// in the arena.
+    /// The key of the other watched literal of the watch node `node`: the arena at `node`; `NONE`
+    /// if the node is not in the arena.
     fn other_key(&self, node: usize) -> usize {
-        let o = node / 2;
-        if o < BIG && o + 5 < self.arena.len() {
-            self.arena[o + 5 - node % 2]
+        if node < self.arena.len() {
+            self.arena[node]
         } else {
             NONE
         }
     }
 
-    /// The watch node `node` of the clause at the arena offset `o = node / 2` watches a literal of
-    /// the key `k` that has become false, and its other watched literal, of the key `okey`, is not
-    /// true: moves the watch to a literal that is not false (0), or keeps it and propagates the
-    /// other watched literal (1) or finds the clause false (2).
+    /// The watch node `node` of the clause at the arena offset `o = node - node % 2 - 4` watches a
+    /// literal of the key `k` that has become false (its first watched literal if `node` is odd),
+    /// and its other watched literal, of the key `okey`, is not true: moves the watch to a literal
+    /// that is not false (0), or keeps it and propagates the other watched literal (1) or finds the
+    /// clause false (2).
     fn move_watch(&mut self, k: usize, node: usize, okey: usize) -> usize {
-        let o = node / 2;
-        if o >= BIG || o + 5 >= self.arena.len() {
+        if node < 4 || node >= self.arena.len() {
             return 1;
         }
-        let mp = if node % 2 == 0 { o + 2 } else { o + 3 };
-        let qp = if node % 2 == 0 { o + 3 } else { o + 2 };
+        let o = node - node % 2 - 4;
+        if o + 5 >= self.arena.len() {
+            return 1;
+        }
+        let mp = if node % 2 == 1 { o + 2 } else { o + 3 };
+        let qp = if node % 2 == 1 { o + 3 } else { o + 2 };
         let c = self.arena[o];
         let end = self.arena[o + 1];
         let found = self.find_watch(o + 6, end, self.arena[qp], self.arena[mp]);
