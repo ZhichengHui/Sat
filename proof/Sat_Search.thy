@@ -632,6 +632,26 @@ definition Search_propagate_lit_contract :: \<open>('addr, 'gv, Search) Global_S
      let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s' \<star> \<langle>sok s'\<rangle>) in
      make_function_contract pre post\<close>
 
+text \<open>The arena offset of the clause of a node \<open>nd \<ge> 4\<close>, as \<^verbatim>\<open>propagate_lit\<close> computes it.\<close>
+lemma node_off4:
+  fixes nd :: \<open>64 word\<close>
+  assumes \<open>4 \<le> nd\<close>
+  shows \<open>nd mod 2 \<le> nd\<close> \<open>4 \<le> nd - nd mod 2\<close>
+proof -
+  have f: \<open>4 \<le> unat nd\<close>
+    using assms by (simp add: word_le_nat_alt)
+  have u: \<open>unat (nd mod 2) = unat nd mod 2\<close>
+    by (simp add: unat_mod)
+  show a: \<open>nd mod 2 \<le> nd\<close>
+    by (simp add: word_le_nat_alt u)
+  have d: \<open>unat (nd - nd mod 2) = unat nd - unat nd mod 2\<close>
+    using a u by (simp add: unat_sub)
+  have \<open>4 \<le> unat nd - unat nd mod 2\<close>
+    using f by presburger
+  then show \<open>4 \<le> nd - nd mod 2\<close>
+    using d by (simp add: word_le_nat_alt)
+qed
+
 text \<open>\<^verbatim>\<open>propagate_lit\<close> takes the watch list \<open>k\<close> out and leaves an empty vector there.\<close>
 lemma sok_watch_new:
   \<open>sok_in s \<Longrightarrow> sok (update_Search_watches (\<nabla>{rvec_elems_focus} (\<lambda>xs. xs[k := rvec_new_val L8])) s)\<close>
@@ -694,7 +714,8 @@ lemma Search_propagate_lit_spec:
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   apply (all \<open>(node_bound; fail)?\<close>)
-  sorry
+  apply (all \<open>(rule node_off4; assumption)?\<close>)
+  done
 
 
 definition Search_propagate_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
@@ -722,9 +743,8 @@ lemma Search_propagate_spec:
       simp add: true_def false_def)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(auto simp add: sok_def sok_in_def; fail)?\<close>)
-  sorry
+  done
 
-(*CUT*)
 definition Search_rescale_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
     ('s, unit, 'abort) function_contract\<close> where
   \<open>Search_rescale_contract r g s \<equiv>
@@ -736,6 +756,8 @@ lemma Search_rescale_spec:
   shows \<open>\<Gamma>; Search_rescale r \<Turnstile>\<^sub>F Search_rescale_contract r g s\<close>
   apply (crush_boot f: Search_rescale_def contract: Search_rescale_contract_def)
   apply (crush_base simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for i_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -758,6 +780,8 @@ lemma Search_prev_seen_spec:
   shows \<open>\<Gamma>; Search_prev_seen s i \<Turnstile>\<^sub>F Search_prev_seen_contract s i\<close>
   apply (crush_boot f: Search_prev_seen_def contract: Search_prev_seen_contract_def)
   apply (crush_base inline: NONE_def simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for i_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -779,6 +803,8 @@ lemma Search_pick_spec:
   shows \<open>\<Gamma>; Search_pick s \<Turnstile>\<^sub>F Search_pick_contract s\<close>
   apply (crush_boot f: Search_pick_def contract: Search_pick_contract_def)
   apply (crush_base inline: NONE_def simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for best_ref best_act_ref v_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -807,6 +833,8 @@ lemma Search_backtrack_spec:
   apply (crush_boot f: Search_backtrack_def contract: Search_backtrack_contract_def)
   apply (crush_base inline: NONE_def
       specs add: key_spec contracts add: key_contract_def simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
   apply (ucincl_discharge\<open>
     rule_tac
       INV=\<open>\<lambda>k. \<Squnion>gs s'. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> can_alloc_reference \<star> \<langle>sok s'\<rangle>\<close> and
@@ -856,6 +884,7 @@ lemma new_search_spec:
   apply (crush_boot f: new_search_def contract: new_search_contract_def)
   apply (crush_base inline: NONE_def simp add: true_def false_def)
   apply (all \<open>(simp add: new_cap; fail)?\<close>)
+  apply (all \<open>(simp add: cap_max_bool word_less_nat_alt unat_word_ariths; fail)?\<close>)
   apply (all \<open>search_bound?\<close>)
   apply (auto simp add: sok_def vok_new dest!: rvec_from_elem_val_Some(2))
   done
@@ -872,6 +901,8 @@ lemma Search_clause_lbd_spec:
   apply (crush_boot f: Search_clause_lbd_def contract: Search_clause_lbd_contract_def)
   apply (crush_base inline: NONE_def
       specs add: clause_len_spec contracts add: clause_len_contract_def simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
   apply (all \<open>rename_tac n n_ref j_ref\<close>)
   apply (all \<open>ucincl_discharge\<open>
     rule_tac
@@ -918,6 +949,8 @@ lemma Search_analyze_clause_spec:
   apply (crush_base inline: NONE_def BIG_def
       specs add: Search_update_lbd_spec clause_len_spec
       contracts add: Search_update_lbd_contract_def clause_len_contract_def simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
   apply (all \<open>rename_tac n count_ref j_ref\<close>)
   apply (all \<open>ucincl_discharge\<open>
     rule_tac
@@ -947,6 +980,8 @@ lemma Search_finish_learnt_spec:
   shows \<open>\<Gamma>; Search_finish_learnt r \<Turnstile>\<^sub>F Search_finish_learnt_contract r g s\<close>
   apply (crush_boot f: Search_finish_learnt_def contract: Search_finish_learnt_contract_def)
   apply (crush_base inline: slice_swap_def simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for best_ref bl_ref j_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -966,6 +1001,20 @@ lemma Search_finish_learnt_spec:
     done
   done
 
+text \<open>A push onto a vector shorter than \<^verbatim>\<open>BIG\<close> leaves at most \<^verbatim>\<open>BIG\<close> elements.\<close>
+lemma push_len56:
+  assumes \<open>vok l v\<close> \<open>word64_of_nat (rvec_length v) < (0x100000000000000 :: 64 word)\<close>
+    \<open>288230376151711760 \<le> rvec_cap_max l\<close>
+  shows \<open>rvec_length (the (rvec_append_val v [x])) \<le> 72057594037927936\<close>
+proof -
+  have \<open>unat (word64_of_nat (rvec_length v) :: 64 word) = rvec_length v\<close>
+    using assms(1) rvec_len_unat(1)[of v] by (simp add: vok_def)
+  then have \<open>rvec_length v < 72057594037927936\<close>
+    using assms(2) by (simp add: word_less_nat_alt)
+  then show ?thesis
+    using push_ok(3)[OF assms(1,2,3), of \<open>[x]\<close>] by simp
+qed
+
 definition Search_copy_learnt_contract :: \<open>Search \<Rightarrow> ('s, Lit rvec, 'abort) function_contract\<close> where
   \<open>Search_copy_learnt_contract s \<equiv>
      make_function_contract can_alloc_reference
@@ -975,6 +1024,8 @@ lemma Search_copy_learnt_spec:
   shows \<open>\<Gamma>; Search_copy_learnt s \<Turnstile>\<^sub>F Search_copy_learnt_contract s\<close>
   apply (crush_boot f: Search_copy_learnt_def contract: Search_copy_learnt_contract_def)
   apply (crush_base inline: BIG_def Lit_mk_def simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for out_ref i_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -989,6 +1040,7 @@ lemma Search_copy_learnt_spec:
     apply (crush_base inline: BIG_def Lit_mk_def simp add: true_def false_def rvec_elems_focus_modify)
     apply (all \<open>search_bound?\<close>)
     apply (all \<open>(sok_tac; fail)?\<close>)
+    apply (all \<open>(rule push_len56, assumption, assumption, rule cap_max_big)?\<close>)
     done
   done
 
@@ -1003,6 +1055,8 @@ lemma Search_unmark_from_spec:
   shows \<open>\<Gamma>; Search_unmark_from r i \<Turnstile>\<^sub>F Search_unmark_from_contract r g s i\<close>
   apply (crush_boot f: Search_unmark_from_def contract: Search_unmark_from_contract_def)
   apply (crush_base simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for k_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -1029,6 +1083,8 @@ lemma Search_learnt_lbd_spec:
   shows \<open>\<Gamma>; Search_learnt_lbd r \<Turnstile>\<^sub>F Search_learnt_lbd_contract r g s\<close>
   apply (crush_boot f: Search_learnt_lbd_def contract: Search_learnt_lbd_contract_def)
   apply (crush_base inline: NONE_def simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
   apply (all \<open>rename_tac n_ref j_ref\<close>)
   apply (all \<open>ucincl_discharge\<open>
     rule_tac
@@ -1056,6 +1112,8 @@ lemma init_spec:
   shows \<open>\<Gamma>; init r f L \<Turnstile>\<^sub>F init_contract r g s f L\<close>
   apply (crush_boot f: init_def contract: init_contract_def)
   apply (crush_base inline: NONE_def simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for confl_ref i_ref
     apply (ucincl_discharge\<open>
       rule_tac

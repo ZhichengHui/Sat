@@ -22,6 +22,8 @@ lemma Search_count_live_spec:
   shows \<open>\<Gamma>; Search_count_live r \<Turnstile>\<^sub>F Search_count_live_contract r g s\<close>
   apply (crush_boot f: Search_count_live_def contract: Search_count_live_contract_def)
   apply (crush_base inline: NONE_def BIG_def simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for live_ref i_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -46,6 +48,8 @@ lemma Search_cut_spec:
   shows \<open>\<Gamma>; Search_cut s live \<Turnstile>\<^sub>F Search_cut_contract s live\<close>
   apply (crush_boot f: Search_cut_def contract: Search_cut_contract_def)
   apply (crush_base inline: Cut_mk_def simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for left_ref t_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -89,6 +93,8 @@ lemma Search_kill_spec:
   apply (crush_boot f: Search_kill_def contract: Search_kill_contract_def)
   apply (crush_base specs add: Search_unwatch_spec
       contracts add: Search_unwatch_contract_def simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for left_ref i_ref
     apply (ucincl_discharge\<open>
       rule_tac

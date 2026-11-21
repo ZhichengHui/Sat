@@ -143,6 +143,8 @@ lemma cdcl_spec:
       specs add: new_search_spec init_spec
       contracts add: new_search_contract_def init_contract_def
       simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for _ s_ref l_ref _ _ _ confl_ref sr_ref ra_ref st_ref
     apply (ucincl_discharge\<open>
       rule_tac

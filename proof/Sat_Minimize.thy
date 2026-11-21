@@ -54,6 +54,8 @@ lemma Search_unwind_spec:
   shows \<open>\<Gamma>; Search_unwind r \<Turnstile>\<^sub>F Search_unwind_contract r g s\<close>
   apply (crush_boot f: Search_unwind_def contract: Search_unwind_contract_def)
   apply (crush_base inline: NONE_def simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for k_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -109,6 +111,8 @@ lemma Search_compact_spec:
   shows \<open>\<Gamma>; Search_compact r \<Turnstile>\<^sub>F Search_compact_contract r g s\<close>
   apply (crush_boot f: Search_compact_def contract: Search_compact_contract_def)
   apply (crush_base inline: slice_swap_def simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for i_ref j_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -139,6 +143,8 @@ lemma Search_clear_marks_spec:
   shows \<open>\<Gamma>; Search_clear_marks r \<Turnstile>\<^sub>F Search_clear_marks_contract r g s\<close>
   apply (crush_boot f: Search_clear_marks_def contract: Search_clear_marks_contract_def)
   apply (crush_base simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for k_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -187,6 +193,8 @@ lemma Search_analyze_spec:
   apply (crush_boot f: Search_analyze_def contract: Search_analyze_contract_def)
   apply (crush_base inline: NONE_def BIG_def Lit_mk_def
       simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for counter_ref p_ref idx_ref c_ref
     apply (ucincl_discharge\<open>
       rule_tac
