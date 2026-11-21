@@ -10,14 +10,14 @@ text \<open>The fuel that suffices for a formula: more than twice the number of 
   literals).\<close>
 definition fuel_top :: \<open>Formula \<Rightarrow> nat\<close> where
   \<open>fuel_top f \<equiv>
-     Suc (2 * unat (Formula_num_vars f)) + length (Formula_clauses f) +
-     sum_list (List.map (\<lambda>c. length (Clause_v0 c)) (Formula_clauses f))\<close>
+     Suc (2 * unat (Formula_num_vars f)) + length (cls f) +
+     sum_list (List.map (\<lambda>c. length (lits c)) (cls f))\<close>
 
 lemma fuel_top_clause:
-  assumes \<open>c \<in> set (Formula_clauses f)\<close>
-  shows \<open>length (Clause_v0 c) \<le> fuel_top f\<close>
+  assumes \<open>c \<in> set (cls f)\<close>
+  shows \<open>length (lits c) \<le> fuel_top f\<close>
 proof -
-  have \<open>length (Clause_v0 c) \<le> sum_list (List.map (\<lambda>c. length (Clause_v0 c)) (Formula_clauses f))\<close>
+  have \<open>length (lits c) \<le> sum_list (List.map (\<lambda>c. length (lits c)) (cls f))\<close>
     using assms by (simp add: member_le_sum_list)
   then show ?thesis by (simp add: fuel_top_def)
 qed
@@ -33,9 +33,10 @@ lemma dpll_spec:
   assumes \<open>fuel_top f \<le> urust_fuel\<close>
   shows \<open>\<Gamma>; dpll f \<Turnstile>\<^sub>F solver_contract f\<close>
   apply (crush_boot f: dpll_def contract: solver_contract_def)
-  apply (crush_base inline: vec_from_elem_def Pasn_mk_def Assignments_mk_def
+  apply (crush_base inline: Pasn_mk_def Assignments_mk_def
       specs add: solve_spec contracts add: solve_contract_def
       simp add: true_def false_def unat_lt2p formula_wf_def)
+  apply (all \<open>(drule rvec_from_elem_val_Some(2))+\<close>)?
   subgoal \<comment> \<open>the answer of \<^verbatim>\<open>solve\<close> from the empty assignment\<close>
     by (erule sol_start)
   subgoal \<comment> \<open>the fuel of the recursion of \<^verbatim>\<open>solve\<close>\<close>
@@ -99,7 +100,7 @@ theorem solver_correct:
   shows \<open>solver_correct \<Gamma>\<close>
 proof (unfold solver_correct_def, intro allI impI)
   fix f :: Formula
-  assume \<open>formula_invariant f \<and> sat_repr_ok f\<close>
+  assume \<open>formula_invariant f \<and> sat_repr_ok f \<and> sat_sizes_ok f\<close>
   have \<open>\<Gamma>; solver fuel f \<Turnstile>\<^sub>F solver_contract f\<close> if \<open>fuel_top f \<le> fuel\<close> for fuel
     by (rule Sat_ctx.solver_spec[OF Sat_ctxI that])
   then show \<open>\<exists>N. \<forall>fuel \<ge> N. \<Gamma>; solver fuel f \<Turnstile>\<^sub>F solver_contract f\<close>
