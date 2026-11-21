@@ -161,7 +161,8 @@ abbreviation solver_contract :: \<open>Formula \<Rightarrow> ('s, Answer, 'abort
 
 definition solver_correct where
   \<open>solver_correct \<Gamma> \<equiv>
-     \<forall>f. formula_invariant f \<and> sat_repr_ok f \<longrightarrow> (\<exists>N. \<forall>fuel \<ge> N. \<Gamma>; solver fuel f \<Turnstile>\<^sub>F solver_contract f)\<close>
+     \<forall>f. formula_invariant f \<and> sat_repr_ok f \<and> sat_sizes_ok f \<longrightarrow>
+       (\<exists>N. \<forall>fuel \<ge> N. \<Gamma>; solver fuel f \<Turnstile>\<^sub>F solver_contract f)\<close>
 
 text \<open>\<^const>\<open>solver_correct\<close> \<open>\<Gamma>\<close> is the top-level statement: for every formula that satisfies the
   precondition of \<^const>\<open>Sat_ctx.solver_contract\<close> there is a bound \<open>N\<close> such that, with any
