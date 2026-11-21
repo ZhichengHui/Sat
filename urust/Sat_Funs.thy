@@ -1200,7 +1200,7 @@ definition "Search_restart_due" :: \<open>(('addr, 'gv, Search) Global_Store.ref
     if ((((* (self.Search_since)) < 50_usize) || ((* (self.Search_nconf)) == 0_usize)) || ((* (self.Search_lbd_sum)) >= 2199023255552_usize)) || ((* (self.Search_fast)) >= 137438953472_usize) {
       return false;
     };
-    if ((* (self.Search_fast)) * 3_usize) > ((((* (self.Search_lbd_sum)) * 65536_usize) / (* (self.Search_nconf))) * 5_usize) {
+    if ((* (self.Search_fast)) * 7_usize) > ((((* (self.Search_lbd_sum)) * 65536_usize) / (* (self.Search_nconf))) * 10_usize) {
       * (self.Search_since) = 0_usize;
       return true;
     };

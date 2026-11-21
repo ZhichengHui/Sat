@@ -138,13 +138,13 @@ text \<open>The moving averages of the literal block distances, scaled by \<open
 
 lemma restart_avg:
   assumes \<open>\<not> 0x20000000000 \<le> (a :: 64 word)\<close>
-  shows \<open>unat (a * 0x10000 div n) * 5 < 18446744073709551616\<close>
+  shows \<open>5 * unat (a * 0x10000 div n) < 9223372036854775808\<close>
   using assms div_le_dividend[of \<open>unat a * 65536\<close> \<open>unat n\<close>]
   by (simp add: word_le_nat_alt unat_div unat_word_ariths, linarith)
 
 lemma restart_avg2:
   \<open>\<not> 0x20000000000 \<le> (a :: 64 word) + l \<Longrightarrow>
-    unat ((a * 0x10000 + l * 0x10000) div n) * 5 < 18446744073709551616\<close>
+    5 * unat ((a * 0x10000 + l * 0x10000) div n) < 9223372036854775808\<close>
   using restart_avg[of \<open>a + l\<close> n] by (simp add: distrib_right)
 
 lemma restart_lt:
