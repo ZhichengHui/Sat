@@ -75,10 +75,6 @@ next
     using assms(1,3,4) by simp
 qed
 
-lemma word64_less_of_nat_2:
-  \<open>(x :: 64 word) < 2 + word64_of_nat n \<Longrightarrow> unat x < Suc (Suc n)\<close>
-  using word64_less_of_nat[of x \<open>Suc (Suc n)\<close>] by (simp add: add.commute)
-
 text \<open>Below \<open>2^62\<close>, \<open>2c\<close> and \<open>2c + 1\<close> do not overflow.\<close>
 lemma big_c:
   assumes \<open>c < (0x4000000000000000 :: 64 word)\<close>

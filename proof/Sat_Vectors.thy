@@ -254,6 +254,9 @@ text \<open>The invariant in a precondition. \<open>crush_base\<close> would use
 definition sok_in :: \<open>Search \<Rightarrow> bool\<close> where
   \<open>sok_in \<equiv> sok\<close>
 
+text \<open>A goal \<open>sok_in s\<close> or \<open>sok s\<close> closed by a premise of either form.\<close>
+method sok_asm = ((unfold sok_in_def)?, assumption)
+
 lemma rvec_elems_focus_modify_fun:
   \<open>\<nabla>{rvec_elems_focus} f = update_rvec_elems f\<close>
   by (rule ext) (simp add: rvec_elems_focus_modify)
