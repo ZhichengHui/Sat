@@ -60,6 +60,11 @@ lemma rvec_elems_focus_modify:
   shows \<open>\<nabla>{rvec_elems_focus} f v = update_rvec_elems f v\<close>
   by (simp add: focus_modify_def' focus_components rvec.expand)
 
+text \<open>A \<^verbatim>\<open>Vec<bool>\<close> has at most \<open>2^63 - 1\<close> elements.\<close>
+lemma cap_max_bool:
+  \<open>rvec_cap_max (make_elem_layout (Suc 0) (Suc 0)) = 9223372036854775807\<close>
+  by (simp add: rvec_cap_max_def isize_max_def)
+
 section \<open>Satisfaction by index\<close>
 
 
