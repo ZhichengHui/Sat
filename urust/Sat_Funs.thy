@@ -889,7 +889,12 @@ definition "Search_finish_learnt" :: \<open>(('addr, 'gv, Search) Global_Store.r
 (* Rust: Search::copy_learnt *)
 definition "Search_copy_learnt" :: \<open>Search \<Rightarrow> ('s, Lit rvec, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_copy_learnt \<equiv> \<lambda>self. FunctionBody \<lbrakk>
-    let mut out = { let init_3 = { let res_2 = { let vec_1 = rvec_new(\<llangle>make_elem_layout 16 8\<rrangle>); \<llangle>vec_1 :: Lit rvec\<rrangle> }; \<llangle>res_2 :: Lit rvec\<rrangle> }; \<llangle>init_3 :: Lit rvec\<rrangle> };
+    let n = rvec_len(self.Search_learnt);
+    let mut out = { let init_5 = if n < BIG() {
+        { let res_2 = { let vec_1 = rvec_with_capacity(\<llangle>make_elem_layout 16 8\<rrangle>, n); \<llangle>vec_1 :: Lit rvec\<rrangle> }; \<llangle>res_2 :: Lit rvec\<rrangle> }
+      } else {
+        { let res_4 = { let vec_3 = rvec_new(\<llangle>make_elem_layout 16 8\<rrangle>); \<llangle>vec_3 :: Lit rvec\<rrangle> }; \<llangle>res_4 :: Lit rvec\<rrangle> }
+      }; \<llangle>init_5 :: Lit rvec\<rrangle> };
     let mut i = 0_usize;
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while ((* i) < rvec_len(self.Search_learnt)) && (rvec_len(* out) < BIG()) {
       rvec_push(out, Lit_mk { Lit_var: \<llangle>rvec_elems\<rrangle>\<^sub>1(self.Search_learnt)[* i].Lit_var, Lit_value: \<llangle>rvec_elems\<rrangle>\<^sub>1(self.Search_learnt)[* i].Lit_value });
