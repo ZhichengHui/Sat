@@ -864,6 +864,34 @@ definition "Search_minimize" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \
     Search_unmark_from(self, i);
   \<rbrakk>\<close>
 
+(* Rust: Search::bump_clause *)
+definition "Search_bump_clause" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> Formula \<Rightarrow> (Clause rvec) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_bump_clause \<equiv> \<lambda>self f learned c v. FunctionBody \<lbrakk>
+    let len_v = clause_len(f, learned, c);
+    let mut j = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* j) < len_v {
+      let u = lit_at(f, learned, c, * j).Lit_var;
+      if u != v {
+        Search_bump(self, u);
+      };
+      * j += 1_usize;
+    }
+  \<rbrakk>\<close>
+
+(* Rust: Search::bump_reasons *)
+definition "Search_bump_reasons" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> Formula \<Rightarrow> (Clause rvec) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_bump_reasons \<equiv> \<lambda>self f learned. FunctionBody \<lbrakk>
+    let mut i = 1_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < rvec_len(* (self.Search_learnt)) {
+      let v = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_learnt))[* i].Lit_var;
+      if (v < rvec_len(* (self.Search_reason))) && ((\<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_reason))[v]) != NONE()) {
+        let c = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_reason))[v];
+        Search_bump_clause(self, f, learned, c, v);
+      };
+      * i += 1_usize;
+    }
+  \<rbrakk>\<close>
+
 (* Rust: Search::finish_learnt *)
 definition "Search_finish_learnt" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_finish_learnt \<equiv> \<lambda>self. FunctionBody \<lbrakk>
@@ -948,6 +976,7 @@ definition "Search_analyze" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<
       * (self.Search_inc) += ((* (self.Search_inc)) / 512_usize) + 1_usize;
     };
     Search_minimize(self);
+    Search_bump_reasons(self, f, learned);
     Search_finish_learnt(self);
     Search_copy_learnt(* self)
   \<rbrakk>\<close>
