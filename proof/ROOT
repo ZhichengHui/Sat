@@ -1,5 +1,5 @@
 session "Sat_Proof" = "Sat_Spec" +
-  options [document = false, parallel_proofs = 0]
+  options [document = false]
   theories
     Sat_Partial
     Sat_Proof
