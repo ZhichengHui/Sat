@@ -1001,9 +1001,11 @@ impl Search {
         false
     }
 
-    /// A copy of `learnt`, of fewer than `BIG` literals.
+    /// A copy of `learnt`, of fewer than `BIG` literals, allocated at once when `learnt` is
+    /// shorter than `BIG` (the guard of the allocation).
     fn copy_learnt(&self) -> Vec<Lit> {
-        let mut out: Vec<Lit> = Vec::new();
+        let n = self.learnt.len();
+        let mut out: Vec<Lit> = if n < BIG { Vec::with_capacity(n) } else { Vec::new() };
         let mut i: usize = 0;
         while i < self.learnt.len() && out.len() < BIG {
             out.push(Lit { var: self.learnt[i].var, value: self.learnt[i].value });

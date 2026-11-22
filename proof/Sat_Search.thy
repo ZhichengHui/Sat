@@ -680,6 +680,15 @@ proof -
     using push_ok(3)[OF assms(1,2,3), of \<open>[x]\<close>] by simp
 qed
 
+text \<open>A vector of \<open>Vec::with_capacity\<close> is empty and well-formed.\<close>
+lemma vok_with_capacity:
+  \<open>rvec_with_capacity_val l n = Some v \<Longrightarrow> vok l v \<and> rvec_length v = 0\<close>
+  using rvec_with_capacity_val_Some[of l n v] by (simp add: vok_def)
+
+lemma cap_L16:
+  \<open>(n :: 64 word) < 0x100000000000000 \<Longrightarrow> unat n \<le> rvec_cap_max L16\<close>
+  by (simp add: word_less_nat_alt rvec_cap_max_def isize_max_def)
+
 definition Search_copy_learnt_contract :: \<open>Search \<Rightarrow> ('s, Lit rvec, 'abort) function_contract\<close> where
   \<open>Search_copy_learnt_contract s \<equiv>
      make_function_contract can_alloc_reference
@@ -691,6 +700,7 @@ lemma Search_copy_learnt_spec:
   apply (crush_base inline: BIG_def Lit_mk_def simp add: true_def false_def rvec_elems_focus_modify)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (all \<open>(erule cap_L16)?\<close>)
   subgoal for out_ref i_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -706,6 +716,23 @@ lemma Search_copy_learnt_spec:
     apply (all \<open>search_bound?\<close>)
     apply (all \<open>(sok_tac; fail)?\<close>)
     apply (all \<open>(rule push_len56, assumption, assumption, rule cap_max_big)?\<close>)
+    done
+  subgoal for _ out_ref i_ref
+    apply (ucincl_discharge\<open>
+      rule_tac
+        INV=\<open>\<lambda>k. \<Squnion>go out gi i. out_ref \<mapsto>\<langle>\<top>\<rangle> go\<down>out \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star>
+               \<langle>vok L16 out \<and> rvec_length out \<le> 72057594037927936\<rangle>\<close> and
+        INV'=\<open>\<lambda>k. \<Squnion>go out gi i. out_ref \<mapsto>\<langle>\<top>\<rangle> go\<down>out \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star>
+               \<langle>vok L16 out \<and> i < word64_of_nat (rvec_length (Search_learnt s)) \<and>
+                word64_of_nat (rvec_length out) < 0x100000000000000\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
+        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_bounded_while_framedI\<close>)
+    apply (crush_base inline: BIG_def Lit_mk_def simp add: true_def false_def rvec_elems_focus_modify)
+    apply (all \<open>search_bound?\<close>)
+    apply (all \<open>(sok_tac; fail)?\<close>)
+    apply (all \<open>(rule push_len56, assumption, assumption, rule cap_max_big)?\<close>)
+    apply (all \<open>(drule vok_with_capacity; simp)?\<close>)
     done
   done
 
