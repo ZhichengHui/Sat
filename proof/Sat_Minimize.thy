@@ -178,6 +178,69 @@ lemma Search_minimize_spec:
   apply (all \<open>(sok_tac; fail)?\<close>)
   done
 
+section \<open>Reason-side bumping\<close>
+
+definition Search_bump_clause_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
+    Formula \<Rightarrow> Clause rvec \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
+  \<open>Search_bump_clause_contract r g s f L c v \<equiv>
+     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s \<star> \<langle>sok_in s \<and> db_small f L\<rangle> in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s' \<star> \<langle>sok s'\<rangle>) in
+     make_function_contract pre post\<close>
+
+lemma Search_bump_clause_spec:
+  shows \<open>\<Gamma>; Search_bump_clause r f L c v \<Turnstile>\<^sub>F Search_bump_clause_contract r g s f L c v\<close>
+  apply (crush_boot f: Search_bump_clause_def contract: Search_bump_clause_contract_def)
+  apply (crush_base specs add: clause_len_spec contracts add: clause_len_contract_def
+      simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (all \<open>rename_tac n j_ref\<close>)
+  apply (all \<open>ucincl_discharge\<open>
+    rule_tac
+      INV=\<open>\<lambda>k. \<Squnion>gs s' gj j. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference \<star>
+             \<langle>sok s'\<rangle>\<close> and
+      INV'=\<open>\<lambda>k. \<Squnion>gs s' gj j. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference \<star>
+             \<langle>sok s' \<and> j < n\<rangle>\<close> and
+      \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
+      \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+    in wp_bounded_while_framedI\<close>\<close>)
+  apply (crush_base specs add: lit_at_spec Search_bump_spec
+      contracts add: lit_at_contract_def Search_bump_contract_def
+      simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
+  done
+
+definition Search_bump_reasons_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
+    Formula \<Rightarrow> Clause rvec \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
+  \<open>Search_bump_reasons_contract r g s f L \<equiv>
+     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s \<star> \<langle>sok_in s \<and> db_small f L\<rangle> in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s' \<star> \<langle>sok s'\<rangle>) in
+     make_function_contract pre post\<close>
+
+lemma Search_bump_reasons_spec:
+  shows \<open>\<Gamma>; Search_bump_reasons r f L \<Turnstile>\<^sub>F Search_bump_reasons_contract r g s f L\<close>
+  apply (crush_boot f: Search_bump_reasons_def contract: Search_bump_reasons_contract_def)
+  apply (crush_base inline: NONE_def simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (all \<open>rename_tac i_ref\<close>)
+  apply (all \<open>ucincl_discharge\<open>
+    rule_tac
+      INV=\<open>\<lambda>k. \<Squnion>gs s' gi i. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star>
+             \<langle>sok s'\<rangle>\<close> and
+      INV'=\<open>\<lambda>k. \<Squnion>gs s' gi i. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> gi\<down>i \<star> can_alloc_reference \<star>
+             \<langle>sok s' \<and> i < word64_of_nat (rvec_length (Search_learnt s'))\<rangle>\<close> and
+      \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
+      \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+    in wp_bounded_while_framedI\<close>\<close>)
+  apply (crush_base inline: NONE_def specs add: Search_bump_clause_spec
+      contracts add: Search_bump_clause_contract_def
+      simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
+  done
+
 section \<open>Conflict analysis\<close>
 
 text \<open>\<^verbatim>\<open>analyze\<close> clears \<^verbatim>\<open>learnt\<close> and pushes one literal.\<close>
@@ -239,9 +302,10 @@ lemma Search_analyze_spec:
       in wp_bounded_while_framedI\<close>)
     apply (crush_base inline: ACT_def NONE_def BIG_def Lit_mk_def
         specs add: Search_analyze_clause_spec Search_prev_seen_spec Search_finish_learnt_spec
-          Search_copy_learnt_spec Search_minimize_spec
+          Search_copy_learnt_spec Search_minimize_spec Search_bump_reasons_spec
         contracts add: Search_analyze_clause_contract_def Search_prev_seen_contract_def
           Search_finish_learnt_contract_def Search_copy_learnt_contract_def Search_minimize_contract_def
+          Search_bump_reasons_contract_def
         simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
     apply (all \<open>search_bound?\<close>)
     apply (all \<open>(sok_tac; fail)?\<close>)
