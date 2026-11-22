@@ -108,6 +108,14 @@ code to avoid them. Known gaps and the workarounds that held:
   no-panic contracts; keep it.
 - **No length relations between lists**: HOL lists may be longer than `2^64`, so `len(x) == n` does
   not give `length x = unat n`. Check bounds where they are used (adea3d20).
+- **A fuel-bounded loop may stop early**: a loop whose full run soundness depends on (clearing a
+  reused mark buffer) must be checked after it (`if k < len { fresh vector }`), not trusted; and
+  `rvec_wf v` gives `unat (word64_of_nat (rvec_length v)) = rvec_length v` (`rvec_len_unat`), so
+  keep `rvec_wf` of a kept buffer in `sok` (#113).
+- **Checks may take untrusted hints.** `forced_sound` holds after forcing any variables in any
+  order, so `certify` checks only the reasons analysis used (`Search.hint`); a wrong hint only fails
+  the check. To lend a `Search` field to a checker, make it a `Search` method that takes the field
+  with `mem::replace` and stores it back, not a free function with `&mut s.field` (#113).
 - **Tests of `solver` hardly reach the fallback** since CDCL runs first. Test `cdcl` and `dpll`
   directly and compare with an independent oracle, not with `solver` (5952d953, 7f86250c / #69).
   Fuzzing and the suite catch search bugs that the proofs (no panic only) cannot: a truncation bug
