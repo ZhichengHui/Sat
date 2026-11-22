@@ -266,6 +266,12 @@ lemma sok_learnt_reset:
   unfolding sok_in_def sok_def by simp
 
 
+text \<open>The operands of the guard of \<^verbatim>\<open>bump_reasons\<close> in \<^verbatim>\<open>analyze\<close> (\<open>2 * lbd_sum\<close>,
+  \<open>13 * nconf\<close>) stay below \<open>2^64\<close> under its range checks.\<close>
+lemma analyze_guard_bound:
+  \<open>(a :: 64 word) < 0x20000000000 \<Longrightarrow> 2 * unat a < 18446744073709551616\<close>
+  \<open>(n :: 64 word) < 0x100000000000000 \<Longrightarrow> 13 * unat n < 18446744073709551616\<close>
+  by (simp_all add: word_less_nat_alt)
 
 definition Search_analyze_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
     Formula \<Rightarrow> Clause rvec \<Rightarrow> 64 word \<Rightarrow> ('s, Lit rvec, 'abort) function_contract\<close> where
@@ -310,6 +316,7 @@ lemma Search_analyze_spec:
     apply (all \<open>search_bound?\<close>)
     apply (all \<open>(sok_tac; fail)?\<close>)
     apply (all \<open>(erule sok_learnt_reset)?\<close>)
+    apply (all \<open>(rule analyze_guard_bound; assumption)?\<close>)
     done
   done
 
