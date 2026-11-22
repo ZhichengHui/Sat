@@ -158,9 +158,10 @@ lemma on_conflict_spec:
   apply (crush_boot f: on_conflict_def contract: on_conflict_contract_def)
   apply (crush_base inline: ACT_def NONE_def BIG_def Clause_mk_def
       specs add: certify_spec Search_analyze_spec Search_backtrack_spec Search_attach_spec
-        Search_enqueue_spec Search_learnt_lbd_spec
+        Search_enqueue_spec Search_learnt_lbd_spec Search_clear_need_spec
       contracts add: certify_contract_def Search_analyze_contract_def Search_backtrack_contract_def
         Search_attach_contract_def Search_enqueue_contract_def Search_learnt_lbd_contract_def
+        Search_clear_need_contract_def
       simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
   apply (all \<open>cdcl_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)

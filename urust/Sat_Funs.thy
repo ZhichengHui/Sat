@@ -268,7 +268,8 @@ definition "new_search" :: \<open>(64 word) \<Rightarrow> ('s, Search, 'abort, '
       let fld_48 = 0_usize;
       let fld_49 = 0_usize;
       let fld_50 = 0_usize;
-      \<llangle>make_Search fld_23 fld_24 fld_25 fld_26 fld_27 fld_28 fld_29 fld_30 fld_31 fld_32 fld_33 fld_34 fld_35 fld_36 fld_37 fld_38 fld_39 fld_40 fld_41 fld_42 fld_43 fld_44 fld_45 fld_46 fld_47 fld_48 fld_49 fld_50\<rrangle>
+      let fld_51 = rvec_from_elem(\<llangle>make_elem_layout 1 1\<rrangle>, false, n);
+      \<llangle>make_Search fld_23 fld_24 fld_25 fld_26 fld_27 fld_28 fld_29 fld_30 fld_31 fld_32 fld_33 fld_34 fld_35 fld_36 fld_37 fld_38 fld_39 fld_40 fld_41 fld_42 fld_43 fld_44 fld_45 fld_46 fld_47 fld_48 fld_49 fld_50 fld_51\<rrangle>
     }
   \<rbrakk>\<close>
 
@@ -430,13 +431,13 @@ definition "reason_ok" :: \<open>Formula \<Rightarrow> (Clause rvec) \<Rightarro
   \<rbrakk>\<close>
 
 (* Rust: force_trail *)
-definition "force_trail" :: \<open>Formula \<Rightarrow> (Clause rvec) \<Rightarrow> (bool rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (bool rvec) \<Rightarrow> ('s, bool rvec, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>force_trail \<equiv> \<lambda>f learned assign trail reason forced. FunctionBody \<lbrakk>
+definition "force_trail" :: \<open>Formula \<Rightarrow> (Clause rvec) \<Rightarrow> (bool rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (bool rvec) \<Rightarrow> (bool rvec) \<Rightarrow> ('s, bool rvec, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>force_trail \<equiv> \<lambda>f learned assign trail reason level need forced. FunctionBody \<lbrakk>
     let mut forced = { let init_1 = forced; \<llangle>init_1 :: bool rvec\<rrangle> };
     let mut j = 0_usize;
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* j) < rvec_len(trail) {
       let v = \<llangle>rvec_elems\<rrangle>\<^sub>1(trail)[* j];
-      if ((v < rvec_len(* forced)) && (v < rvec_len(assign))) && (v < rvec_len(reason)) {
+      if (((((v < rvec_len(* forced)) && (v < rvec_len(assign))) && (v < rvec_len(reason))) && (v < rvec_len(level))) && (v < rvec_len(need))) && (((\<llangle>rvec_elems\<rrangle>\<^sub>1(level)[v]) == 0_usize) || (\<llangle>rvec_elems\<rrangle>\<^sub>1(need)[v])) {
         if reason_ok(f, learned, \<llangle>rvec_elems\<rrangle>\<^sub>1(reason)[v], true, v, \<llangle>rvec_elems\<rrangle>\<^sub>1(assign)[v], assign, * forced) {
           * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(forced)[v]) = true;
         }
@@ -447,12 +448,12 @@ definition "force_trail" :: \<open>Formula \<Rightarrow> (Clause rvec) \<Rightar
   \<rbrakk>\<close>
 
 (* Rust: certify *)
-definition "certify" :: \<open>Formula \<Rightarrow> (Clause rvec) \<Rightarrow> (bool rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (64 word) \<Rightarrow> (Lit rvec) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>certify \<equiv> \<lambda>f learned assign trail reason confl learnt. FunctionBody \<lbrakk>
+definition "certify" :: \<open>Formula \<Rightarrow> (Clause rvec) \<Rightarrow> (bool rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (bool rvec) \<Rightarrow> (64 word) \<Rightarrow> (Lit rvec) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>certify \<equiv> \<lambda>f learned assign trail reason level need confl learnt. FunctionBody \<lbrakk>
     if (rvec_len(assign) >= BIG()) || (!all_false(learnt, assign)) {
       return false;
     };
-    let forced = force_trail(f, learned, assign, trail, reason, mark(learnt, rvec_len(assign)));
+    let forced = force_trail(f, learned, assign, trail, reason, level, need, mark(learnt, rvec_len(assign)));
     reason_ok(f, learned, confl, false, 0_usize, false, assign, forced)
   \<rbrakk>\<close>
 
@@ -572,6 +573,9 @@ definition "Search_analyze_clause" :: \<open>(('addr, 'gv, Search) Global_Store.
         let lv = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_level))[v];
         Search_bump(self, v);
         if lv >= cur {
+          if v < rvec_len(* (self.Search_need)) {
+            * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_need)[v]) = true;
+          };
           if (* count_v) < NONE() {
             * count_v += 1_usize;
           }
@@ -676,6 +680,9 @@ definition "Search_redundant_step" :: \<open>(('addr, 'gv, Search) Global_Store.
       return 1_usize;
     };
     * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_seen)[q]) = true;
+    if q < rvec_len(* (self.Search_need)) {
+      * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_need)[q]) = true;
+    };
     if rvec_len(* (self.Search_toclear)) < BIG() {
       rvec_push(self.Search_toclear, q);
     };
@@ -726,7 +733,11 @@ definition "Search_compact" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<
     let mut j = 1_usize;
     #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* j) < rvec_len(* (self.Search_learnt)) {
       let v = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_learnt))[* j].Lit_var;
-      if ((!Search_lit_redundant(self, v)) && ((* i) < rvec_len(* (self.Search_learnt)))) && ((* j) < rvec_len(* (self.Search_learnt))) {
+      let redundant = Search_lit_redundant(self, v);
+      if redundant && (v < rvec_len(* (self.Search_need))) {
+        * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_need)[v]) = true;
+      };
+      if ((!redundant) && ((* i) < rvec_len(* (self.Search_learnt)))) && ((* j) < rvec_len(* (self.Search_learnt))) {
         if (* i) < (* j) {
           slice_swap(\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_learnt), * i, * j);
         };
@@ -853,6 +864,19 @@ definition "Search_analyze" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<
     Search_copy_learnt(* self)
   \<rbrakk>\<close>
 
+(* Rust: Search::clear_need *)
+definition "Search_clear_need" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_clear_need \<equiv> \<lambda>self. FunctionBody \<lbrakk>
+    let mut j = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* j) < rvec_len(* (self.Search_trail)) {
+      let v = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_trail))[* j];
+      if v < rvec_len(* (self.Search_need)) {
+        * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_need)[v]) = false;
+      };
+      * j += 1_usize;
+    }
+  \<rbrakk>\<close>
+
 (* Rust: Search::backtrack *)
 definition "Search_backtrack" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_backtrack \<equiv> \<lambda>self lvl. FunctionBody \<lbrakk>
@@ -882,15 +906,16 @@ definition "on_conflict" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rig
   \<open>on_conflict \<equiv> \<lambda>s f learned confl. FunctionBody \<lbrakk>
     if rvec_len(* (s.Search_lim)) == 0_usize {
       let empty = { let res_2 = { let vec_1 = rvec_new(\<llangle>make_elem_layout 16 8\<rrangle>); \<llangle>vec_1 :: Lit rvec\<rrangle> }; \<llangle>res_2 :: Lit rvec\<rrangle> };
-      if certify(f, * learned, * (s.Search_assign), * (s.Search_trail), * (s.Search_reason), confl, empty) {
+      if \<epsilon>\<open>funcall9 certify \<lbrakk>f\<rbrakk> \<lbrakk>* learned\<rbrakk> \<lbrakk>* (s.Search_assign)\<rbrakk> \<lbrakk>* (s.Search_trail)\<rbrakk> \<lbrakk>* (s.Search_reason)\<rbrakk> \<lbrakk>* (s.Search_level)\<rbrakk> \<lbrakk>* (s.Search_need)\<rbrakk> \<lbrakk>confl\<rbrakk> \<lbrakk>empty\<rbrakk>\<close> {
         return 1_usize;
       };
       return 2_usize;
     };
     let learnt = Search_analyze(s, f, * learned, confl);
-    if ((rvec_len(learnt) == 0_usize) || (rvec_len(* learned) >= BIG())) || (!certify(f, * learned, * (s.Search_assign), * (s.Search_trail), * (s.Search_reason), confl, learnt)) {
+    if ((rvec_len(learnt) == 0_usize) || (rvec_len(* learned) >= BIG())) || (!\<epsilon>\<open>funcall9 certify \<lbrakk>f\<rbrakk> \<lbrakk>* learned\<rbrakk> \<lbrakk>* (s.Search_assign)\<rbrakk> \<lbrakk>* (s.Search_trail)\<rbrakk> \<lbrakk>* (s.Search_reason)\<rbrakk> \<lbrakk>* (s.Search_level)\<rbrakk> \<lbrakk>* (s.Search_need)\<rbrakk> \<lbrakk>confl\<rbrakk> \<lbrakk>learnt\<rbrakk>\<close>) {
       return 2_usize;
     };
+    Search_clear_need(s);
     let v = \<llangle>rvec_elems\<rrangle>\<^sub>1(learnt)[0_usize].Lit_var;
     let b = \<llangle>rvec_elems\<rrangle>\<^sub>1(learnt)[0_usize].Lit_value;
     let bj = if (rvec_len(learnt) > 1_usize) && ((\<llangle>rvec_elems\<rrangle>\<^sub>1(learnt)[1_usize].Lit_var) < rvec_len(* (s.Search_level))) {

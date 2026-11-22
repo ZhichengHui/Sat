@@ -478,14 +478,14 @@ lemma reason_ok_spec:
   done
 
 definition force_trail_contract :: \<open>Formula \<Rightarrow> Clause rvec \<Rightarrow> bool rvec \<Rightarrow> (64 word) rvec \<Rightarrow> (64 word) rvec \<Rightarrow>
-    bool rvec \<Rightarrow> (bool list \<Rightarrow> bool) \<Rightarrow> ('s, bool rvec, 'abort) function_contract\<close> where
-  \<open>force_trail_contract f L assign trail reason fo X \<equiv>
+    (64 word) rvec \<Rightarrow> bool rvec \<Rightarrow> bool rvec \<Rightarrow> (bool list \<Rightarrow> bool) \<Rightarrow> ('s, bool rvec, 'abort) function_contract\<close> where
+  \<open>force_trail_contract f L assign trail reason level need fo X \<equiv>
      let pre = can_alloc_reference \<star> \<langle>db_small f L \<and> forced_sound f L (rvec_elems assign) X (rvec_elems fo)\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star> \<langle>forced_sound f L (rvec_elems assign) X (rvec_elems r)\<rangle> in
      make_function_contract pre post\<close>
 
 lemma force_trail_spec:
-  shows \<open>\<Gamma>; force_trail f L assign trail reason fo \<Turnstile>\<^sub>F force_trail_contract f L assign trail reason fo X\<close>
+  shows \<open>\<Gamma>; force_trail f L assign trail reason level need fo \<Turnstile>\<^sub>F force_trail_contract f L assign trail reason level need fo X\<close>
   apply (crush_boot f: force_trail_def contract: force_trail_contract_def)
   apply (crush_base simp add: true_def false_def rvec_elems_focus_modify)
   subgoal for forced_ref j_ref
@@ -505,15 +505,15 @@ lemma force_trail_spec:
   done
 
 definition certify_contract :: \<open>Formula \<Rightarrow> Clause rvec \<Rightarrow> bool rvec \<Rightarrow> (64 word) rvec \<Rightarrow> (64 word) rvec \<Rightarrow>
-    64 word \<Rightarrow> Lit rvec \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
-  \<open>certify_contract f L assign trail reason c learnt \<equiv>
+    (64 word) rvec \<Rightarrow> bool rvec \<Rightarrow> 64 word \<Rightarrow> Lit rvec \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
+  \<open>certify_contract f L assign trail reason level need c learnt \<equiv>
      let pre = can_alloc_reference \<star> \<langle>db_small f L \<and> rvec_length learnt \<le> 2^62\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
         \<langle>r \<longrightarrow> (\<forall>a. (\<forall>c \<in> set (db f L). clause_sat a c) \<longrightarrow> (\<exists>l \<in> set (rvec_elems learnt). lit_sat a l))\<rangle> in
      make_function_contract pre post\<close>
 
 lemma certify_spec:
-  shows \<open>\<Gamma>; certify f L assign trail reason c learnt \<Turnstile>\<^sub>F certify_contract f L assign trail reason c learnt\<close>
+  shows \<open>\<Gamma>; certify f L assign trail reason level need c learnt \<Turnstile>\<^sub>F certify_contract f L assign trail reason level need c learnt\<close>
   apply (crush_boot f: certify_def contract: certify_contract_def)
   apply (crush_base inline: BIG_def specs add: all_false_spec mark_spec force_trail_spec[where X=\<open>\<lambda>a. \<forall>l \<in> set (rvec_elems learnt). \<not> lit_sat a l\<close>]
         reason_ok_spec

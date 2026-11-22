@@ -457,6 +457,35 @@ lemma Search_pick_spec:
     done
   done
 
+definition Search_clear_need_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
+    ('s, unit, 'abort) function_contract\<close> where
+  \<open>Search_clear_need_contract r g s \<equiv>
+     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s \<star> \<langle>sok_in s\<rangle> in
+     let post = \<lambda>_. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s' \<star> \<langle>sok s'\<rangle>) in
+     make_function_contract pre post\<close>
+
+lemma Search_clear_need_spec:
+  shows \<open>\<Gamma>; Search_clear_need r \<Turnstile>\<^sub>F Search_clear_need_contract r g s\<close>
+  apply (crush_boot f: Search_clear_need_def contract: Search_clear_need_contract_def)
+  apply (crush_base simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
+  subgoal for j_ref
+    apply (ucincl_discharge\<open>
+      rule_tac
+        INV=\<open>\<lambda>k. \<Squnion>gs s' gj j. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference \<star>
+               \<langle>sok_in s'\<rangle>\<close> and
+        INV'=\<open>\<lambda>k. \<Squnion>gs s' gj j. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference \<star>
+               \<langle>sok_in s' \<and> j < word64_of_nat (rvec_length (Search_trail s'))\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
+        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_bounded_while_framedI\<close>)
+    apply (crush_base simp add: true_def false_def rvec_elems_focus_modify)
+    apply (all \<open>search_bound?\<close>)
+    apply (all \<open>(sok_tac; fail)?\<close>)
+    done
+  done
+
 definition Search_backtrack_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
     64 word \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
   \<open>Search_backtrack_contract r g s lvl \<equiv>

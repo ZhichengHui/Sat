@@ -283,7 +283,10 @@ struct Cut {
 /// redundant, `toclear` lists both to clear them afterwards, and `stack` holds the frames
 /// `(v, j, end)` of the depth-first search of `lit_redundant`: variable `v`, and the arena
 /// positions of the next literal of its reason and of the end of the reason's entry. `fast`,
-/// `lbd_sum`, `nconf` and `since` are the moving averages and counts of `restart_due`.
+/// `lbd_sum`, `nconf` and `since` are the moving averages and counts of `restart_due`. `need`
+/// marks the variables whose reasons `certify` reads besides those of level 0: the variables of
+/// the conflict level that conflict analysis marks and those that minimisation finds redundant;
+/// `clear_need` clears it after each conflict.
 struct Search {
     assign: Vec<bool>,
     set: Vec<bool>,
@@ -313,6 +316,7 @@ struct Search {
     lbd_sum: usize,
     nconf: usize,
     since: usize,
+    need: Vec<bool>,
 }
 
 impl Search {
@@ -595,7 +599,8 @@ impl Search {
     /// The literals of clause `c` in conflict analysis: each variable other than `p`, not yet
     /// seen and above level 0 is marked; the literal is added to `learnt` if its level is below
     /// `cur`, while `learnt` is shorter than `BIG` (a clause missing a literal is still checked
-    /// by `certify`). The number of the marked variables at level `cur` or above.
+    /// by `certify`), and otherwise marked in `need`. The number of the marked variables at level
+    /// `cur` or above.
     fn analyze_clause(&mut self, f: &Formula, learned: &Vec<Clause>, c: usize, p: usize, cur: usize) -> usize {
         self.update_lbd(f, learned, c);
         let len = clause_len(f, learned, c);
@@ -609,6 +614,9 @@ impl Search {
                 let lv = self.level[v];
                 self.bump(v);
                 if lv >= cur {
+                    if v < self.need.len() {
+                        self.need[v] = true;
+                    }
                     if count < NONE {
                         count += 1;
                     }
@@ -719,7 +727,8 @@ impl Search {
     /// redundant); otherwise advances `j` and looks at the variable `q` of that literal. If `q`
     /// is `v`, of level 0 or marked, nothing more; if it is known not redundant, a decision, or of
     /// a level that no literal of `learnt` has, `q` is marked not redundant and the search fails
-    /// (1); otherwise `q` is marked and its frame pushed. 0 if the search goes on. `q` is recorded
+    /// (1); otherwise `q` is marked, in `seen` and in `need`, and its frame pushed. 0 if the
+    /// search goes on. `q` is recorded
     /// in `toclear` only while it is shorter than `BIG` (a mark left set only changes the search).
     fn redundant_step(&mut self) -> usize {
         let n = self.stack.len();
@@ -752,6 +761,9 @@ impl Search {
             return 1;
         }
         self.seen[q] = true;
+        if q < self.need.len() {
+            self.need[q] = true;
+        }
         if self.toclear.len() < BIG {
             self.toclear.push(q);
         }
@@ -798,13 +810,18 @@ impl Search {
     }
 
     /// Moves the literals of `learnt` after the first that are not `lit_redundant` to the front,
-    /// in order; the number of literals kept, the first included.
+    /// in order, and marks the variables of the others in `need`; the number of literals kept, the
+    /// first included.
     fn compact(&mut self) -> usize {
         let mut i: usize = 1;
         let mut j: usize = 1;
         while j < self.learnt.len() {
             let v = self.learnt[j].var;
-            if !self.lit_redundant(v) && i < self.learnt.len() && j < self.learnt.len() {
+            let redundant = self.lit_redundant(v);
+            if redundant && v < self.need.len() {
+                self.need[v] = true;
+            }
+            if !redundant && i < self.learnt.len() && j < self.learnt.len() {
                 if i < j {
                     self.learnt.swap(i, j);
                 }
@@ -1040,6 +1057,18 @@ impl Search {
         self.copy_learnt()
     }
 
+    /// Clears the marks `need` of the variables of the trail.
+    fn clear_need(&mut self) {
+        let mut j: usize = 0;
+        while j < self.trail.len() {
+            let v = self.trail[j];
+            if v < self.need.len() {
+                self.need[v] = false;
+            }
+            j += 1;
+        }
+    }
+
     /// Undoes every assignment above decision level `lvl`.
     fn backtrack(&mut self, lvl: usize) {
         if lvl < self.lim.len() {
@@ -1126,6 +1155,7 @@ fn new_search(n: usize) -> Search {
         lbd_sum: 0,
         nconf: 0,
         since: 0,
+        need: vec![false; n],
     }
 }
 
@@ -1209,21 +1239,29 @@ fn reason_ok(
     j >= len
 }
 
-/// Marks, in trail order, every variable whose reason clause has all its other literals marked
-/// and false.
+/// Marks, in trail order, every variable of level 0 or marked in `need` whose reason clause has
+/// all its other literals marked and false.
 fn force_trail(
     f: &Formula,
     learned: &Vec<Clause>,
     assign: &Vec<bool>,
     trail: &Vec<usize>,
     reason: &Vec<usize>,
+    level: &Vec<usize>,
+    need: &Vec<bool>,
     forced: Vec<bool>,
 ) -> Vec<bool> {
     let mut forced = forced;
     let mut j: usize = 0;
     while j < trail.len() {
         let v = trail[j];
-        if v < forced.len() && v < assign.len() && v < reason.len() {
+        if v < forced.len()
+            && v < assign.len()
+            && v < reason.len()
+            && v < level.len()
+            && v < need.len()
+            && (level[v] == 0 || need[v])
+        {
             if reason_ok(f, learned, reason[v], true, v, assign[v], assign, &forced) {
                 forced[v] = true;
             }
@@ -1234,8 +1272,9 @@ fn force_trail(
 }
 
 /// The clause `learnt` follows from the formula and the clauses `learned`: its literals are false
-/// under `assign`, and the reasons of the trail, from the negation of `learnt`, force the values
-/// of `assign` that falsify clause `confl`. Every assignment that satisfies the clauses and
+/// under `assign`, and the reasons of the trail (those of its variables of level 0 or marked in
+/// `need`; skipping any reason does not harm soundness), from the negation of `learnt`, force the
+/// values of `assign` that falsify clause `confl`. Every assignment that satisfies the clauses and
 /// falsifies `learnt` agrees with `assign` on the marked variables, so it falsifies clause `confl`:
 /// there is none. False if `assign` has `BIG` or more entries: `mark` allocates `assign.len()`
 /// marks, and a `Vec<bool>` holds fewer than `2^63`.
@@ -1245,13 +1284,15 @@ fn certify(
     assign: &Vec<bool>,
     trail: &Vec<usize>,
     reason: &Vec<usize>,
+    level: &Vec<usize>,
+    need: &Vec<bool>,
     confl: usize,
     learnt: &Vec<Lit>,
 ) -> bool {
     if assign.len() >= BIG || !all_false(learnt, assign) {
         return false;
     }
-    let forced = force_trail(f, learned, assign, trail, reason, mark(learnt, assign.len()));
+    let forced = force_trail(f, learned, assign, trail, reason, level, need, mark(learnt, assign.len()));
     reason_ok(f, learned, confl, false, 0, false, assign, &forced)
 }
 
@@ -1300,7 +1341,7 @@ fn satisfies(f: &Formula, a: &Vec<bool>) -> bool {
 fn on_conflict(s: &mut Search, f: &Formula, learned: &mut Vec<Clause>, confl: usize) -> usize {
     if s.lim.len() == 0 {
         let empty: Vec<Lit> = Vec::new();
-        if certify(f, learned, &s.assign, &s.trail, &s.reason, confl, &empty) {
+        if certify(f, learned, &s.assign, &s.trail, &s.reason, &s.level, &s.need, confl, &empty) {
             return 1;
         }
         return 2;
@@ -1308,10 +1349,11 @@ fn on_conflict(s: &mut Search, f: &Formula, learned: &mut Vec<Clause>, confl: us
     let learnt = s.analyze(f, learned, confl);
     if learnt.len() == 0
         || learned.len() >= BIG
-        || !certify(f, learned, &s.assign, &s.trail, &s.reason, confl, &learnt)
+        || !certify(f, learned, &s.assign, &s.trail, &s.reason, &s.level, &s.need, confl, &learnt)
     {
         return 2;
     }
+    s.clear_need();
     let v = learnt[0].var;
     let b = learnt[0].value;
     let bj = if learnt.len() > 1 && learnt[1].var < s.level.len() { s.level[learnt[1].var] } else { 0 };
