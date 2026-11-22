@@ -286,8 +286,9 @@ struct Cut {
 /// `lbd_sum`, `nconf` and `since` are the moving averages and counts of `restart_due`. `hint`
 /// lists the variables whose reasons the last conflict analysis used: its first `nres` entries
 /// those it resolved on, from the last trail position down, then those `minimize` found redundant;
-/// `certify` checks only their reasons above level 0 (an untrusted hint). `marks` is the buffer of
-/// the marks of `certify`.
+/// `certify` checks only their reasons above level 0. The hint is untrusted: `certify` checks every
+/// reason it uses, so a wrong hint can only make it fail. `marks` is the buffer of the marks of
+/// `certify`, kept between calls.
 struct Search {
     assign: Vec<bool>,
     set: Vec<bool>,
@@ -1312,7 +1313,9 @@ fn force_pass(
 }
 
 /// Forces the variables of `hint` from position `from` on (`force_pass`), again while a pass
-/// forces one and leaves one unforced.
+/// forces one and leaves one unforced, at most `hint.len()` passes. `minimize` lists the redundant
+/// variables in the order it found them, not in trail order, so a pass may meet a variable before
+/// those its reason needs.
 fn force_fix(
     f: &Formula,
     learned: &Vec<Clause>,
@@ -1360,8 +1363,9 @@ impl Search {
     /// falsifies `learnt` agrees with `assign` on the marked variables, so it falsifies clause `confl`:
     /// there is none. Only the reasons of the variables of the trail positions below `lo` and of
     /// `hint` are checked (the variables found redundant first, from position `nres` on, then the
-    /// first `nres` from the last down); the choice does not matter for soundness. The marks are
-    /// kept in `marks`. False if `assign` has `BIG` or more entries: `mark` may allocate
+    /// first `nres` from the last down). `hint` and `nres` are untrusted: a variable is marked only
+    /// if it is one of `learnt` or its reason is checked, so a wrong hint can only make `certify`
+    /// return false. The marks are kept in `marks`. False if `assign` has `BIG` or more entries: `mark` may allocate
     /// `assign.len()` marks, and a `Vec<bool>` holds fewer than `2^63`.
     fn certify(&mut self, f: &Formula, learned: &Vec<Clause>, lo: usize, nres: usize, confl: usize, learnt: &Vec<Lit>) -> bool {
         if self.assign.len() >= BIG || !all_false(learnt, &self.assign) {
