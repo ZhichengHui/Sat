@@ -976,7 +976,9 @@ definition "Search_analyze" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<
       * (self.Search_inc) += ((* (self.Search_inc)) / 512_usize) + 1_usize;
     };
     Search_minimize(self);
-    Search_bump_reasons(self, f, learned);
+    if (((* (self.Search_lbd_sum)) < 2199023255552_usize) && ((* (self.Search_nconf)) < BIG())) && ((2_usize * (* (self.Search_lbd_sum))) >= (13_usize * (* (self.Search_nconf)))) {
+      Search_bump_reasons(self, f, learned);
+    };
     Search_finish_learnt(self);
     Search_copy_learnt(* self)
   \<rbrakk>\<close>
