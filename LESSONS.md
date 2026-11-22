@@ -38,7 +38,11 @@ no longer apply are removed. Progress entries are cited by session prefix (`prog
   (b64c1dfb, adea3d20, 81673216).
 - **A proof that fails only in CI with "Cannot transfer: not a super theory"** was a timing race
   between forked proofs on the slower runners, not a wrong proof; `proof/ROOT` now sets
-  `parallel_proofs = 0` for `Sat_Proof` (53f8b137 / #92). Keep it; check locally before rewriting.
+  `parallel_proofs = 0` for `Sat_Proof` (53f8b137 / #92). The `ML` warm-up of `Sat_Partial` removed
+  the race: #135 dropped the option again (3/3 CI runs green, `Sat_Proof` 18:49 → 9–14 min). If
+  "Cannot transfer" comes back, extend the warm-up before going sequential again.
+- **CI runner speed varies by ±30 %** between runs (AutoCorrode 6:44–11:24 on the same sources):
+  compare session times as ratios to an untouched session in the same run (#135).
 - **Killing processes**: a script that computed a kill list (awk over `ps`) sent SIGTERM to ~390
   processes of the user, among them Pool Server sessions and other agents' work (67db04ed / #98).
   List the children with `ps --ppid` and kill named PIDs only.
