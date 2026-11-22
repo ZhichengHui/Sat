@@ -283,7 +283,11 @@ struct Cut {
 /// redundant, `toclear` lists both to clear them afterwards, and `stack` holds the frames
 /// `(v, j, end)` of the depth-first search of `lit_redundant`: variable `v`, and the arena
 /// positions of the next literal of its reason and of the end of the reason's entry. `fast`,
-/// `lbd_sum`, `nconf` and `since` are the moving averages and counts of `restart_due`.
+/// `lbd_sum`, `nconf` and `since` are the moving averages and counts of `restart_due`. `hint`
+/// lists the variables whose reasons the last conflict analysis used: its first `nres` entries
+/// those it resolved on, from the last trail position down, then those `minimize` found redundant;
+/// `certify` checks only their reasons above level 0 (an untrusted hint). `marks` is the buffer of
+/// the marks of `certify`.
 struct Search {
     assign: Vec<bool>,
     set: Vec<bool>,
@@ -313,6 +317,9 @@ struct Search {
     lbd_sum: usize,
     nconf: usize,
     since: usize,
+    hint: Vec<usize>,
+    nres: usize,
+    marks: Vec<bool>,
 }
 
 impl Search {
@@ -730,6 +737,9 @@ impl Search {
         let j = self.stack[n - 2];
         if j >= self.stack[n - 1] || j >= self.arena.len() {
             self.stack.truncate(n - 3);
+            if self.hint.len() < BIG {
+                self.hint.push(v);
+            }
             return 0;
         }
         self.stack[n - 2] = j + 1;
@@ -1000,6 +1010,7 @@ impl Search {
     /// empty if the analysis fails.
     fn analyze(&mut self, f: &Formula, learned: &Vec<Clause>, confl: usize) -> Vec<Lit> {
         let cur = self.lim.len();
+        self.hint.clear();
         self.learnt.clear();
         self.learnt.push(Lit { var: NONE, value: false });
         let mut counter: usize = 0;
@@ -1018,6 +1029,9 @@ impl Search {
             }
             idx = i;
             p = self.trail[i];
+            if self.hint.len() < BIG {
+                self.hint.push(p);
+            }
             if p >= self.seen.len() || p >= self.reason.len() || p >= self.assign.len() {
                 return Vec::new();
             }
@@ -1032,6 +1046,7 @@ impl Search {
             return Vec::new();
         }
         self.learnt[0] = Lit { var: p, value: !self.assign[p] };
+        self.nres = self.hint.len();
         if self.inc < ACT {
             self.inc += self.inc / 512 + 1;
         }
@@ -1126,6 +1141,9 @@ fn new_search(n: usize) -> Search {
         lbd_sum: 0,
         nconf: 0,
         since: 0,
+        hint: Vec::new(),
+        nres: 0,
+        marks: vec![false; n],
     }
 }
 
@@ -1167,9 +1185,27 @@ fn all_false(learnt: &Vec<Lit>, assign: &Vec<bool>) -> bool {
     i >= learnt.len()
 }
 
-/// Marks the variables of the literals of `learnt` in a list of `n` marks.
-fn mark(learnt: &Vec<Lit>, n: usize) -> Vec<bool> {
-    let mut forced = vec![false; n];
+/// A list of `n` false marks: `buf` with all its marks cleared if it has `n` entries (a buffer
+/// kept between calls), else a new list (also if the fuel runs out before all are cleared).
+fn cleared(buf: Vec<bool>, n: usize) -> Vec<bool> {
+    let mut forced = buf;
+    if forced.len() != n {
+        return vec![false; n];
+    }
+    let mut k: usize = 0;
+    while k < forced.len() {
+        forced[k] = false;
+        k += 1;
+    }
+    if k < forced.len() {
+        return vec![false; n];
+    }
+    forced
+}
+
+/// Marks the variables of the literals of `learnt` in the list of `n` marks `cleared(buf, n)`.
+fn mark(learnt: &Vec<Lit>, n: usize, buf: Vec<bool>) -> Vec<bool> {
+    let mut forced = cleared(buf, n);
     let mut i: usize = 0;
     while i < learnt.len() {
         if learnt[i].var < forced.len() {
@@ -1209,50 +1245,135 @@ fn reason_ok(
     j >= len
 }
 
-/// Marks, in trail order, every variable whose reason clause has all its other literals marked
-/// and false.
+/// Marks `v` if it is unmarked and its reason clause has all its other literals marked and false;
+/// whether it marked `v`.
+fn force_var(
+    f: &Formula,
+    learned: &Vec<Clause>,
+    assign: &Vec<bool>,
+    reason: &Vec<usize>,
+    v: usize,
+    forced: &mut Vec<bool>,
+) -> bool {
+    if v < forced.len() && v < assign.len() && v < reason.len() && !forced[v] {
+        if reason_ok(f, learned, reason[v], true, v, assign[v], assign, forced) {
+            forced[v] = true;
+            return true;
+        }
+    }
+    false
+}
+
+/// Forces (`force_var`), in trail order, the variables of the trail positions below `lo`.
 fn force_trail(
     f: &Formula,
     learned: &Vec<Clause>,
     assign: &Vec<bool>,
     trail: &Vec<usize>,
     reason: &Vec<usize>,
+    lo: usize,
     forced: Vec<bool>,
 ) -> Vec<bool> {
     let mut forced = forced;
     let mut j: usize = 0;
-    while j < trail.len() {
-        let v = trail[j];
-        if v < forced.len() && v < assign.len() && v < reason.len() {
-            if reason_ok(f, learned, reason[v], true, v, assign[v], assign, &forced) {
-                forced[v] = true;
-            }
-        }
+    while j < lo && j < trail.len() {
+        force_var(f, learned, assign, reason, trail[j], &mut forced);
         j += 1;
     }
     forced
 }
 
-/// The clause `learnt` follows from the formula and the clauses `learned`: its literals are false
-/// under `assign`, and the reasons of the trail, from the negation of `learnt`, force the values
-/// of `assign` that falsify clause `confl`. Every assignment that satisfies the clauses and
-/// falsifies `learnt` agrees with `assign` on the marked variables, so it falsifies clause `confl`:
-/// there is none. False if `assign` has `BIG` or more entries: `mark` allocates `assign.len()`
-/// marks, and a `Vec<bool>` holds fewer than `2^63`.
-fn certify(
+/// Forces (`force_var`) the variables of `hint` from position `from` on, in order; whether it forced
+/// one and left one unforced.
+fn force_pass(
     f: &Formula,
     learned: &Vec<Clause>,
     assign: &Vec<bool>,
-    trail: &Vec<usize>,
     reason: &Vec<usize>,
-    confl: usize,
-    learnt: &Vec<Lit>,
+    hint: &Vec<usize>,
+    from: usize,
+    forced: &mut Vec<bool>,
 ) -> bool {
-    if assign.len() >= BIG || !all_false(learnt, assign) {
-        return false;
+    let mut progress: usize = 0;
+    let mut left: usize = 0;
+    let mut j = from;
+    while j < hint.len() {
+        let v = hint[j];
+        if force_var(f, learned, assign, reason, v, forced) {
+            progress = 1;
+        } else if v < forced.len() && !forced[v] {
+            left = 1;
+        }
+        j += 1;
     }
-    let forced = force_trail(f, learned, assign, trail, reason, mark(learnt, assign.len()));
-    reason_ok(f, learned, confl, false, 0, false, assign, &forced)
+    progress != 0 && left != 0
+}
+
+/// Forces the variables of `hint` from position `from` on (`force_pass`), again while a pass
+/// forces one and leaves one unforced.
+fn force_fix(
+    f: &Formula,
+    learned: &Vec<Clause>,
+    assign: &Vec<bool>,
+    reason: &Vec<usize>,
+    hint: &Vec<usize>,
+    from: usize,
+    forced: Vec<bool>,
+) -> Vec<bool> {
+    let mut forced = forced;
+    let mut again: usize = 1;
+    let mut pass: usize = 0;
+    while again != 0 && pass < hint.len() {
+        pass += 1;
+        again = if force_pass(f, learned, assign, reason, hint, from, &mut forced) { 1 } else { 0 };
+    }
+    forced
+}
+
+/// Forces the variables of the first `to` entries of `hint`, from the last one down.
+fn force_back(
+    f: &Formula,
+    learned: &Vec<Clause>,
+    assign: &Vec<bool>,
+    reason: &Vec<usize>,
+    hint: &Vec<usize>,
+    to: usize,
+    forced: Vec<bool>,
+) -> Vec<bool> {
+    let mut forced = forced;
+    let mut j = to;
+    while j > 0 {
+        j -= 1;
+        if j < hint.len() {
+            force_var(f, learned, assign, reason, hint[j], &mut forced);
+        }
+    }
+    forced
+}
+
+impl Search {
+    /// The clause `learnt` follows from the formula and the clauses `learned`: its literals are false
+    /// under `assign`, and the reasons of the trail, from the negation of `learnt`, force the values
+    /// of `assign` that falsify clause `confl`. Every assignment that satisfies the clauses and
+    /// falsifies `learnt` agrees with `assign` on the marked variables, so it falsifies clause `confl`:
+    /// there is none. Only the reasons of the variables of the trail positions below `lo` and of
+    /// `hint` are checked (the variables found redundant first, from position `nres` on, then the
+    /// first `nres` from the last down); the choice does not matter for soundness. The marks are
+    /// kept in `marks`. False if `assign` has `BIG` or more entries: `mark` may allocate
+    /// `assign.len()` marks, and a `Vec<bool>` holds fewer than `2^63`.
+    fn certify(&mut self, f: &Formula, learned: &Vec<Clause>, lo: usize, nres: usize, confl: usize, learnt: &Vec<Lit>) -> bool {
+        if self.assign.len() >= BIG || !all_false(learnt, &self.assign) {
+            return false;
+        }
+        let b = std::mem::replace(&mut self.marks, Vec::new());
+        let forced = mark(learnt, self.assign.len(), b);
+        let forced = force_trail(f, learned, &self.assign, &self.trail, &self.reason, lo, forced);
+        let forced = force_fix(f, learned, &self.assign, &self.reason, &self.hint, nres, forced);
+        let forced = force_back(f, learned, &self.assign, &self.reason, &self.hint, nres, forced);
+        let r = reason_ok(f, learned, confl, false, 0, false, &self.assign, &forced);
+        self.marks = forced;
+        r
+    }
 }
 
 /// The values of the variables below `n` in `assign` (`false` where `assign` has none).
@@ -1300,15 +1421,17 @@ fn satisfies(f: &Formula, a: &Vec<bool>) -> bool {
 fn on_conflict(s: &mut Search, f: &Formula, learned: &mut Vec<Clause>, confl: usize) -> usize {
     if s.lim.len() == 0 {
         let empty: Vec<Lit> = Vec::new();
-        if certify(f, learned, &s.assign, &s.trail, &s.reason, confl, &empty) {
+        let lo = s.trail.len();
+        if s.certify(f, learned, lo, 0, confl, &empty) {
             return 1;
         }
         return 2;
     }
     let learnt = s.analyze(f, learned, confl);
+    let lo = if s.lim.len() > 0 { s.lim[0] } else { s.trail.len() };
     if learnt.len() == 0
         || learned.len() >= BIG
-        || !certify(f, learned, &s.assign, &s.trail, &s.reason, confl, &learnt)
+        || !s.certify(f, learned, lo, s.nres, confl, &learnt)
     {
         return 2;
     }

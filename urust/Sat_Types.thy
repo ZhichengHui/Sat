@@ -104,9 +104,12 @@ scalable_datatype_record Search =
   Search_lbd_sum :: \<open>64 word\<close>
   Search_nconf :: \<open>64 word\<close>
   Search_since :: \<open>64 word\<close>
+  Search_hint :: \<open>(64 word) rvec\<close>
+  Search_nres :: \<open>64 word\<close>
+  Search_marks :: \<open>bool rvec\<close>
 micro_rust_record Search
 
-definition "Search_mk" :: \<open>(bool rvec) \<Rightarrow> (bool rvec) \<Rightarrow> (bool rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (64 word) \<Rightarrow> (((64 word) rvec) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (bool rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (64 word) \<Rightarrow> (bool rvec) \<Rightarrow> (Lit rvec) \<Rightarrow> (bool rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (64 word) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (bool rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, Search, 'abort, 'i, 'o) function_body\<close> where
-  [crush_inline]: \<open>Search_mk \<equiv> \<lambda>a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20 a21 a22 a23 a24 a25 a26 a27. FunctionBody (literal (make_Search a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20 a21 a22 a23 a24 a25 a26 a27))\<close>
+definition "Search_mk" :: \<open>(bool rvec) \<Rightarrow> (bool rvec) \<Rightarrow> (bool rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (64 word) \<Rightarrow> (((64 word) rvec) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (bool rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (64 word) \<Rightarrow> (bool rvec) \<Rightarrow> (Lit rvec) \<Rightarrow> (bool rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (64 word) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (bool rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ((64 word) rvec) \<Rightarrow> (64 word) \<Rightarrow> (bool rvec) \<Rightarrow> ('s, Search, 'abort, 'i, 'o) function_body\<close> where
+  [crush_inline]: \<open>Search_mk \<equiv> \<lambda>a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20 a21 a22 a23 a24 a25 a26 a27 a28 a29 a30. FunctionBody (literal (make_Search a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20 a21 a22 a23 a24 a25 a26 a27 a28 a29 a30))\<close>
 
 end

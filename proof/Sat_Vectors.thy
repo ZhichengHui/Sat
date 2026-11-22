@@ -242,12 +242,13 @@ proof -
 qed
 
 text \<open>The invariant of the search state: the vectors it grows are well-formed and have the
-  layouts of their element types.\<close>
+  layouts of their element types, and the buffer of the marks of \<^verbatim>\<open>certify\<close> is well-formed.\<close>
 definition sok :: \<open>Search \<Rightarrow> bool\<close> where
   \<open>sok s \<equiv> vok L8 (Search_trail s) \<and> vok L8 (Search_start s) \<and> vok L8 (Search_arena s) \<and>
      (\<forall>w \<in> set (rvec_elems (Search_watches s)). vok L8 w) \<and> vok L16 (Search_learnt s) \<and>
      vok L8 (Search_stack s) \<and> vok L8 (Search_toclear s) \<and> vok L8 (Search_lim s) \<and>
-     vok L8 (Search_lbd s) \<and> vok L1 (Search_dead s)\<close>
+     vok L8 (Search_lbd s) \<and> vok L1 (Search_dead s) \<and> vok L8 (Search_hint s) \<and>
+     rvec_wf (Search_marks s)\<close>
 
 text \<open>The invariant in a precondition. \<open>crush_base\<close> would use a premise \<open>sok s\<close> to
   instantiate the \<open>sok ?s'\<close> of a postcondition before the points-to fixes \<open>?s'\<close>.\<close>
