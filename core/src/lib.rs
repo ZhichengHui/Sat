@@ -184,10 +184,14 @@ fn solve(f: &Formula, pa: Pasn) -> Answer {
 // Conflict-driven clause learning (CDCL). The search below is not trusted: every index is checked
 // before use, and a vector grows only while it is shorter than `BIG` (elsewhere the step is
 // skipped, or the search gives up), so it never panics; its answers are checked before they are
-// returned. A `Sat` answer is an assignment that `satisfies` checks against the formula; an
-// `Unsat` answer is a learned empty clause. Every learned clause is first certified by `certify`
-// to follow from the formula and the clauses learned before. When a check fails, or a loop runs
-// out of fuel, `cdcl` gives up and `solver` falls back to `solve`.
+// returned. Every push and every allocation sized by a vector's length has its own guard, because
+// the proofs (`proof/Sat_Vectors.thy`) know no relation between the lengths of two vectors: a push
+// onto a vector shorter than `BIG` cannot exceed `rvec_cap_max` (lemma `push_ok`), and a skipped
+// push, or giving up, is sound because every answer is checked. A `Sat` answer is an assignment
+// that `satisfies` checks against the formula; an `Unsat` answer is a learned empty clause. Every
+// learned clause is first certified by `certify` to follow from the formula and the clauses
+// learned before. When a check fails, or a loop runs out of fuel, `cdcl` gives up and `solver`
+// falls back to `solve`.
 
 /// No clause, node or variable: the largest `usize`.
 const NONE: usize = 18446744073709551615;
@@ -327,7 +331,8 @@ impl Search {
         self.key_false(key(v, b))
     }
 
-    /// Assigns `b` to `v` with the reason `r` at the current decision level.
+    /// Assigns `b` to `v` with the reason `r` at the current decision level. Nothing if `trail`
+    /// has `BIG` entries (the guard of its push).
     fn enqueue(&mut self, v: usize, b: bool, r: usize) {
         if v < self.assign.len()
             && v < self.set.len()
@@ -348,7 +353,9 @@ impl Search {
     }
 
     /// Adds the new clause `c` to the arena at an even offset `o` and, if it has at least two
-    /// literals, its watch nodes `o + 5`, `o + 4` watching its first two literals.
+    /// literals, its watch nodes `o + 5`, `o + 4` watching its first two literals. The padding
+    /// and `start` are pushed only while shorter than `BIG`; `o < BIG` keeps `o + 7` from
+    /// overflowing.
     fn attach(&mut self, f: &Formula, learned: &Vec<Clause>, c: usize) {
         if self.arena.len() % 2 == 1 && self.arena.len() < BIG {
             self.arena.push(NONE);
@@ -379,6 +386,9 @@ impl Search {
 
     /// Appends the entry of clause `c` to the arena: its index, the end of its entry, the
     /// positions of its first two literals, two keys `NONE`, and the keys of its literals.
+    /// Nothing if the arena or the clause has `BIG` or more entries (`o + 6 + len` does not
+    /// overflow, and the six header words are one push of at most eight elements, `push_ok`);
+    /// a key is pushed only while the arena is shorter than `BIG`.
     fn push_clause(&mut self, f: &Formula, learned: &Vec<Clause>, c: usize) {
         let len = clause_len(f, learned, c);
         let o = self.arena.len();
@@ -584,7 +594,8 @@ impl Search {
 
     /// The literals of clause `c` in conflict analysis: each variable other than `p`, not yet
     /// seen and above level 0 is marked; the literal is added to `learnt` if its level is below
-    /// `cur`. The number of the marked variables at level `cur` or above.
+    /// `cur`, while `learnt` is shorter than `BIG` (a clause missing a literal is still checked
+    /// by `certify`). The number of the marked variables at level `cur` or above.
     fn analyze_clause(&mut self, f: &Formula, learned: &Vec<Clause>, c: usize, p: usize, cur: usize) -> usize {
         self.update_lbd(f, learned, c);
         let len = clause_len(f, learned, c);
@@ -683,7 +694,8 @@ impl Search {
     }
 
     /// Pushes the frame of `v` onto `stack`: `v`, the arena positions of the first literal of its
-    /// reason and of the end of the entry (`0, 0` if `v` has no reason in the arena).
+    /// reason and of the end of the entry (`0, 0` if `v` has no reason in the arena). Nothing if
+    /// `stack` has `BIG` entries; the frame is one push of three words.
     fn push_frame(&mut self, v: usize) {
         let mut from: usize = 0;
         let mut end: usize = 0;
@@ -707,7 +719,8 @@ impl Search {
     /// redundant); otherwise advances `j` and looks at the variable `q` of that literal. If `q`
     /// is `v`, of level 0 or marked, nothing more; if it is known not redundant, a decision, or of
     /// a level that no literal of `learnt` has, `q` is marked not redundant and the search fails
-    /// (1); otherwise `q` is marked and its frame pushed. 0 if the search goes on.
+    /// (1); otherwise `q` is marked and its frame pushed. 0 if the search goes on. `q` is recorded
+    /// in `toclear` only while it is shorter than `BIG` (a mark left set only changes the search).
     fn redundant_step(&mut self) -> usize {
         let n = self.stack.len();
         if n < 3 {
@@ -1224,7 +1237,8 @@ fn force_trail(
 /// under `assign`, and the reasons of the trail, from the negation of `learnt`, force the values
 /// of `assign` that falsify clause `confl`. Every assignment that satisfies the clauses and
 /// falsifies `learnt` agrees with `assign` on the marked variables, so it falsifies clause `confl`:
-/// there is none. False if `assign` has `BIG` or more entries.
+/// there is none. False if `assign` has `BIG` or more entries: `mark` allocates `assign.len()`
+/// marks, and a `Vec<bool>` holds fewer than `2^63`.
 fn certify(
     f: &Formula,
     learned: &Vec<Clause>,
@@ -1280,7 +1294,9 @@ fn satisfies(f: &Formula, a: &Vec<bool>) -> bool {
 
 /// Handles the false clause `confl`: learns a certified clause and asserts its first literal
 /// after backjumping (0); or, at decision level 0, certifies the empty clause: the formula is
-/// unsatisfiable (1); or gives up (2).
+/// unsatisfiable (1); or gives up (2). It gives up when `learned`, `lbd` or `dead` has `BIG`
+/// entries, the guards of their pushes; the guard of `lbd` and `dead` is right before their
+/// pushes, since the contracts of `learnt_lbd` and `backtrack` do not keep their lengths.
 fn on_conflict(s: &mut Search, f: &Formula, learned: &mut Vec<Clause>, confl: usize) -> usize {
     if s.lim.len() == 0 {
         let empty: Vec<Lit> = Vec::new();
@@ -1362,6 +1378,7 @@ pub fn cdcl(f: &Formula) -> Option<Answer> {
                 }
                 return None;
             }
+            // The guard of the push onto `lim`.
             if s.lim.len() >= BIG {
                 return None;
             }
