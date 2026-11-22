@@ -366,33 +366,14 @@ lemma clear_step:
   assumes \<open>ra < word64_of_nat (length xs)\<close> \<open>\<forall>v < length xs. xs ! v \<longrightarrow> unat ra \<le> v\<close>
     \<open>v < length xs\<close> \<open>xs[unat ra := False] ! v\<close>
   shows \<open>unat (ra + 1) \<le> v\<close>
-proof -
-  have r: \<open>unat ra < length xs\<close>
-    using assms(1) word64_less_of_nat by blast
-  then have \<open>v \<noteq> unat ra\<close>
-    using assms(4) by auto
-  moreover have \<open>xs ! v\<close>
-    using assms(4) calculation by simp
-  ultimately have \<open>unat ra < v\<close>
-    using assms(2,3) by fastforce
-  moreover have \<open>unat (ra + 1) = Suc (unat ra)\<close>
-    using word64_less_max[OF assms(1)] unat_word_Suc_simp by blast
-  ultimately show ?thesis
-    by simp
-qed
+  using assms word64_less_of_nat[OF assms(1)] unat_word_Suc_simp[OF word64_less_max[OF assms(1)]]
+  by (cases \<open>v = unat ra\<close>) auto
 
 lemma clear_end:
   assumes \<open>\<not> r < word64_of_nat (rvec_length xs)\<close> \<open>rvec_wf xs\<close>
     \<open>\<forall>v < rvec_length xs. rvec_elems xs ! v \<longrightarrow> unat r \<le> v\<close> \<open>v < rvec_length xs\<close> \<open>rvec_elems xs ! v\<close>
   shows False
-proof -
-  have \<open>unat (word64_of_nat (rvec_length xs)) = rvec_length xs\<close>
-    using assms(2) by (rule rvec_len_unat(1))
-  then have \<open>rvec_length xs \<le> unat r\<close>
-    using assms(1) by (simp add: not_less word_le_nat_alt)
-  then show ?thesis
-    using assms(3,4,5) by fastforce
-qed
+  using assms rvec_len_unat(1)[OF assms(2)] by (auto simp: not_less word_le_nat_alt)
 
 definition cleared_contract :: \<open>bool rvec \<Rightarrow> 64 word \<Rightarrow> ('s, bool rvec, 'abort) function_contract\<close> where
   \<open>cleared_contract buf n \<equiv>
@@ -416,18 +397,10 @@ lemma cleared_spec:
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
     apply (crush_base simp add: true_def false_def rvec_elems_focus_modify)
-    apply (all \<open>(erule (4) clear_end; fail)?\<close>)
-    apply (all \<open>(simp add: cap_max_bool; fail)?\<close>)
-    apply (all \<open>(auto intro!: rvec_wf_update_elems; fail)?\<close>)
-    apply (all \<open>(erule rvec_from_elem_val_Some(1); fail)?\<close>)
-    apply (all \<open>(auto dest!: rvec_from_elem_val_Some(2); fail)?\<close>)
-    apply (all \<open>(rule word64_less_max, assumption; fail)?\<close>)
-    apply (all \<open>(rule word64_less_of_nat, assumption; fail)?\<close>)
-    apply (all \<open>(rule clear_step, assumption+; fail)?\<close>)
+    apply (auto simp add: cap_max_bool intro: clear_step word64_less_max word64_less_of_nat
+        rvec_wf_update_elems elim: clear_end dest: rvec_from_elem_val_Some)
     done
-  apply (all \<open>(simp add: cap_max_bool; fail)?\<close>)
-  apply (all \<open>(erule rvec_from_elem_val_Some(1); fail)?\<close>)
-  apply (auto dest!: rvec_from_elem_val_Some(2))
+  apply (auto simp add: cap_max_bool dest: rvec_from_elem_val_Some)
   done
 
 definition mark_contract :: \<open>Lit rvec \<Rightarrow> 64 word \<Rightarrow> bool rvec \<Rightarrow> ('s, bool rvec, 'abort) function_contract\<close> where
@@ -591,8 +564,7 @@ lemma force_trail_spec:
       in wp_bounded_while_framedI\<close>)
     apply (crush_base specs add: force_var_spec contracts add: force_var_contract_def
         simp add: true_def false_def rvec_elems_focus_modify)
-    subgoal using word64_less_max by blast
-    subgoal using word64_less_of_nat by blast
+    apply (all \<open>blast intro: word64_less_max word64_less_of_nat\<close>)
     done
   done
 
@@ -624,7 +596,7 @@ lemma force_pass_spec:
       in wp_bounded_while_framedI\<close>)
     apply (crush_base specs add: force_var_spec contracts add: force_var_contract_def
         simp add: true_def false_def rvec_elems_focus_modify)
-    apply (all \<open>(blast intro: word64_less_max word64_less_of_nat)\<close>)
+    apply (all \<open>blast intro: word64_less_max word64_less_of_nat\<close>)
     done
   done
 
@@ -653,7 +625,7 @@ lemma force_fix_spec:
       in wp_bounded_while_framedI\<close>)
     apply (crush_base specs add: force_pass_spec contracts add: force_pass_contract_def
         simp add: true_def false_def rvec_elems_focus_modify)
-    using word64_less_max apply blast
+    apply (blast intro: word64_less_max)
     done
   done
 
