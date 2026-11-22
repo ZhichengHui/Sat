@@ -360,24 +360,97 @@ lemma all_false_spec:
     done
   done
 
-definition mark_contract :: \<open>Lit rvec \<Rightarrow> 64 word \<Rightarrow> ('s, bool rvec, 'abort) function_contract\<close> where
-  \<open>mark_contract learnt n \<equiv>
-     let pre = can_alloc_reference \<star> \<langle>unat n < 2^63\<rangle> in
+text \<open>The marks below \<open>k\<close> are clear: clearing mark \<open>k\<close> extends that by one, and once \<open>k\<close>
+  reaches the length all are clear.\<close>
+lemma clear_step:
+  assumes \<open>ra < word64_of_nat (length xs)\<close> \<open>\<forall>v < length xs. xs ! v \<longrightarrow> unat ra \<le> v\<close>
+    \<open>v < length xs\<close> \<open>xs[unat ra := False] ! v\<close>
+  shows \<open>unat (ra + 1) \<le> v\<close>
+proof -
+  have r: \<open>unat ra < length xs\<close>
+    using assms(1) word64_less_of_nat by blast
+  then have \<open>v \<noteq> unat ra\<close>
+    using assms(4) by auto
+  moreover have \<open>xs ! v\<close>
+    using assms(4) calculation by simp
+  ultimately have \<open>unat ra < v\<close>
+    using assms(2,3) by fastforce
+  moreover have \<open>unat (ra + 1) = Suc (unat ra)\<close>
+    using word64_less_max[OF assms(1)] unat_word_Suc_simp by blast
+  ultimately show ?thesis
+    by simp
+qed
+
+lemma clear_end:
+  assumes \<open>\<not> r < word64_of_nat (rvec_length xs)\<close> \<open>rvec_wf xs\<close>
+    \<open>\<forall>v < rvec_length xs. rvec_elems xs ! v \<longrightarrow> unat r \<le> v\<close> \<open>v < rvec_length xs\<close> \<open>rvec_elems xs ! v\<close>
+  shows False
+proof -
+  have \<open>unat (word64_of_nat (rvec_length xs)) = rvec_length xs\<close>
+    using assms(2) by (rule rvec_len_unat(1))
+  then have \<open>rvec_length xs \<le> unat r\<close>
+    using assms(1) by (simp add: not_less word_le_nat_alt)
+  then show ?thesis
+    using assms(3,4,5) by fastforce
+qed
+
+definition cleared_contract :: \<open>bool rvec \<Rightarrow> 64 word \<Rightarrow> ('s, bool rvec, 'abort) function_contract\<close> where
+  \<open>cleared_contract buf n \<equiv>
+     let pre = can_alloc_reference \<star> \<langle>unat n < 2^63 \<and> rvec_wf buf\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>rvec_wf r \<and> (\<forall>v < rvec_length r. \<not> rvec_elems r ! v)\<rangle> in
+     make_function_contract pre post\<close>
+
+lemma cleared_spec:
+  shows \<open>\<Gamma>; cleared buf n \<Turnstile>\<^sub>F cleared_contract buf n\<close>
+  apply (crush_boot f: cleared_def contract: cleared_contract_def)
+  apply (crush_base simp add: true_def false_def rvec_elems_focus_modify)
+  subgoal for forced_ref k_ref
+    apply (ucincl_discharge\<open>
+      rule_tac
+        INV=\<open>\<lambda>_. \<Squnion>gf fo g k. forced_ref \<mapsto>\<langle>\<top>\<rangle> gf\<down>fo \<star> k_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>k \<star>
+               \<langle>rvec_wf fo \<and> (\<forall>v < rvec_length fo. rvec_elems fo ! v \<longrightarrow> unat k \<le> v)\<rangle>\<close> and
+        INV'=\<open>\<lambda>_. \<Squnion>gf fo g k. forced_ref \<mapsto>\<langle>\<top>\<rangle> gf\<down>fo \<star> k_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>k \<star>
+               \<langle>k < word64_of_nat (rvec_length fo) \<and> rvec_wf fo \<and>
+                (\<forall>v < rvec_length fo. rvec_elems fo ! v \<longrightarrow> unat k \<le> v)\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
+        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_bounded_while_framedI\<close>)
+    apply (crush_base simp add: true_def false_def rvec_elems_focus_modify)
+    apply (all \<open>(erule (4) clear_end; fail)?\<close>)
+    apply (all \<open>(simp add: cap_max_bool; fail)?\<close>)
+    apply (all \<open>(auto intro!: rvec_wf_update_elems; fail)?\<close>)
+    apply (all \<open>(erule rvec_from_elem_val_Some(1); fail)?\<close>)
+    apply (all \<open>(auto dest!: rvec_from_elem_val_Some(2); fail)?\<close>)
+    apply (all \<open>(rule word64_less_max, assumption; fail)?\<close>)
+    apply (all \<open>(rule word64_less_of_nat, assumption; fail)?\<close>)
+    apply (all \<open>(rule clear_step, assumption+; fail)?\<close>)
+    done
+  apply (all \<open>(simp add: cap_max_bool; fail)?\<close>)
+  apply (all \<open>(erule rvec_from_elem_val_Some(1); fail)?\<close>)
+  apply (auto dest!: rvec_from_elem_val_Some(2))
+  done
+
+definition mark_contract :: \<open>Lit rvec \<Rightarrow> 64 word \<Rightarrow> bool rvec \<Rightarrow> ('s, bool rvec, 'abort) function_contract\<close> where
+  \<open>mark_contract learnt n buf \<equiv>
+     let pre = can_alloc_reference \<star> \<langle>unat n < 2^63 \<and> rvec_wf buf\<rangle> in
      let post = \<lambda>r. can_alloc_reference \<star>
-        \<langle>\<forall>v < rvec_length r. rvec_elems r ! v \<longrightarrow> (\<exists>l \<in> set (rvec_elems learnt). unat (Lit_var l) = v)\<rangle> in
+        \<langle>rvec_wf r \<and>
+         (\<forall>v < rvec_length r. rvec_elems r ! v \<longrightarrow> (\<exists>l \<in> set (rvec_elems learnt). unat (Lit_var l) = v))\<rangle> in
      make_function_contract pre post\<close>
 
 lemma mark_spec:
-  shows \<open>\<Gamma>; mark learnt n \<Turnstile>\<^sub>F mark_contract learnt n\<close>
+  shows \<open>\<Gamma>; mark learnt n buf \<Turnstile>\<^sub>F mark_contract learnt n buf\<close>
   apply (crush_boot f: mark_def contract: mark_contract_def)
-  apply (crush_base simp add: true_def false_def rvec_elems_focus_modify)
+  apply (crush_base specs add: cleared_spec contracts add: cleared_contract_def
+      simp add: true_def false_def rvec_elems_focus_modify)
   subgoal for fv forced_ref i_ref
     apply (ucincl_discharge\<open>
       rule_tac
         INV=\<open>\<lambda>k. \<Squnion>gf fo g i. forced_ref \<mapsto>\<langle>\<top>\<rangle> gf\<down>fo \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>i \<star> can_alloc_reference \<star>
-               \<langle>\<forall>v < rvec_length fo. rvec_elems fo ! v \<longrightarrow> (\<exists>l \<in> set (rvec_elems learnt). unat (Lit_var l) = v)\<rangle>\<close> and
+               \<langle>rvec_wf fo \<and>
+                (\<forall>v < rvec_length fo. rvec_elems fo ! v \<longrightarrow> (\<exists>l \<in> set (rvec_elems learnt). unat (Lit_var l) = v))\<rangle>\<close> and
         INV'=\<open>\<lambda>k. \<Squnion>gf fo g i. forced_ref \<mapsto>\<langle>\<top>\<rangle> gf\<down>fo \<star> i_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>i \<star> can_alloc_reference \<star>
-               \<langle>i < word64_of_nat (rvec_length learnt) \<and>
+               \<langle>i < word64_of_nat (rvec_length learnt) \<and> rvec_wf fo \<and>
                 (\<forall>v < rvec_length fo. rvec_elems fo ! v \<longrightarrow> (\<exists>l \<in> set (rvec_elems learnt). unat (Lit_var l) = v))\<rangle>\<close> and
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
@@ -385,9 +458,8 @@ lemma mark_spec:
     apply (crush_base simp add: true_def false_def rvec_elems_focus_modify)
     apply (auto simp add: word64_less_of_nat intro: word64_less_max)
     apply (metis mark_upd word64_less_of_nat)
-    apply (auto dest!: rvec_from_elem_val_Some(2))
+    apply (auto intro!: rvec_wf_update_elems)
     done
-  apply (simp add: cap_max_bool)
   done
 
 definition reason_ok_contract :: \<open>Formula \<Rightarrow> Clause rvec \<Rightarrow> 64 word \<Rightarrow> bool \<Rightarrow> 64 word \<Rightarrow> bool \<Rightarrow>
@@ -477,51 +549,140 @@ lemma reason_ok_spec:
     done
   done
 
+definition force_var_contract :: \<open>Formula \<Rightarrow> Clause rvec \<Rightarrow> bool rvec \<Rightarrow> (64 word) rvec \<Rightarrow> 64 word \<Rightarrow>
+    ('addr, 'gv, bool rvec) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> bool rvec \<Rightarrow> (bool list \<Rightarrow> bool) \<Rightarrow>
+    ('s, bool, 'abort) function_contract\<close> where
+  \<open>force_var_contract f L assign reason v r g fo X \<equiv>
+     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>fo \<star>
+        \<langle>db_small f L \<and> forced_sound f L (rvec_elems assign) X (rvec_elems fo) \<and> rvec_wf fo\<rangle> in
+     let post = \<lambda>_. can_alloc_reference \<star>
+        (\<Squnion>g' fo'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>fo' \<star> \<langle>forced_sound f L (rvec_elems assign) X (rvec_elems fo') \<and> rvec_wf fo'\<rangle>) in
+     make_function_contract pre post\<close>
+
+lemma force_var_spec:
+  shows \<open>\<Gamma>; force_var f L assign reason v r \<Turnstile>\<^sub>F force_var_contract f L assign reason v r g fo X\<close>
+  apply (crush_boot f: force_var_def contract: force_var_contract_def)
+  apply (crush_base specs add: reason_ok_spec contracts add: reason_ok_contract_def
+      simp add: true_def false_def rvec_elems_focus_modify)
+  apply (auto simp add: word64_less_of_nat intro: forced_sound_step rvec_wf_update_elems)
+  done
+
 definition force_trail_contract :: \<open>Formula \<Rightarrow> Clause rvec \<Rightarrow> bool rvec \<Rightarrow> (64 word) rvec \<Rightarrow> (64 word) rvec \<Rightarrow>
-    bool rvec \<Rightarrow> (bool list \<Rightarrow> bool) \<Rightarrow> ('s, bool rvec, 'abort) function_contract\<close> where
-  \<open>force_trail_contract f L assign trail reason fo X \<equiv>
-     let pre = can_alloc_reference \<star> \<langle>db_small f L \<and> forced_sound f L (rvec_elems assign) X (rvec_elems fo)\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star> \<langle>forced_sound f L (rvec_elems assign) X (rvec_elems r)\<rangle> in
+    64 word \<Rightarrow> bool rvec \<Rightarrow> (bool list \<Rightarrow> bool) \<Rightarrow> ('s, bool rvec, 'abort) function_contract\<close> where
+  \<open>force_trail_contract f L assign trail reason lo fo X \<equiv>
+     let pre = can_alloc_reference \<star> \<langle>db_small f L \<and> forced_sound f L (rvec_elems assign) X (rvec_elems fo) \<and> rvec_wf fo\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>forced_sound f L (rvec_elems assign) X (rvec_elems r) \<and> rvec_wf r\<rangle> in
      make_function_contract pre post\<close>
 
 lemma force_trail_spec:
-  shows \<open>\<Gamma>; force_trail f L assign trail reason fo \<Turnstile>\<^sub>F force_trail_contract f L assign trail reason fo X\<close>
+  shows \<open>\<Gamma>; force_trail f L assign trail reason lo fo \<Turnstile>\<^sub>F force_trail_contract f L assign trail reason lo fo X\<close>
   apply (crush_boot f: force_trail_def contract: force_trail_contract_def)
   apply (crush_base simp add: true_def false_def rvec_elems_focus_modify)
   subgoal for forced_ref j_ref
     apply (ucincl_discharge\<open>
       rule_tac
         INV=\<open>\<lambda>k. \<Squnion>gf fo' g j. forced_ref \<mapsto>\<langle>\<top>\<rangle> gf\<down>fo' \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>j \<star> can_alloc_reference \<star>
-               \<langle>forced_sound f L (rvec_elems assign) X (rvec_elems fo')\<rangle>\<close> and
+               \<langle>forced_sound f L (rvec_elems assign) X (rvec_elems fo') \<and> rvec_wf fo'\<rangle>\<close> and
         INV'=\<open>\<lambda>k. \<Squnion>gf fo' g j. forced_ref \<mapsto>\<langle>\<top>\<rangle> gf\<down>fo' \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>j \<star> can_alloc_reference \<star>
-               \<langle>j < word64_of_nat (rvec_length trail) \<and> forced_sound f L (rvec_elems assign) X (rvec_elems fo')\<rangle>\<close> and
+               \<langle>j < lo \<and> j < word64_of_nat (rvec_length trail) \<and>
+                forced_sound f L (rvec_elems assign) X (rvec_elems fo') \<and> rvec_wf fo'\<rangle>\<close> and
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base specs add: reason_ok_spec contracts add: reason_ok_contract_def
+    apply (crush_base specs add: force_var_spec contracts add: force_var_contract_def
         simp add: true_def false_def rvec_elems_focus_modify)
-    apply (auto simp add: word64_less_of_nat intro: word64_less_max forced_sound_step)
+    subgoal using word64_less_max by blast
+    subgoal using word64_less_of_nat by blast
     done
   done
 
-definition certify_contract :: \<open>Formula \<Rightarrow> Clause rvec \<Rightarrow> bool rvec \<Rightarrow> (64 word) rvec \<Rightarrow> (64 word) rvec \<Rightarrow>
-    64 word \<Rightarrow> Lit rvec \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
-  \<open>certify_contract f L assign trail reason c learnt \<equiv>
-     let pre = can_alloc_reference \<star> \<langle>db_small f L \<and> rvec_length learnt \<le> 2^62\<rangle> in
-     let post = \<lambda>r. can_alloc_reference \<star>
-        \<langle>r \<longrightarrow> (\<forall>a. (\<forall>c \<in> set (db f L). clause_sat a c) \<longrightarrow> (\<exists>l \<in> set (rvec_elems learnt). lit_sat a l))\<rangle> in
+definition force_pass_contract :: \<open>Formula \<Rightarrow> Clause rvec \<Rightarrow> bool rvec \<Rightarrow> (64 word) rvec \<Rightarrow> (64 word) rvec \<Rightarrow>
+    64 word \<Rightarrow> ('addr, 'gv, bool rvec) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> bool rvec \<Rightarrow> (bool list \<Rightarrow> bool) \<Rightarrow>
+    ('s, bool, 'abort) function_contract\<close> where
+  \<open>force_pass_contract f L assign reason hint from r g fo X \<equiv>
+     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>fo \<star>
+        \<langle>db_small f L \<and> forced_sound f L (rvec_elems assign) X (rvec_elems fo) \<and> rvec_wf fo\<rangle> in
+     let post = \<lambda>_. can_alloc_reference \<star>
+        (\<Squnion>g' fo'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>fo' \<star> \<langle>forced_sound f L (rvec_elems assign) X (rvec_elems fo') \<and> rvec_wf fo'\<rangle>) in
      make_function_contract pre post\<close>
 
-lemma certify_spec:
-  shows \<open>\<Gamma>; certify f L assign trail reason c learnt \<Turnstile>\<^sub>F certify_contract f L assign trail reason c learnt\<close>
-  apply (crush_boot f: certify_def contract: certify_contract_def)
-  apply (crush_base inline: BIG_def specs add: all_false_spec mark_spec force_trail_spec[where X=\<open>\<lambda>a. \<forall>l \<in> set (rvec_elems learnt). \<not> lit_sat a l\<close>]
-        reason_ok_spec
-      contracts add: all_false_contract_def mark_contract_def force_trail_contract_def reason_ok_contract_def
-      simp add: true_def false_def)
-  subgoal using certify_sound by blast
-  subgoal by (rule forced_sound_mark) auto
-  apply (simp add: not_le word_less_nat_alt)
+lemma force_pass_spec:
+  shows \<open>\<Gamma>; force_pass f L assign reason hint from r \<Turnstile>\<^sub>F force_pass_contract f L assign reason hint from r g fo X\<close>
+  apply (crush_boot f: force_pass_def contract: force_pass_contract_def)
+  apply (crush_base simp add: true_def false_def rvec_elems_focus_modify)
+  subgoal for progress_ref left_ref j_ref
+    apply (ucincl_discharge\<open>
+      rule_tac
+        INV=\<open>\<lambda>k. \<Squnion>gf fo' gr pr gl l gj j. r \<mapsto>\<langle>\<top>\<rangle> gf\<down>fo' \<star> progress_ref \<mapsto>\<langle>\<top>\<rangle> gr\<down>pr \<star>
+               left_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference \<star>
+               \<langle>forced_sound f L (rvec_elems assign) X (rvec_elems fo') \<and> rvec_wf fo'\<rangle>\<close> and
+        INV'=\<open>\<lambda>k. \<Squnion>gf fo' gr pr gl l gj j. r \<mapsto>\<langle>\<top>\<rangle> gf\<down>fo' \<star> progress_ref \<mapsto>\<langle>\<top>\<rangle> gr\<down>pr \<star>
+               left_ref \<mapsto>\<langle>\<top>\<rangle> gl\<down>l \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> gj\<down>j \<star> can_alloc_reference \<star>
+               \<langle>j < word64_of_nat (rvec_length hint) \<and> forced_sound f L (rvec_elems assign) X (rvec_elems fo') \<and> rvec_wf fo'\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
+        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_bounded_while_framedI\<close>)
+    apply (crush_base specs add: force_var_spec contracts add: force_var_contract_def
+        simp add: true_def false_def rvec_elems_focus_modify)
+    apply (all \<open>(blast intro: word64_less_max word64_less_of_nat)\<close>)
+    done
+  done
+
+definition force_fix_contract :: \<open>Formula \<Rightarrow> Clause rvec \<Rightarrow> bool rvec \<Rightarrow> (64 word) rvec \<Rightarrow> (64 word) rvec \<Rightarrow>
+    64 word \<Rightarrow> bool rvec \<Rightarrow> (bool list \<Rightarrow> bool) \<Rightarrow> ('s, bool rvec, 'abort) function_contract\<close> where
+  \<open>force_fix_contract f L assign reason hint from fo X \<equiv>
+     let pre = can_alloc_reference \<star> \<langle>db_small f L \<and> forced_sound f L (rvec_elems assign) X (rvec_elems fo) \<and> rvec_wf fo\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>forced_sound f L (rvec_elems assign) X (rvec_elems r) \<and> rvec_wf r\<rangle> in
+     make_function_contract pre post\<close>
+
+lemma force_fix_spec:
+  shows \<open>\<Gamma>; force_fix f L assign reason hint from fo \<Turnstile>\<^sub>F force_fix_contract f L assign reason hint from fo X\<close>
+  apply (crush_boot f: force_fix_def contract: force_fix_contract_def)
+  apply (crush_base simp add: true_def false_def rvec_elems_focus_modify)
+  subgoal for forced_ref again_ref pass_ref
+    apply (ucincl_discharge\<open>
+      rule_tac
+        INV=\<open>\<lambda>k. \<Squnion>gf fo' ga a gp p. forced_ref \<mapsto>\<langle>\<top>\<rangle> gf\<down>fo' \<star> again_ref \<mapsto>\<langle>\<top>\<rangle> ga\<down>a \<star>
+               pass_ref \<mapsto>\<langle>\<top>\<rangle> gp\<down>p \<star> can_alloc_reference \<star>
+               \<langle>forced_sound f L (rvec_elems assign) X (rvec_elems fo') \<and> rvec_wf fo'\<rangle>\<close> and
+        INV'=\<open>\<lambda>k. \<Squnion>gf fo' ga a gp p. forced_ref \<mapsto>\<langle>\<top>\<rangle> gf\<down>fo' \<star> again_ref \<mapsto>\<langle>\<top>\<rangle> ga\<down>a \<star>
+               pass_ref \<mapsto>\<langle>\<top>\<rangle> gp\<down>p \<star> can_alloc_reference \<star>
+               \<langle>p < word64_of_nat (rvec_length hint) \<and> forced_sound f L (rvec_elems assign) X (rvec_elems fo') \<and> rvec_wf fo'\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
+        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_bounded_while_framedI\<close>)
+    apply (crush_base specs add: force_pass_spec contracts add: force_pass_contract_def
+        simp add: true_def false_def rvec_elems_focus_modify)
+    using word64_less_max apply blast
+    done
+  done
+
+definition force_back_contract :: \<open>Formula \<Rightarrow> Clause rvec \<Rightarrow> bool rvec \<Rightarrow> (64 word) rvec \<Rightarrow> (64 word) rvec \<Rightarrow>
+    64 word \<Rightarrow> bool rvec \<Rightarrow> (bool list \<Rightarrow> bool) \<Rightarrow> ('s, bool rvec, 'abort) function_contract\<close> where
+  \<open>force_back_contract f L assign reason hint to fo X \<equiv>
+     let pre = can_alloc_reference \<star> \<langle>db_small f L \<and> forced_sound f L (rvec_elems assign) X (rvec_elems fo) \<and> rvec_wf fo\<rangle> in
+     let post = \<lambda>r. can_alloc_reference \<star> \<langle>forced_sound f L (rvec_elems assign) X (rvec_elems r) \<and> rvec_wf r\<rangle> in
+     make_function_contract pre post\<close>
+
+lemma force_back_spec:
+  shows \<open>\<Gamma>; force_back f L assign reason hint to fo \<Turnstile>\<^sub>F force_back_contract f L assign reason hint to fo X\<close>
+  apply (crush_boot f: force_back_def contract: force_back_contract_def)
+  apply (crush_base simp add: true_def false_def rvec_elems_focus_modify)
+  subgoal for forced_ref j_ref
+    apply (ucincl_discharge\<open>
+      rule_tac
+        INV=\<open>\<lambda>k. \<Squnion>gf fo' g j. forced_ref \<mapsto>\<langle>\<top>\<rangle> gf\<down>fo' \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>j \<star> can_alloc_reference \<star>
+               \<langle>forced_sound f L (rvec_elems assign) X (rvec_elems fo') \<and> rvec_wf fo'\<rangle>\<close> and
+        INV'=\<open>\<lambda>k. \<Squnion>gf fo' g j. forced_ref \<mapsto>\<langle>\<top>\<rangle> gf\<down>fo' \<star> j_ref \<mapsto>\<langle>\<top>\<rangle> g\<down>j \<star> can_alloc_reference \<star>
+               \<langle>0 < j \<and> forced_sound f L (rvec_elems assign) X (rvec_elems fo') \<and> rvec_wf fo'\<rangle>\<close> and
+        \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
+        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
+      in wp_bounded_while_framedI\<close>)
+    apply (crush_base specs add: force_var_spec contracts add: force_var_contract_def
+        simp add: true_def false_def rvec_elems_focus_modify)
+    subgoal using word64_less_of_nat by blast
+    subgoal by (simp add: word_le_nat_alt word_less_nat_alt)
+    done
   done
 
 definition model_contract :: \<open>bool rvec \<Rightarrow> 64 word \<Rightarrow> ('s, bool rvec, 'abort) function_contract\<close> where

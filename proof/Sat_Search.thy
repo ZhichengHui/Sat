@@ -510,6 +510,12 @@ lemma new_cap:
     \<open>unat (n + 1) \<le> rvec_cap_max L8\<close>
   using assms by (simp_all add: word_less_nat_alt unat_word_ariths rvec_cap_max_def isize_max_def)
 
+text \<open>A new vector of \<open>n\<close> copies of \<open>x\<close> is well-formed.\<close>
+lemma from_elem_wf:
+  assumes h: \<open>rvec_from_elem_val l x n = Some v\<close>
+  shows \<open>rvec_wf v \<and> rvec_elems v = replicate n x\<close>
+  using rvec_from_elem_val_Some(1)[OF h] rvec_from_elem_val_Some(2)[OF h] by simp
+
 definition new_search_contract :: \<open>64 word \<Rightarrow> ('s, Search, 'abort) function_contract\<close> where
   \<open>new_search_contract n \<equiv>
      make_function_contract (can_alloc_reference \<star> \<langle>n < 0x100000000000000\<rangle>)
@@ -522,7 +528,7 @@ lemma new_search_spec:
   apply (all \<open>(simp add: new_cap; fail)?\<close>)
   apply (all \<open>(simp add: cap_max_bool word_less_nat_alt unat_word_ariths; fail)?\<close>)
   apply (all \<open>search_bound?\<close>)
-  apply (auto simp add: sok_def vok_new dest!: rvec_from_elem_val_Some(2))
+  apply (auto simp add: sok_def vok_new dest!: from_elem_wf)
   done
 
 definition Search_clause_lbd_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>

@@ -196,9 +196,18 @@ qed
 lemma sok_learnt_reset:
   assumes \<open>sok_in s\<close>
   shows \<open>sok_in (update_Search_learnt
-    (\<lambda>a. the (rvec_append_val (update_rvec_elems (\<lambda>_. []) (Search_learnt s)) [x])) s)\<close>
-  using assms vok_clear_push(2)[OF _ cap_max_big(3), of \<open>Search_learnt s\<close> x]
-  unfolding sok_in_def sok_def by (simp; blast)
+    (\<lambda>a. the (rvec_append_val (update_rvec_elems (\<lambda>_. []) (Search_learnt s)) [x]))
+    (update_Search_hint (\<lambda>_. update_rvec_elems (\<lambda>_. []) (Search_hint s)) s))\<close>
+proof -
+  have l: \<open>vok L16 (Search_learnt s)\<close> and h: \<open>vok L8 (Search_hint s)\<close>
+    using assms unfolding sok_in_def sok_def by simp_all
+  have \<open>vok L16 (the (rvec_append_val (update_rvec_elems (\<lambda>_. []) (Search_learnt s)) [x]))\<close>
+    using l by (rule vok_clear_push(2)[OF _ cap_max_big(3)])
+  moreover have \<open>vok L8 (update_rvec_elems (\<lambda>_. []) (Search_hint s))\<close>
+    using h by (rule vok_update) simp
+  ultimately show ?thesis
+    using assms unfolding sok_in_def sok_def by simp
+qed
 
 
 

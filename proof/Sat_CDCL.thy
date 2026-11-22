@@ -140,6 +140,36 @@ section \<open>The search with certified answers\<close>
 text \<open>A conflict adds a certified learned clause to the database; \<^verbatim>\<open>cdcl\<close> answers only what the
   checks show.\<close>
 
+definition Search_certify_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
+    Formula \<Rightarrow> Clause rvec \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow> Lit rvec \<Rightarrow>
+    ('s, bool, 'abort) function_contract\<close> where
+  \<open>Search_certify_contract r g s f L lo nres c learnt \<equiv>
+     let pre = can_alloc_reference \<star> r \<mapsto>\<langle>\<top>\<rangle> g\<down>s \<star>
+        \<langle>sok_in s \<and> db_small f L \<and> rvec_length learnt \<le> 2^62\<rangle> in
+     let post = \<lambda>res. can_alloc_reference \<star> (\<Squnion>g' s'. r \<mapsto>\<langle>\<top>\<rangle> g'\<down>s' \<star>
+        \<langle>sok s' \<and> (res \<longrightarrow>
+           (\<forall>a. (\<forall>c \<in> set (db f L). clause_sat a c) \<longrightarrow> (\<exists>l \<in> set (rvec_elems learnt). lit_sat a l)))\<rangle>) in
+     make_function_contract pre post\<close>
+
+lemma Search_certify_spec:
+  shows \<open>\<Gamma>; Search_certify r f L lo nres c learnt \<Turnstile>\<^sub>F Search_certify_contract r g s f L lo nres c learnt\<close>
+  apply (crush_boot f: Search_certify_def contract: Search_certify_contract_def)
+  apply (crush_base inline: BIG_def mem_replace_def
+      specs add: all_false_spec mark_spec
+        force_trail_spec[where X=\<open>\<lambda>a. \<forall>l \<in> set (rvec_elems learnt). \<not> lit_sat a l\<close>]
+        force_fix_spec[where X=\<open>\<lambda>a. \<forall>l \<in> set (rvec_elems learnt). \<not> lit_sat a l\<close>]
+        force_back_spec[where X=\<open>\<lambda>a. \<forall>l \<in> set (rvec_elems learnt). \<not> lit_sat a l\<close>]
+        reason_ok_spec
+      contracts add: all_false_contract_def mark_contract_def force_trail_contract_def
+        force_fix_contract_def force_back_contract_def reason_ok_contract_def
+      simp add: true_def false_def rvec_elems_focus_modify)
+  apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (all \<open>(auto simp add: sok_in_def sok_def; fail)?\<close>)
+  apply (all \<open>(use certify_sound in blast; fail)?\<close>)
+  apply (all \<open>(rule forced_sound_mark; auto; fail)?\<close>)
+  apply (all \<open>(simp add: not_le word_less_nat_alt; fail)?\<close>)
+  done
+
 definition on_conflict_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
     Formula \<Rightarrow> ('addr, 'gv, Clause rvec) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Clause rvec \<Rightarrow> 64 word \<Rightarrow>
     ('s, 64 word, 'abort) function_contract\<close> where
@@ -157,9 +187,9 @@ lemma on_conflict_spec:
   shows \<open>\<Gamma>; on_conflict r f lref c \<Turnstile>\<^sub>F on_conflict_contract r g s f lref gl L c\<close>
   apply (crush_boot f: on_conflict_def contract: on_conflict_contract_def)
   apply (crush_base inline: ACT_def NONE_def BIG_def Clause_mk_def
-      specs add: certify_spec Search_analyze_spec Search_backtrack_spec Search_attach_spec
+      specs add: Search_certify_spec Search_analyze_spec Search_backtrack_spec Search_attach_spec
         Search_enqueue_spec Search_learnt_lbd_spec
-      contracts add: certify_contract_def Search_analyze_contract_def Search_backtrack_contract_def
+      contracts add: Search_certify_contract_def Search_analyze_contract_def Search_backtrack_contract_def
         Search_attach_contract_def Search_enqueue_contract_def Search_learnt_lbd_contract_def
       simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
   apply (all \<open>cdcl_bound?\<close>)
