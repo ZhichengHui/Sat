@@ -996,7 +996,8 @@ impl Search {
         false
     }
 
-    /// Raises the activity of the variable of each literal of clause `c` other than `v`.
+    /// Raises the activity of the variable of each literal of clause `c` other than `v` (the
+    /// variable that `c` implied), with `bump`.
     fn bump_clause(&mut self, f: &Formula, learned: &Vec<Clause>, c: usize, v: usize) {
         let len = clause_len(f, learned, c);
         let mut j: usize = 0;
@@ -1010,13 +1011,14 @@ impl Search {
     }
 
     /// Reason-side bumping (as in MapleSAT): raises the activity of the variables of the reason
-    /// clauses of the literals of `learnt` after the first, so that the decisions follow the
-    /// variables that implied the learned clause. `analyze` calls it only while the fast moving
-    /// average of the literal block distances of the learned clauses (`fast` of `restart_due`, scaled
-    /// by `2^16`) is at least 6.5: it pays on the long clauses of pigeon-hole instances (average 7 to
-    /// 15) and not on random 3-SAT (average 4 to 5.5, 25 % more conflicts). The average over all
-    /// conflicts (`lbd_sum` / `nconf`) is a worse signal: it starts above 6.5 on random 3-SAT, whose
-    /// first conflicts have long clauses, while `fast` starts at 0.
+    /// clauses of the literals of `learnt` after the first (a decision has none), so that the
+    /// decisions follow the variables that implied the learned clause. `analyze` calls it only
+    /// while the fast moving average of the literal block distances of the learned clauses (`fast`
+    /// of `restart_due`, scaled by `2^16`) is at least 6.5: it pays on the long clauses of
+    /// pigeon-hole instances (average 7 to 15) and not on random 3-SAT (average 4 to 5.5, 25 % more
+    /// conflicts). The average over all conflicts (`lbd_sum` / `nconf`, #132) is a worse signal: it
+    /// starts above 6.5 on random 3-SAT, whose first conflicts have long clauses, while `fast`
+    /// starts at 0.
     fn bump_reasons(&mut self, f: &Formula, learned: &Vec<Clause>) {
         let mut i: usize = 1;
         while i < self.learnt.len() {
