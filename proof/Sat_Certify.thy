@@ -292,6 +292,7 @@ lemma lit_at_spec:
   shows \<open>\<Gamma>; lit_at f L c j \<Turnstile>\<^sub>F lit_at_contract f L c j\<close>
   apply (crush_boot f: lit_at_def contract: lit_at_contract_def)
   apply (crush_base inline: Lit_mk_def NONE_def simp add: true_def false_def)
+  apply (all \<open>(rule word64_less_of_nat, assumption)?\<close>)
   using word64_less_of_nat apply (auto simp add: db_def db_small_def nth_append word_less_nat_alt
       unat_of_nat_eq unat_sub word_le_nat_alt not_less Lit.expand len_word)
   done
@@ -678,11 +679,17 @@ lemma model_spec:
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
     apply (crush_base simp add: true_def false_def rvec_elems_focus_modify)
-    using word64_less_of_nat word64_unat_less_max apply (auto simp add: word_less_nat_alt)
-    apply (auto dest!: rvec_from_elem_val_Some(2))
+    apply (all \<open>(rule word64_less_of_nat word64_less_max, assumption)?\<close>)
+    apply (all \<open>drule rvec_from_elem_val_Some(2), simp\<close>)
     done
   apply (simp add: cap_max_bool)
   done
+
+text \<open>A clause with a literal at a 64-bit index that the assignment satisfies.\<close>
+lemma clause_sat_nth:
+  \<open>j < word64_of_nat (length (lits c)) \<Longrightarrow> a ! unat (Lit_var (lits c ! unat j)) = Lit_value (lits c ! unat j) \<Longrightarrow>
+    clause_sat a c\<close>
+  unfolding clause_sat_def lit_sat_def using word64_less_of_nat nth_mem by blast
 
 definition clause_holds_contract :: \<open>Clause \<Rightarrow> bool rvec \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
   \<open>clause_holds_contract c a \<equiv>
@@ -704,8 +711,9 @@ lemma clause_holds_spec:
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
     apply (crush_base simp add: true_def false_def rvec_elems_focus_modify)
-    using word64_less_of_nat word64_unat_less_max
-    apply (auto simp add: clause_sat_def lit_sat_def word_less_nat_alt)
+    apply (all \<open>(rule word64_less_of_nat word64_less_max, assumption)?\<close>)
+    apply (all \<open>(erule notE, rule word64_less_max, assumption)?\<close>)
+    apply (all \<open>rule clause_sat_nth, assumption, simp\<close>)
     done
   done
 
