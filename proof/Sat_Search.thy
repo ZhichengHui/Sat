@@ -348,9 +348,10 @@ lemma Search_propagate_lit_spec:
         Search_other_key_contract_def close_gap_contract_def
       simp add: true_def false_def rvec_elems_focus_modify)
   apply (all \<open>search_bound?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (all \<open>(rule vok_update; (assumption | simp); fail)?\<close>)
   apply (all \<open>(node_bound; fail)?\<close>)
   apply (all \<open>(rule node_off4; assumption)?\<close>)
+  apply (all \<open>(sok_tac; fail)?\<close>)
   done
 
 
@@ -578,6 +579,13 @@ lemma Search_update_lbd_spec:
   apply (all \<open>(sok_tac; fail)?\<close>)
   done
 
+text \<open>\<^verbatim>\<open>analyze_clause\<close> pushes onto \<^verbatim>\<open>learnt\<close>, shorter than \<^verbatim>\<open>BIG\<close>.\<close>
+lemma sok_learnt_push:
+  assumes \<open>sok_in s\<close> \<open>word64_of_nat (rvec_length (Search_learnt s)) < (0x100000000000000 :: 64 word)\<close>
+  shows \<open>\<exists>y. rvec_append_val (Search_learnt s) [x] = Some y\<close>
+  using push_ok(1)[of L16 \<open>Search_learnt s\<close> \<open>[x]\<close>] assms cap_max_big(3)
+  by (simp add: sok_in_def sok_def)
+
 definition Search_analyze_clause_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
     Formula \<Rightarrow> Clause rvec \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
   \<open>Search_analyze_clause_contract r g s f L c p cur \<equiv>
@@ -608,6 +616,7 @@ lemma Search_analyze_clause_spec:
       specs add: lit_at_spec Search_bump_spec contracts add: lit_at_contract_def Search_bump_contract_def
       simp add: true_def false_def rvec_elems_focus_modify)
   apply (all \<open>search_bound?\<close>)
+  apply (all \<open>(rule sok_learnt_push; (sok_asm | (simp add: not_le; fail)))?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   done
 

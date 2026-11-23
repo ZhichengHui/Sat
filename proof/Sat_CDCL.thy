@@ -123,6 +123,12 @@ proof -
     by (simp_all add: sok_in_def sok_def)
 qed
 
+text \<open>\<^verbatim>\<open>on_conflict\<close> pushes a learned clause onto \<open>L\<close>, shorter than \<^verbatim>\<open>BIG\<close>.\<close>
+lemma learned_push_ok:
+  assumes \<open>vok L24 L\<close> \<open>\<not> 0x100000000000000 \<le> word64_of_nat (rvec_length L)\<close>
+  shows \<open>\<exists>y. rvec_append_val L [x] = Some y\<close> \<open>vok L24 (the (rvec_append_val L [x]))\<close>
+  using push_ok(1,2)[of L24 L \<open>[x]\<close>] assms cap_max_big(4) by (simp_all add: not_le)
+
 section \<open>Bounds of the main loop\<close>
 
 method cdcl_bound =
@@ -192,9 +198,11 @@ lemma on_conflict_spec:
       contracts add: Search_certify_contract_def Search_analyze_contract_def Search_backtrack_contract_def
         Search_attach_contract_def Search_enqueue_contract_def Search_learnt_lbd_contract_def
       simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+  apply (all \<open>sok_asm?\<close>)
+  apply (all \<open>(rule sok_lbd_dead; (assumption | (simp add: not_le; fail)))?\<close>)
+  apply (all \<open>(rule learned_push_ok; assumption)?\<close>)
   apply (all \<open>cdcl_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
-  apply (all \<open>(rule sok_lbd_dead; (assumption | (simp add: not_le; fail)))?\<close>)
   done
 
 definition cdcl_contract :: \<open>Formula \<Rightarrow> ('s, Answer option, 'abort) function_contract\<close> where
@@ -235,10 +243,10 @@ lemma cdcl_spec:
           Search_enqueue_contract_def Search_pick_contract_def model_contract_def satisfies_contract_def
           Search_reduce_contract_def Search_restart_due_contract_def
         simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
-    apply (all \<open>cdcl_bound?\<close>)
     apply (all \<open>sok_asm?\<close>)
     apply (all \<open>(rule sok_lim_push; (sok_asm | (simp add: not_le; fail)))?\<close>)
     apply (all \<open>(rule vok_new)?\<close>)
+    apply (all \<open>cdcl_bound?\<close>)
     done
   apply (all \<open>cdcl_bound?\<close>)
   apply (all \<open>sok_asm?\<close>)
