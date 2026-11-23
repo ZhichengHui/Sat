@@ -25,6 +25,12 @@ no longer apply are removed. Progress entries are cited by session prefix (`prog
   prints the remaining goals. `isabelle build_log -H Error <session>` shows every error with its
   full goal; `check.log` truncates them (b64c1dfb, adea3d20). Watch the log for "running for"
   > 180 s (81673216).
+- **Many proof variants in one batch pass.** To find which steps of a proof can go, add
+  temporary copies of the lemma with different proofs and new names (`..._spec_t1`, …) next to
+  it. Nothing uses the copies, and one pass reports every failing copy by line. 12 variants of
+  two contracts took one 17-minute pass, and a second pass checked the combination (18071633).
+  Single removals that pass alone can still fail together. Delete the copies before the final
+  pass.
 - **Stale state in the Pool Server.** It keeps the imported theories it loaded at `isabelle_open`:
   after regenerating `urust/` and `isabelle-devcopy`, close and reopen the file (1da7f95e). Editing
   a file while it is being checked, or a line above a finished `crush_base`, gives spurious "Cannot

@@ -190,10 +190,7 @@ definition Search_bump_clause_contract :: \<open>('addr, 'gv, Search) Global_Sto
 lemma Search_bump_clause_spec:
   shows \<open>\<Gamma>; Search_bump_clause r f L c v \<Turnstile>\<^sub>F Search_bump_clause_contract r g s f L c v\<close>
   apply (crush_boot f: Search_bump_clause_def contract: Search_bump_clause_contract_def)
-  apply (crush_base specs add: clause_len_spec contracts add: clause_len_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify)
-  apply (all \<open>search_bound?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (crush_base specs add: clause_len_spec contracts add: clause_len_contract_def)
   apply (all \<open>rename_tac n j_ref\<close>)
   apply (all \<open>ucincl_discharge\<open>
     rule_tac
@@ -205,8 +202,7 @@ lemma Search_bump_clause_spec:
       \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
     in wp_bounded_while_framedI\<close>\<close>)
   apply (crush_base specs add: lit_at_spec Search_bump_spec
-      contracts add: lit_at_contract_def Search_bump_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify)
+      contracts add: lit_at_contract_def Search_bump_contract_def)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   done
@@ -221,9 +217,7 @@ definition Search_bump_reasons_contract :: \<open>('addr, 'gv, Search) Global_St
 lemma Search_bump_reasons_spec:
   shows \<open>\<Gamma>; Search_bump_reasons r f L \<Turnstile>\<^sub>F Search_bump_reasons_contract r g s f L\<close>
   apply (crush_boot f: Search_bump_reasons_def contract: Search_bump_reasons_contract_def)
-  apply (crush_base inline: NONE_def simp add: true_def false_def rvec_elems_focus_modify)
-  apply (all \<open>search_bound?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (crush_base inline: NONE_def)
   apply (all \<open>rename_tac i_ref\<close>)
   apply (all \<open>ucincl_discharge\<open>
     rule_tac
@@ -235,8 +229,7 @@ lemma Search_bump_reasons_spec:
       \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
     in wp_bounded_while_framedI\<close>\<close>)
   apply (crush_base inline: NONE_def specs add: Search_bump_clause_spec
-      contracts add: Search_bump_clause_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify)
+      contracts add: Search_bump_clause_contract_def)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   done
