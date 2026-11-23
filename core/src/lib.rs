@@ -996,7 +996,8 @@ impl Search {
         false
     }
 
-    /// Raises the activity of the variable of each literal of clause `c` other than `v`.
+    /// Raises the activity of the variable of each literal of clause `c` other than `v` (the
+    /// variable that `c` implied), with `bump`.
     fn bump_clause(&mut self, f: &Formula, learned: &Vec<Clause>, c: usize, v: usize) {
         let len = clause_len(f, learned, c);
         let mut j: usize = 0;
@@ -1010,11 +1011,13 @@ impl Search {
     }
 
     /// Reason-side bumping (as in MapleSAT): raises the activity of the variables of the reason
-    /// clauses of the literals of `learnt` after the first, so that the decisions follow the
-    /// variables that implied the learned clause. `analyze` calls it only while the average
-    /// literal block distance of the learned clauses (`lbd_sum` / `nconf`) is at least 6.5: it
-    /// pays on the long clauses of pigeon-hole instances (average 7 to 15) and not on random 3-SAT
-    /// (average 4 to 5.5, 25 % more conflicts).
+    /// clauses of the literals of `learnt` after the first (a decision has none), so that the
+    /// decisions follow the variables that implied the learned clause.
+    /// `analyze` calls it only while the average literal block distance of the learned clauses
+    /// (`lbd_sum` / `nconf`) is at least 6.5 (#131, #132): pigeon-hole instances learn clauses of
+    /// average LBD 7 to 15 and need about 40 % fewer conflicts with it (hole8 and hole9 copies 43
+    /// to 60 % faster), while uuf100 (random 3-SAT) learns clauses of average LBD 4.3 to 5.2 and
+    /// needs about 20 % more conflicts (32 % more time) when it always bumps reasons (#129).
     fn bump_reasons(&mut self, f: &Formula, learned: &Vec<Clause>) {
         let mut i: usize = 1;
         while i < self.learnt.len() {
@@ -1087,6 +1090,13 @@ impl Search {
             self.inc += self.inc / 512 + 1;
         }
         self.minimize();
+        // Adaptive reason-side bumping, while the average LBD `lbd_sum / nconf` is at least 6.5
+        // (see `bump_reasons`). The counters are those of `restart_due`, which has not yet added
+        // this conflict. `restart_due` keeps `lbd_sum` below `2^40 + 2^20` and `nconf` at most
+        // `BIG`, so the range checks fail only after `BIG` conflicts; they bound the operands for
+        // the proof (`analyze_guard_bound`): `2 * lbd_sum < 2^42` and `13 * nconf < 2^60` do not
+        // overflow. A change of the counters (or of their caps in `restart_due`) must keep them
+        // within these checks, or the guard turns reason bumping off.
         if self.lbd_sum < 0x20000000000 && self.nconf < BIG && 2 * self.lbd_sum >= 13 * self.nconf {
             self.bump_reasons(f, learned);
         }
