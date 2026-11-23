@@ -176,6 +176,7 @@ lemma Search_restart_due_spec:
   apply (crush_boot f: Search_restart_due_def contract: Search_restart_due_contract_def)
   apply (crush_base inline: BIG_def ACT_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
   apply (all \<open>restart_bound?\<close>)
+  apply (all \<open>(match conclusion in \<open>sok _\<close> \<Rightarrow> \<open>sok_tac; fail\<close>)?\<close>)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   done
