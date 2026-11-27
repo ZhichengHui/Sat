@@ -9,6 +9,69 @@ text \<open>The contracts of the conflict analysis of the CDCL search of \<^verb
 context Sat_ctx
 begin
 
+section \<open>Invariant steps\<close>
+
+text \<open>Most \<open>sok\<close> goals below are the invariant of a premise after updates of fields outside
+  \<open>sok\<close>, element updates and pushes. These rules prove them without \<open>sok_tac\<close> (an \<open>auto\<close>
+  over all premises, 0.5--5 s a goal).\<close>
+lemma sok_frame:
+  assumes \<open>sok s\<close>
+  shows \<open>sok (update_Search_assign f1 s)\<close> \<open>sok (update_Search_set f2 s)\<close>
+    \<open>sok (update_Search_false_lit f3 s)\<close> \<open>sok (update_Search_level f4 s)\<close>
+    \<open>sok (update_Search_reason f5 s)\<close> \<open>sok (update_Search_qhead f6 s)\<close>
+    \<open>sok (update_Search_phase f7 s)\<close> \<open>sok (update_Search_act f8 s)\<close>
+    \<open>sok (update_Search_inc f9 s)\<close> \<open>sok (update_Search_seen f10 s)\<close>
+    \<open>sok (update_Search_stamp f11 s)\<close> \<open>sok (update_Search_tick f12 s)\<close>
+    \<open>sok (update_Search_hist f13 s)\<close> \<open>sok (update_Search_fail f14 s)\<close>
+    \<open>sok (update_Search_fast f15 s)\<close> \<open>sok (update_Search_lbd_sum f16 s)\<close>
+    \<open>sok (update_Search_nconf f17 s)\<close> \<open>sok (update_Search_since f18 s)\<close>
+    \<open>sok (update_Search_nres f19 s)\<close>
+  using assms by (simp_all add: sok_def)
+
+lemma sok_elems:
+  assumes \<open>sok s\<close>
+  shows \<open>length (g1 (rvec_elems (Search_stack s))) \<le> rvec_length (Search_stack s) \<Longrightarrow>
+      sok (update_Search_stack (update_rvec_elems g1) s)\<close>
+    \<open>Search_stack s = v2 \<Longrightarrow> length (g2 (rvec_elems v2)) \<le> rvec_length v2 \<Longrightarrow>
+      sok (update_Search_stack (\<lambda>_. update_rvec_elems g2 v2) s)\<close>
+    \<open>length (g3 (rvec_elems (Search_toclear s))) \<le> rvec_length (Search_toclear s) \<Longrightarrow>
+      sok (update_Search_toclear (update_rvec_elems g3) s)\<close>
+    \<open>Search_toclear s = v4 \<Longrightarrow> length (g4 (rvec_elems v4)) \<le> rvec_length v4 \<Longrightarrow>
+      sok (update_Search_toclear (\<lambda>_. update_rvec_elems g4 v4) s)\<close>
+    \<open>length (g5 (rvec_elems (Search_hint s))) \<le> rvec_length (Search_hint s) \<Longrightarrow>
+      sok (update_Search_hint (update_rvec_elems g5) s)\<close>
+    \<open>Search_hint s = v6 \<Longrightarrow> length (g6 (rvec_elems v6)) \<le> rvec_length v6 \<Longrightarrow>
+      sok (update_Search_hint (\<lambda>_. update_rvec_elems g6 v6) s)\<close>
+    \<open>length (g7 (rvec_elems (Search_learnt s))) \<le> rvec_length (Search_learnt s) \<Longrightarrow>
+      sok (update_Search_learnt (update_rvec_elems g7) s)\<close>
+    \<open>Search_learnt s = v8 \<Longrightarrow> length (g8 (rvec_elems v8)) \<le> rvec_length v8 \<Longrightarrow>
+      sok (update_Search_learnt (\<lambda>_. update_rvec_elems g8 v8) s)\<close>
+  using assms by (auto simp add: sok_def intro!: vok_update)
+
+lemma sok_push:
+  assumes \<open>sok s\<close>
+  shows \<open>Search_stack s = v \<Longrightarrow> word64_of_nat (rvec_length v) < (0x100000000000000 :: 64 word) \<Longrightarrow>
+      length xs \<le> 8 \<Longrightarrow> sok (update_Search_stack (\<lambda>_. the (rvec_append_val v xs)) s)\<close>
+    \<open>Search_toclear s = v \<Longrightarrow> word64_of_nat (rvec_length v) < (0x100000000000000 :: 64 word) \<Longrightarrow>
+      length xs \<le> 8 \<Longrightarrow> sok (update_Search_toclear (\<lambda>_. the (rvec_append_val v xs)) s)\<close>
+    \<open>Search_hint s = v \<Longrightarrow> word64_of_nat (rvec_length v) < (0x100000000000000 :: 64 word) \<Longrightarrow>
+      length xs \<le> 8 \<Longrightarrow> sok (update_Search_hint (\<lambda>_. the (rvec_append_val v xs)) s)\<close>
+    \<open>word64_of_nat (rvec_length (Search_stack s)) < (0x100000000000000 :: 64 word) \<Longrightarrow>
+      length xs \<le> 8 \<Longrightarrow> \<exists>y. rvec_append_val (Search_stack s) xs = Some y\<close>
+    \<open>word64_of_nat (rvec_length (Search_toclear s)) < (0x100000000000000 :: 64 word) \<Longrightarrow>
+      length xs \<le> 8 \<Longrightarrow> \<exists>y. rvec_append_val (Search_toclear s) xs = Some y\<close>
+    \<open>word64_of_nat (rvec_length (Search_hint s)) < (0x100000000000000 :: 64 word) \<Longrightarrow>
+      length xs \<le> 8 \<Longrightarrow> \<exists>y. rvec_append_val (Search_hint s) xs = Some y\<close>
+  using assms by (auto simp add: sok_def cap_max_big push_ok)
+
+text \<open>\<open>sok_in\<close>/\<open>sok\<close> and the pushes of the minimisation by the rules above, a premise and
+  the bounds of the premises; it fails fast on every other goal.\<close>
+method sok_fast =
+  ((match conclusion in \<open>sok_in _\<close> \<Rightarrow> succeed \<bar> \<open>sok _\<close> \<Rightarrow> succeed \<bar>
+     \<open>\<exists>y. rvec_append_val _ _ = Some y\<close> \<Rightarrow> succeed),
+   (unfold sok_in_def)?, ((rule sok_frame sok_elems sok_push)+)?,
+   (sok_asm | (simp (no_asm); fail) | (simp add: not_le; fail))+)
+
 section \<open>Recursive minimisation\<close>
 
 definition Search_push_frame_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
@@ -22,6 +85,7 @@ lemma Search_push_frame_spec:
   shows \<open>\<Gamma>; Search_push_frame r v \<Turnstile>\<^sub>F Search_push_frame_contract r g s v\<close>
   apply (crush_boot f: Search_push_frame_def contract: Search_push_frame_contract_def)
   apply (crush_base inline: BIG_def ACT_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+  apply (all \<open>(sok_fast; fail)?\<close>)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   done
@@ -39,6 +103,7 @@ lemma Search_redundant_step_spec:
   apply (crush_base inline: BIG_def ACT_def NONE_def
       specs add: Search_push_frame_spec contracts add: Search_push_frame_contract_def
       simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+  apply (all \<open>(sok_fast; fail)?\<close>)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   done
@@ -54,6 +119,7 @@ lemma Search_unwind_spec:
   shows \<open>\<Gamma>; Search_unwind r \<Turnstile>\<^sub>F Search_unwind_contract r g s\<close>
   apply (crush_boot f: Search_unwind_def contract: Search_unwind_contract_def)
   apply (crush_base inline: BIG_def ACT_def NONE_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+  apply (all \<open>(sok_fast; fail)?\<close>)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for k_ref
@@ -66,6 +132,7 @@ lemma Search_unwind_spec:
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
     apply (crush_base inline: BIG_def ACT_def NONE_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+    apply (all \<open>(sok_fast; fail)?\<close>)
     apply (all \<open>search_bound?\<close>)
     apply (all \<open>(sok_tac; fail)?\<close>)
     done
@@ -96,6 +163,7 @@ lemma Search_lit_redundant_spec:
       specs add: Search_redundant_step_spec Search_unwind_spec
       contracts add: Search_redundant_step_contract_def Search_unwind_contract_def
       simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+  apply (all \<open>(sok_fast; fail)?\<close>)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   done
@@ -111,6 +179,7 @@ lemma Search_compact_spec:
   shows \<open>\<Gamma>; Search_compact r \<Turnstile>\<^sub>F Search_compact_contract r g s\<close>
   apply (crush_boot f: Search_compact_def contract: Search_compact_contract_def)
   apply (crush_base inline: BIG_def ACT_def slice_swap_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+  apply (all \<open>(sok_fast; fail)?\<close>)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for i_ref j_ref
@@ -126,9 +195,10 @@ lemma Search_compact_spec:
       in wp_bounded_while_framedI\<close>)
     apply (crush_base inline: BIG_def ACT_def slice_swap_def specs add: Search_lit_redundant_spec
         contracts add: Search_lit_redundant_contract_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+    apply (all \<open>(sok_fast; fail)?\<close>)
     apply (all \<open>search_bound?\<close>)
-    apply (all \<open>(sok_tac; fail)?\<close>)
     apply (all \<open>(rule FalseE, rule swap_ok2; assumption)?\<close>)
+    apply (all \<open>(sok_tac; fail)?\<close>)
     done
   done
 
@@ -143,6 +213,7 @@ lemma Search_clear_marks_spec:
   shows \<open>\<Gamma>; Search_clear_marks r \<Turnstile>\<^sub>F Search_clear_marks_contract r g s\<close>
   apply (crush_boot f: Search_clear_marks_def contract: Search_clear_marks_contract_def)
   apply (crush_base inline: BIG_def ACT_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+  apply (all \<open>(sok_fast; fail)?\<close>)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for k_ref
@@ -155,6 +226,7 @@ lemma Search_clear_marks_spec:
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
     apply (crush_base inline: BIG_def ACT_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+    apply (all \<open>(sok_fast; fail)?\<close>)
     apply (all \<open>search_bound?\<close>)
     apply (all \<open>(sok_tac; fail)?\<close>)
     done
@@ -175,6 +247,7 @@ lemma Search_minimize_spec:
       contracts add: Search_learnt_lbd_contract_def Search_compact_contract_def
         Search_clear_marks_contract_def Search_unmark_from_contract_def
       simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+  apply (all \<open>(sok_fast; fail)?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   done
 
@@ -203,6 +276,7 @@ lemma Search_bump_clause_spec:
     in wp_bounded_while_framedI\<close>\<close>)
   apply (crush_base specs add: lit_at_spec Search_bump_spec
       contracts add: lit_at_contract_def Search_bump_contract_def)
+  apply (all \<open>(sok_fast; fail)?\<close>)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   done
@@ -230,6 +304,7 @@ lemma Search_bump_reasons_spec:
     in wp_bounded_while_framedI\<close>\<close>)
   apply (crush_base inline: NONE_def specs add: Search_bump_clause_spec
       contracts add: Search_bump_clause_contract_def)
+  apply (all \<open>(sok_fast; fail)?\<close>)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   done
@@ -272,6 +347,7 @@ lemma Search_analyze_spec:
   apply (crush_boot f: Search_analyze_def contract: Search_analyze_contract_def)
   apply (crush_base inline: ACT_def NONE_def BIG_def Lit_mk_def
       simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+  apply (all \<open>(sok_fast; fail)?\<close>)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   apply (all \<open>(erule sok_learnt_reset; fail)?\<close>)
@@ -299,6 +375,7 @@ lemma Search_analyze_spec:
           Search_finish_learnt_contract_def Search_copy_learnt_contract_def Search_minimize_contract_def
           Search_bump_reasons_contract_def
         simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+    apply (all \<open>(sok_fast; fail)?\<close>)
     apply (all \<open>search_bound?\<close>)
     apply (all \<open>(sok_tac; fail)?\<close>)
     apply (all \<open>(erule sok_learnt_reset)?\<close>)
