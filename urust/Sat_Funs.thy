@@ -172,6 +172,9 @@ urust_const_data "BIG" :: \<open>('s, 64 word, 'abort, 'i prompt, 'o prompt_outp
 (* Rust: ACT *)
 urust_const_data "ACT" :: \<open>('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> = \<open>4611686018427387904\<close>
 
+(* Rust: HEAP_MIN *)
+urust_const_data "HEAP_MIN" :: \<open>('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> = \<open>512\<close>
+
 (* Rust: clause_len *)
 definition "clause_len" :: \<open>Formula \<Rightarrow> (Clause rvec) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>clause_len \<equiv> \<lambda>f learned c. FunctionBody \<lbrakk>
@@ -236,6 +239,18 @@ definition "close_gap" :: \<open>((64 word) rvec) \<Rightarrow> (64 word) \<Righ
     * ys
   \<rbrakk>\<close>
 
+(* Rust: iota *)
+definition "iota" :: \<open>(64 word) \<Rightarrow> ('s, (64 word) rvec, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>iota \<equiv> \<lambda>n. FunctionBody \<lbrakk>
+    let mut xs = { let init_1 = rvec_from_elem(\<llangle>make_elem_layout 8 8\<rrangle>, 0_usize, n); \<llangle>init_1 :: (64 word) rvec\<rrangle> };
+    let mut i = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < rvec_len(* xs) {
+      * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(xs)[* i]) = * i;
+      * i += 1_usize;
+    };
+    * xs
+  \<rbrakk>\<close>
+
 (* Rust: new_search *)
 definition "new_search" :: \<open>(64 word) \<Rightarrow> ('s, Search, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>new_search \<equiv> \<lambda>n. FunctionBody \<lbrakk>
@@ -271,7 +286,11 @@ definition "new_search" :: \<open>(64 word) \<Rightarrow> ('s, Search, 'abort, '
       let fld_53 = { let res_24 = { let vec_23 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_23 :: (64 word) rvec\<rrangle> }; \<llangle>res_24 :: (64 word) rvec\<rrangle> };
       let fld_54 = 0_usize;
       let fld_55 = rvec_from_elem(\<llangle>make_elem_layout 1 1\<rrangle>, false, n);
-      \<llangle>make_Search fld_25 fld_26 fld_27 fld_28 fld_29 fld_30 fld_31 fld_32 fld_33 fld_34 fld_35 fld_36 fld_37 fld_38 fld_39 fld_40 fld_41 fld_42 fld_43 fld_44 fld_45 fld_46 fld_47 fld_48 fld_49 fld_50 fld_51 fld_52 fld_53 fld_54 fld_55\<rrangle>
+      let fld_56 = iota(n);
+      let fld_57 = iota(n);
+      let fld_58 = n;
+      let fld_59 = n >= HEAP_MIN();
+      \<llangle>make_Search fld_25 fld_26 fld_27 fld_28 fld_29 fld_30 fld_31 fld_32 fld_33 fld_34 fld_35 fld_36 fld_37 fld_38 fld_39 fld_40 fld_41 fld_42 fld_43 fld_44 fld_45 fld_46 fld_47 fld_48 fld_49 fld_50 fld_51 fld_52 fld_53 fld_54 fld_55 fld_56 fld_57 fld_58 fld_59\<rrangle>
     }
   \<rbrakk>\<close>
 
@@ -619,6 +638,71 @@ definition "Search_update_lbd" :: \<open>(('addr, 'gv, Search) Global_Store.ref)
     }
   \<rbrakk>\<close>
 
+(* Rust: Search::before *)
+definition "Search_before" :: \<open>Search \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, bool, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_before \<equiv> \<lambda>self a b. FunctionBody \<lbrakk>
+    let x = if a < rvec_len(self.Search_act) {
+      \<llangle>rvec_elems\<rrangle>\<^sub>1(self.Search_act)[a]
+    } else {
+      0_usize
+    };
+    let y = if b < rvec_len(self.Search_act) {
+      \<llangle>rvec_elems\<rrangle>\<^sub>1(self.Search_act)[b]
+    } else {
+      0_usize
+    };
+    (x > y) || ((x == y) && (a < b))
+  \<rbrakk>\<close>
+
+(* Rust: Search::sift_down *)
+definition "Search_sift_down" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_sift_down \<equiv> \<lambda>self i. FunctionBody \<lbrakk>
+    if i < rvec_len(* (self.Search_heap)) {
+      let v = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_heap))[i];
+      let mut i = i;
+      let mut go = 1_usize;
+      #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (((* go) == 1_usize) && ((* i) < BIG())) && ((* i) < rvec_len(* (self.Search_heap))) {
+        let c = (2_usize * (* i)) + 1_usize;
+        if (c < (* (self.Search_hlen))) && (c < rvec_len(* (self.Search_heap))) {
+          let d = c + 1_usize;
+          let m = if ((d < (* (self.Search_hlen))) && (d < rvec_len(* (self.Search_heap)))) && Search_before(* self, \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_heap))[d], \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_heap))[c]) {
+            d
+          } else {
+            c
+          };
+          if (m < rvec_len(* (self.Search_heap))) && Search_before(* self, \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_heap))[m], v) {
+            let u = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_heap))[m];
+            * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_heap)[* i]) = u;
+            if u < rvec_len(* (self.Search_hpos)) {
+              * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_hpos)[u]) = * i;
+            };
+            * i = m;
+          } else {
+            * go = 0_usize;
+          }
+        } else {
+          * go = 0_usize;
+        }
+      };
+      if (* i) < rvec_len(* (self.Search_heap)) {
+        * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_heap)[* i]) = v;
+      };
+      if v < rvec_len(* (self.Search_hpos)) {
+        * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_hpos)[v]) = * i;
+      }
+    }
+  \<rbrakk>\<close>
+
+(* Rust: Search::heapify *)
+definition "Search_heapify" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_heapify \<equiv> \<lambda>self. FunctionBody \<lbrakk>
+    let mut i = (* (self.Search_hlen)) / 2_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) > 0_usize {
+      * i -= 1_usize;
+      Search_sift_down(self, * i);
+    }
+  \<rbrakk>\<close>
+
 (* Rust: Search::rescale *)
 definition "Search_rescale" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_rescale \<equiv> \<lambda>self. FunctionBody \<lbrakk>
@@ -628,6 +712,38 @@ definition "Search_rescale" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<
       * i += 1_usize;
     };
     * (self.Search_inc) = ((* (self.Search_inc)) >> 30_u64) + 1_usize;
+    if * (self.Search_use_heap) {
+      Search_heapify(self);
+    }
+  \<rbrakk>\<close>
+
+(* Rust: Search::sift_up *)
+definition "Search_sift_up" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_sift_up \<equiv> \<lambda>self i. FunctionBody \<lbrakk>
+    if i < rvec_len(* (self.Search_heap)) {
+      let v = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_heap))[i];
+      let mut i = i;
+      let mut go = 1_usize;
+      #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (((* go) == 1_usize) && ((* i) > 0_usize)) && ((* i) < rvec_len(* (self.Search_heap))) {
+        let p = ((* i) - 1_usize) / 2_usize;
+        if (p < rvec_len(* (self.Search_heap))) && Search_before(* self, v, \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_heap))[p]) {
+          let u = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_heap))[p];
+          * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_heap)[* i]) = u;
+          if u < rvec_len(* (self.Search_hpos)) {
+            * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_hpos)[u]) = * i;
+          };
+          * i = p;
+        } else {
+          * go = 0_usize;
+        }
+      };
+      if (* i) < rvec_len(* (self.Search_heap)) {
+        * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_heap)[* i]) = v;
+      };
+      if v < rvec_len(* (self.Search_hpos)) {
+        * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_hpos)[v]) = * i;
+      }
+    }
   \<rbrakk>\<close>
 
 (* Rust: Search::bump *)
@@ -639,6 +755,11 @@ definition "Search_bump" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rig
       };
       if (\<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_act))[v]) >= (ACT() / 2_usize) {
         Search_rescale(self);
+      } else {
+        if (* (self.Search_use_heap)) && (v < rvec_len(* (self.Search_hpos))) {
+          let i = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_hpos))[v];
+          Search_sift_up(self, i);
+        }
       }
     }
   \<rbrakk>\<close>
@@ -983,11 +1104,37 @@ definition "Search_analyze" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<
     Search_copy_learnt(* self)
   \<rbrakk>\<close>
 
+(* Rust: Search::insert *)
+definition "Search_insert" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_insert \<equiv> \<lambda>self v. FunctionBody \<lbrakk>
+    if (((* (self.Search_use_heap)) && (v < rvec_len(* (self.Search_hpos)))) && ((\<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_hpos))[v]) == NONE())) && ((* (self.Search_hlen)) < rvec_len(* (self.Search_heap))) {
+      let i = * (self.Search_hlen);
+      * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_heap)[i]) = v;
+      * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_hpos)[v]) = i;
+      * (self.Search_hlen) = i + 1_usize;
+      Search_sift_up(self, i);
+    }
+  \<rbrakk>\<close>
+
+(* Rust: Search::reinsert *)
+definition "Search_reinsert" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_reinsert \<equiv> \<lambda>self i. FunctionBody \<lbrakk>
+    let mut j = i;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* j) < rvec_len(* (self.Search_trail)) {
+      let v = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_trail))[* j];
+      Search_insert(self, v);
+      * j += 1_usize;
+    }
+  \<rbrakk>\<close>
+
 (* Rust: Search::backtrack *)
 definition "Search_backtrack" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_backtrack \<equiv> \<lambda>self lvl. FunctionBody \<lbrakk>
     if lvl < rvec_len(* (self.Search_lim)) {
       let stop = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_lim))[lvl];
+      if * (self.Search_use_heap) {
+        Search_reinsert(self, stop);
+      };
       #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while stop < rvec_len(* (self.Search_trail)) {
         let v = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_trail))[rvec_len(* (self.Search_trail)) - 1_usize];
         if (((v < rvec_len(* (self.Search_set))) && (v < rvec_len(* (self.Search_phase)))) && (v < rvec_len(* (self.Search_assign)))) && (v < rvec_len(* (self.Search_reason))) {
@@ -1343,9 +1490,48 @@ definition "Search_restart_due" :: \<open>(('addr, 'gv, Search) Global_Store.ref
     false
   \<rbrakk>\<close>
 
-(* Rust: Search::pick *)
-definition "Search_pick" :: \<open>Search \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
-  \<open>Search_pick \<equiv> \<lambda>self. FunctionBody \<lbrakk>
+(* Rust: Search::heap_pop *)
+definition "Search_heap_pop" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_heap_pop \<equiv> \<lambda>self. FunctionBody \<lbrakk>
+    if (* (self.Search_hlen)) == 0_usize {
+      return NONE();
+    };
+    let n = (* (self.Search_hlen)) - 1_usize;
+    * (self.Search_hlen) = n;
+    if n < rvec_len(* (self.Search_heap)) {
+      let v = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_heap))[0_usize];
+      let u = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_heap))[n];
+      if v < rvec_len(* (self.Search_hpos)) {
+        * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_hpos)[v]) = NONE();
+      };
+      if n > 0_usize {
+        * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_heap)[0_usize]) = u;
+        if u < rvec_len(* (self.Search_hpos)) {
+          * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_hpos)[u]) = 0_usize;
+        };
+        Search_sift_down(self, 0_usize);
+      };
+      return v;
+    };
+    NONE()
+  \<rbrakk>\<close>
+
+(* Rust: Search::pick_heap *)
+definition "Search_pick_heap" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_pick_heap \<equiv> \<lambda>self. FunctionBody \<lbrakk>
+    let mut best = NONE();
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while ((* best) == NONE()) && ((* (self.Search_hlen)) > 0_usize) {
+      let v = Search_heap_pop(self);
+      if (v < rvec_len(* (self.Search_set))) && (!(\<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_set))[v])) {
+        * best = v;
+      }
+    };
+    * best
+  \<rbrakk>\<close>
+
+(* Rust: Search::pick_scan *)
+definition "Search_pick_scan" :: \<open>Search \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_pick_scan \<equiv> \<lambda>self. FunctionBody \<lbrakk>
     let mut best = NONE();
     let mut best_act = 0_usize;
     let mut v = 0_usize;
@@ -1357,6 +1543,15 @@ definition "Search_pick" :: \<open>Search \<Rightarrow> ('s, 64 word, 'abort, 'i
       * v += 1_usize;
     };
     * best
+  \<rbrakk>\<close>
+
+(* Rust: Search::pick *)
+definition "Search_pick" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_pick \<equiv> \<lambda>self. FunctionBody \<lbrakk>
+    if * (self.Search_use_heap) {
+      return Search_pick_heap(self);
+    };
+    Search_pick_scan(* self)
   \<rbrakk>\<close>
 
 (* Rust: cdcl *)
@@ -1400,7 +1595,7 @@ definition "cdcl" :: \<open>Formula \<Rightarrow> ('s, Answer option, 'abort, 'i
           Search_backtrack(s, 0_usize);
         }
       } else {
-        let v = Search_pick(* s);
+        let v = Search_pick(s);
         if v == NONE() {
           let m = model(* (s.Search_assign), n);
           if satisfies(f, m) {
