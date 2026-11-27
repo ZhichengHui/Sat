@@ -203,6 +203,10 @@ const NONE: usize = 18446744073709551615;
 const BIG: usize = 72057594037927936;
 /// A bound on the activities and their increment (`2^62`), so that their sum does not overflow.
 const ACT: usize = 4611686018427387904;
+/// The number of variables from which `pick` takes the decisions from the heap; below it, keeping
+/// the heap costs more than the linear scan of `pick_scan` (permuted uuf100, hole7 to hole9 copies:
+/// +3 to +5 % with the heap, #143).
+const HEAP_MIN: usize = 512;
 
 /// The number of literals of clause `c` of the clause database: the formula's clauses followed by
 /// the learned ones; 0 if there is no such clause.
@@ -289,7 +293,12 @@ struct Cut {
 /// those it resolved on, from the last trail position down, then those `minimize` found redundant;
 /// `certify` checks only their reasons above level 0. The hint is untrusted: `certify` checks every
 /// reason it uses, so a wrong hint can only make it fail. `marks` is the buffer of the marks of
-/// `certify`, kept between calls.
+/// `certify`, kept between calls. `heap[0..hlen]` is a binary max-heap of variables in the order
+/// of `before`, holding every unassigned variable and maybe some assigned ones; `hpos[v]` is the
+/// position of `v` in it, `NONE` if it is not in it. `pick` takes the first unassigned variable
+/// from it and `backtrack` puts the variables it unassigns back, if `use_heap` (at least
+/// `HEAP_MIN` variables); otherwise the heap is not used. The heap is search state: a wrong heap
+/// can only change the decisions.
 struct Search {
     assign: Vec<bool>,
     set: Vec<bool>,
@@ -322,6 +331,10 @@ struct Search {
     hint: Vec<usize>,
     nres: usize,
     marks: Vec<bool>,
+    heap: Vec<usize>,
+    hpos: Vec<usize>,
+    hlen: usize,
+    use_heap: bool,
 }
 
 impl Search {
@@ -587,9 +600,12 @@ impl Search {
             i += 1;
         }
         self.inc = (self.inc >> 30) + 1;
+        if self.use_heap {
+            self.heapify();
+        }
     }
 
-    /// Raises the activity of `v` by `inc`.
+    /// Raises the activity of `v` by `inc`, and moves `v` up the heap.
     fn bump(&mut self, v: usize) {
         if v < self.act.len() {
             if self.act[v] < ACT && self.inc < ACT {
@@ -597,8 +613,147 @@ impl Search {
             }
             if self.act[v] >= ACT / 2 {
                 self.rescale();
+            } else if self.use_heap && v < self.hpos.len() {
+                let i = self.hpos[v];
+                self.sift_up(i);
             }
         }
+    }
+
+    /// The variable `a` comes before `b` in the heap: its activity is higher, or the same and its
+    /// index is smaller. The first unassigned variable in this order is the one the linear scan
+    /// of `pick` chose before the heap.
+    fn before(&self, a: usize, b: usize) -> bool {
+        let x = if a < self.act.len() { self.act[a] } else { 0 };
+        let y = if b < self.act.len() { self.act[b] } else { 0 };
+        x > y || (x == y && a < b)
+    }
+
+    /// Moves the variable at heap position `i` up while it comes before its parent.
+    #[inline(never)]
+    fn sift_up(&mut self, i: usize) {
+        if i < self.heap.len() {
+            let v = self.heap[i];
+            let mut i = i;
+            let mut go: usize = 1;
+            while go == 1 && i > 0 && i < self.heap.len() {
+                let p = (i - 1) / 2;
+                if p < self.heap.len() && self.before(v, self.heap[p]) {
+                    let u = self.heap[p];
+                    self.heap[i] = u;
+                    if u < self.hpos.len() {
+                        self.hpos[u] = i;
+                    }
+                    i = p;
+                } else {
+                    go = 0;
+                }
+            }
+            if i < self.heap.len() {
+                self.heap[i] = v;
+            }
+            if v < self.hpos.len() {
+                self.hpos[v] = i;
+            }
+        }
+    }
+
+    /// Moves the variable at heap position `i` down while a child in the heap comes before it;
+    /// `i < BIG` keeps `2 * i + 2` from overflowing.
+    fn sift_down(&mut self, i: usize) {
+        if i < self.heap.len() {
+            let v = self.heap[i];
+            let mut i = i;
+            let mut go: usize = 1;
+            while go == 1 && i < BIG && i < self.heap.len() {
+                let c = 2 * i + 1;
+                if c < self.hlen && c < self.heap.len() {
+                    let d = c + 1;
+                    let m = if d < self.hlen && d < self.heap.len() && self.before(self.heap[d], self.heap[c]) {
+                        d
+                    } else {
+                        c
+                    };
+                    if m < self.heap.len() && self.before(self.heap[m], v) {
+                        let u = self.heap[m];
+                        self.heap[i] = u;
+                        if u < self.hpos.len() {
+                            self.hpos[u] = i;
+                        }
+                        i = m;
+                    } else {
+                        go = 0;
+                    }
+                } else {
+                    go = 0;
+                }
+            }
+            if i < self.heap.len() {
+                self.heap[i] = v;
+            }
+            if v < self.hpos.len() {
+                self.hpos[v] = i;
+            }
+        }
+    }
+
+    /// Restores the order of the heap after `rescale`: the shift can make activities equal, and
+    /// then the index decides between them.
+    #[inline(never)]
+    fn heapify(&mut self) {
+        let mut i = self.hlen / 2;
+        while i > 0 {
+            i -= 1;
+            self.sift_down(i);
+        }
+    }
+
+    /// Puts the variables of the trail from position `i` on into the heap.
+    #[inline(never)]
+    fn reinsert(&mut self, i: usize) {
+        let mut j = i;
+        while j < self.trail.len() {
+            let v = self.trail[j];
+            self.insert(v);
+            j += 1;
+        }
+    }
+
+    /// Puts the variable `v` into the heap if it is not in it.
+    fn insert(&mut self, v: usize) {
+        if self.use_heap && v < self.hpos.len() && self.hpos[v] == NONE && self.hlen < self.heap.len() {
+            let i = self.hlen;
+            self.heap[i] = v;
+            self.hpos[v] = i;
+            self.hlen = i + 1;
+            self.sift_up(i);
+        }
+    }
+
+    /// Removes the first variable of the heap and returns it; `NONE` if the heap is empty. The
+    /// heap is shorter afterwards whenever it was not empty.
+    fn heap_pop(&mut self) -> usize {
+        if self.hlen == 0 {
+            return NONE;
+        }
+        let n = self.hlen - 1;
+        self.hlen = n;
+        if n < self.heap.len() {
+            let v = self.heap[0];
+            let u = self.heap[n];
+            if v < self.hpos.len() {
+                self.hpos[v] = NONE;
+            }
+            if n > 0 {
+                self.heap[0] = u;
+                if u < self.hpos.len() {
+                    self.hpos[u] = 0;
+                }
+                self.sift_down(0);
+            }
+            return v;
+        }
+        NONE
     }
 
     /// The literals of clause `c` in conflict analysis: each variable other than `p`, not yet
@@ -1098,10 +1253,14 @@ impl Search {
         self.copy_learnt()
     }
 
-    /// Undoes every assignment above decision level `lvl`.
+    /// Undoes every assignment above decision level `lvl`, and puts the variables back into the
+    /// heap first.
     fn backtrack(&mut self, lvl: usize) {
         if lvl < self.lim.len() {
             let stop = self.lim[lvl];
+            if self.use_heap {
+                self.reinsert(stop);
+            }
             while stop < self.trail.len() {
                 let v = self.trail[self.trail.len() - 1];
                 if v < self.set.len() && v < self.phase.len() && v < self.assign.len() && v < self.reason.len() {
@@ -1120,8 +1279,17 @@ impl Search {
         }
     }
 
-    /// The unassigned variable of the highest activity; `NONE` if every variable is assigned.
-    fn pick(&self) -> usize {
+    /// The unassigned variable of the highest activity, of the smallest index among those of the
+    /// same activity; `NONE` if there is none.
+    fn pick(&mut self) -> usize {
+        if self.use_heap {
+            return self.pick_heap();
+        }
+        self.pick_scan()
+    }
+
+    /// `pick` by a scan of every variable.
+    fn pick_scan(&self) -> usize {
         let mut best = NONE;
         let mut best_act: usize = 0;
         let mut v: usize = 0;
@@ -1131,6 +1299,21 @@ impl Search {
                 best_act = self.act[v];
             }
             v += 1;
+        }
+        best
+    }
+
+    /// `pick` from the heap: its first variable, whose assigned variables before it are dropped;
+    /// `NONE` if the heap has no unassigned variable. The loop ends since every `heap_pop` of a
+    /// heap that is not empty makes it shorter.
+    #[inline(never)]
+    fn pick_heap(&mut self) -> usize {
+        let mut best = NONE;
+        while best == NONE && self.hlen > 0 {
+            let v = self.heap_pop();
+            if v < self.set.len() && !self.set[v] {
+                best = v;
+            }
         }
         best
     }
@@ -1151,6 +1334,18 @@ fn close_gap(xs: Vec<usize>, i: usize, j: usize) -> Vec<usize> {
         ys.truncate(j);
     }
     ys
+}
+
+/// The vector `0, 1, ..., n - 1`: the first heap of a search, in the order of `before`, since
+/// every activity is 0.
+fn iota(n: usize) -> Vec<usize> {
+    let mut xs = vec![0; n];
+    let mut i: usize = 0;
+    while i < xs.len() {
+        xs[i] = i;
+        i += 1;
+    }
+    xs
 }
 
 /// The empty search state for `n` variables.
@@ -1187,6 +1382,10 @@ fn new_search(n: usize) -> Search {
         hint: Vec::new(),
         nres: 0,
         marks: vec![false; n],
+        heap: iota(n),
+        hpos: iota(n),
+        hlen: n,
+        use_heap: n >= HEAP_MIN,
     }
 }
 
