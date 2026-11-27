@@ -1,5 +1,5 @@
 theory Sat_Search
-  imports Sat_Proof.Sat_Vectors
+  imports Sat_Proof.Sat_Heap
 begin
 
 text \<open>The contracts of the functions of the CDCL search of \<^verbatim>\<open>core/src/lib.rs\<close> that \<^verbatim>\<open>cdcl\<close>
@@ -392,7 +392,8 @@ definition Search_rescale_contract :: \<open>('addr, 'gv, Search) Global_Store.r
 lemma Search_rescale_spec:
   shows \<open>\<Gamma>; Search_rescale r \<Turnstile>\<^sub>F Search_rescale_contract r g s\<close>
   apply (crush_boot f: Search_rescale_def contract: Search_rescale_contract_def)
-  apply (crush_base simp add: true_def false_def rvec_elems_focus_modify)
+  apply (crush_base specs add: Search_heapify_spec contracts add: Search_heapify_contract_def
+      simp add: true_def false_def rvec_elems_focus_modify)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   subgoal for i_ref
@@ -404,8 +405,10 @@ lemma Search_rescale_spec:
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base inline: NONE_def simp add: true_def false_def rvec_elems_focus_modify)
+    apply (crush_base inline: NONE_def specs add: Search_heapify_spec contracts add: Search_heapify_contract_def
+        simp add: true_def false_def rvec_elems_focus_modify)
     apply (all \<open>search_bound?\<close>)
+    apply (all \<open>sok_asm?\<close>)
     apply (all \<open>(sok_tac; fail)?\<close>)
     done
   done
@@ -433,31 +436,6 @@ lemma Search_prev_seen_spec:
     done
   done
 
-definition Search_pick_contract :: \<open>Search \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
-  \<open>Search_pick_contract s \<equiv> make_function_contract can_alloc_reference (\<lambda>_. can_alloc_reference)\<close>
-
-lemma Search_pick_spec:
-  shows \<open>\<Gamma>; Search_pick s \<Turnstile>\<^sub>F Search_pick_contract s\<close>
-  apply (crush_boot f: Search_pick_def contract: Search_pick_contract_def)
-  apply (crush_base inline: NONE_def simp add: true_def false_def rvec_elems_focus_modify)
-  apply (all \<open>search_bound?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
-  subgoal for best_ref best_act_ref v_ref
-    apply (ucincl_discharge\<open>
-      rule_tac
-        INV=\<open>\<lambda>k. \<Squnion>gb b ga a gv v. best_ref \<mapsto>\<langle>\<top>\<rangle> gb\<down>b \<star> best_act_ref \<mapsto>\<langle>\<top>\<rangle> ga\<down>a \<star>
-               v_ref \<mapsto>\<langle>\<top>\<rangle> gv\<down>v \<star> can_alloc_reference\<close> and
-        INV'=\<open>\<lambda>k. \<Squnion>gb b ga a gv v. best_ref \<mapsto>\<langle>\<top>\<rangle> gb\<down>b \<star> best_act_ref \<mapsto>\<langle>\<top>\<rangle> ga\<down>a \<star>
-               v_ref \<mapsto>\<langle>\<top>\<rangle> gv\<down>v \<star> can_alloc_reference \<star> \<langle>v < word64_of_nat (rvec_length (Search_set s))\<rangle>\<close> and
-        \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
-        \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
-      in wp_bounded_while_framedI\<close>)
-    apply (crush_base inline: NONE_def simp add: true_def false_def rvec_elems_focus_modify)
-    apply (all \<open>search_bound?\<close>)
-    apply (all \<open>(sok_tac; fail)?\<close>)
-    done
-  done
-
 definition Search_backtrack_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
     64 word \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
   \<open>Search_backtrack_contract r g s lvl \<equiv>
@@ -469,19 +447,21 @@ lemma Search_backtrack_spec:
   shows \<open>\<Gamma>; Search_backtrack r lvl \<Turnstile>\<^sub>F Search_backtrack_contract r g s lvl\<close>
   apply (crush_boot f: Search_backtrack_def contract: Search_backtrack_contract_def)
   apply (crush_base inline: NONE_def
-      specs add: key_spec contracts add: key_contract_def simp add: true_def false_def rvec_elems_focus_modify)
+      specs add: key_spec Search_reinsert_spec contracts add: key_contract_def Search_reinsert_contract_def
+      simp add: true_def false_def rvec_elems_focus_modify)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
-  apply (ucincl_discharge\<open>
+  apply (all \<open>ucincl_discharge\<open>
     rule_tac
       INV=\<open>\<lambda>k. \<Squnion>gs s'. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> can_alloc_reference \<star> \<langle>sok s'\<rangle>\<close> and
       INV'=\<open>\<lambda>k. \<Squnion>gs s'. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> can_alloc_reference \<star>
              \<langle>sok s' \<and> rvec_elems (Search_lim s) ! unat lvl < word64_of_nat (rvec_length (Search_trail s'))\<rangle>\<close> and
       \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
       \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
-    in wp_bounded_while_framedI\<close>)
+    in wp_bounded_while_framedI\<close>\<close>)
   apply (crush_base inline: NONE_def
-      specs add: key_spec contracts add: key_contract_def simp add: true_def false_def rvec_elems_focus_modify)
+      specs add: key_spec contracts add: key_contract_def
+      simp add: true_def false_def rvec_elems_focus_modify)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   done
@@ -497,8 +477,9 @@ definition Search_bump_contract :: \<open>('addr, 'gv, Search) Global_Store.ref 
 lemma Search_bump_spec:
   shows \<open>\<Gamma>; Search_bump r v \<Turnstile>\<^sub>F Search_bump_contract r g s v\<close>
   apply (crush_boot f: Search_bump_def contract: Search_bump_contract_def)
-  apply (crush_base inline: ACT_def specs add: Search_rescale_spec
-      contracts add: Search_rescale_contract_def simp add: true_def false_def rvec_elems_focus_modify)
+  apply (crush_base inline: ACT_def specs add: Search_rescale_spec Search_sift_up_spec
+      contracts add: Search_rescale_contract_def Search_sift_up_contract_def
+      simp add: true_def false_def rvec_elems_focus_modify)
   apply (all \<open>search_bound?\<close>)
   apply (all \<open>(sok_tac; fail)?\<close>)
   done
@@ -525,7 +506,8 @@ definition new_search_contract :: \<open>64 word \<Rightarrow> ('s, Search, 'abo
 lemma new_search_spec:
   shows \<open>\<Gamma>; new_search n \<Turnstile>\<^sub>F new_search_contract n\<close>
   apply (crush_boot f: new_search_def contract: new_search_contract_def)
-  apply (crush_base inline: NONE_def simp add: true_def false_def)
+  apply (crush_base inline: NONE_def HEAP_MIN_def specs add: iota_spec contracts add: iota_contract_def
+      simp add: true_def false_def)
   apply (all \<open>(simp add: new_cap; fail)?\<close>)
   apply (all \<open>(simp add: cap_max_bool word_less_nat_alt unat_word_ariths; fail)?\<close>)
   apply (all \<open>search_bound?\<close>)
