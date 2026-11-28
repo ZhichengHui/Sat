@@ -205,7 +205,10 @@ const BIG: usize = 72057594037927936;
 const ACT: usize = 4611686018427387904;
 /// The number of variables from which `pick` takes the decisions from the heap; below it, keeping
 /// the heap costs more than the linear scan of `pick_scan` (permuted uuf100, hole7 to hole9 copies:
-/// +3 to +5 % with the heap, #143).
+/// +3 to +5 % with the heap, #143). 512 lies between those instances (at most 100 variables) and
+/// the bmc ones (at least 13215), where the scan took 24 to 58 % of the instructions; hanoi4 (718
+/// variables) runs as fast either way. Both ways take the same decisions, so the bound only
+/// changes the speed.
 const HEAP_MIN: usize = 512;
 
 /// The number of literals of clause `c` of the clause database: the formula's clauses followed by
@@ -295,12 +298,20 @@ struct Cut {
 /// the reasons of the conflict clause and of `hint` need, each after those its own reason needs
 /// (`level0_hint`); `certify` checks only their reasons at level 0. The hints are untrusted:
 /// `certify` checks every reason it uses, so a wrong hint can only make it fail. `marks` is the
-/// buffer of the marks of `certify`, kept between calls. `heap[0..hlen]` is a binary max-heap of variables in the order
-/// of `before`, holding every unassigned variable and maybe some assigned ones; `hpos[v]` is the
-/// position of `v` in it, `NONE` if it is not in it. `pick` takes the first unassigned variable
-/// from it and `backtrack` puts the variables it unassigns back, if `use_heap` (at least
-/// `HEAP_MIN` variables); otherwise the heap is not used. The heap is search state: a wrong heap
-/// can only change the decisions.
+/// buffer of the marks of `certify`, kept between calls. `heap[0..hlen]` is a binary max-heap of
+/// variables in the order of `before` (activity descending, then index ascending): no variable at
+/// position `i > 0` comes before its parent at `(i - 1) / 2`. It holds every unassigned variable
+/// and maybe some assigned ones; `hpos[v]` is the position of `v` in it, `NONE` if `v` is not in it
+/// (popped by `pick` and not put back since), and `heap[hlen..]` holds no meaning. `heap` and
+/// `hpos` keep their length `n`, so `sok` says nothing of them. `bump` only raises an activity and
+/// moves the variable up. `rescale` shifts every activity: that keeps their order but can make two
+/// of them equal, and then the index decides, so a parent can come after its child: `rescale`
+/// rebuilds the heap. `pick` takes the first unassigned variable from it and `backtrack` puts the
+/// variables it unassigns back, if `use_heap` (at least `HEAP_MIN` variables); otherwise the heap
+/// is not used. The heap is search state: a wrong heap can only change the decisions. `sift_up`,
+/// `heapify`, `reinsert` and `pick_heap` are `#[inline(never)]`: inlined into `bump`, `backtrack`
+/// and `cdcl`, the heap code changed the code generated for the hot loop of `cdcl`, +1.4 %
+/// instructions on hole9 even with the heap off (#143). The front end ignores the attribute.
 struct Search {
     assign: Vec<bool>,
     set: Vec<bool>,
@@ -595,7 +606,7 @@ impl Search {
         NONE
     }
 
-    /// Divides every activity and the increment by `2^30`.
+    /// Divides every activity and the increment by `2^30`, and rebuilds the heap (see `heapify`).
     fn rescale(&mut self) {
         let mut i: usize = 0;
         while i < self.act.len() {
