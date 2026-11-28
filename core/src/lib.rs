@@ -291,9 +291,11 @@ struct Cut {
 /// `lbd_sum`, `nconf` and `since` are the moving averages and counts of `restart_due`. `hint`
 /// lists the variables whose reasons the last conflict analysis used: its first `nres` entries
 /// those it resolved on, from the last trail position down, then those `minimize` found redundant;
-/// `certify` checks only their reasons above level 0. The hint is untrusted: `certify` checks every
-/// reason it uses, so a wrong hint can only make it fail. `marks` is the buffer of the marks of
-/// `certify`, kept between calls. `heap[0..hlen]` is a binary max-heap of variables in the order
+/// `certify` checks only their reasons above level 0. `hint0` lists the variables of level 0 that
+/// the reasons of the conflict clause and of `hint` need, each after those its own reason needs
+/// (`level0_hint`); `certify` checks only their reasons at level 0. The hints are untrusted:
+/// `certify` checks every reason it uses, so a wrong hint can only make it fail. `marks` is the
+/// buffer of the marks of `certify`, kept between calls. `heap[0..hlen]` is a binary max-heap of variables in the order
 /// of `before`, holding every unassigned variable and maybe some assigned ones; `hpos[v]` is the
 /// position of `v` in it, `NONE` if it is not in it. `pick` takes the first unassigned variable
 /// from it and `backtrack` puts the variables it unassigns back, if `use_heap` (at least
@@ -330,6 +332,7 @@ struct Search {
     since: usize,
     hint: Vec<usize>,
     nres: usize,
+    hint0: Vec<usize>,
     marks: Vec<bool>,
     heap: Vec<usize>,
     hpos: Vec<usize>,
@@ -1381,6 +1384,7 @@ fn new_search(n: usize) -> Search {
         since: 0,
         hint: Vec::new(),
         nres: 0,
+        hint0: Vec::new(),
         marks: vec![false; n],
         heap: iota(n),
         hpos: iota(n),
@@ -1596,15 +1600,118 @@ fn force_back(
 }
 
 impl Search {
+    /// Pushes onto `stack` the frame `(v, j, end)` of the depth-first search of `close0`: `v`, and
+    /// the arena positions of the first literal of clause `c` and of the end of its entry (`0, 0`
+    /// if `c` is not in the arena). Nothing if `stack` has `BIG` entries.
+    fn frame0(&mut self, v: usize, c: usize) {
+        let mut from: usize = 0;
+        let mut end: usize = 0;
+        if c < self.start.len() {
+            let o = self.start[c];
+            if o < BIG && o + 1 < self.arena.len() {
+                from = o + 6;
+                end = self.arena[o + 1];
+            }
+        }
+        if self.stack.len() < BIG {
+            self.stack.extend_from_slice(&[v, from, end]);
+        }
+    }
+
+    /// One step of the search of `close0` on its top frame `(v, j, end)`: pops the frame if `j` is
+    /// `end`, and appends `v` to `hint0` unless it is `NONE` (the frame of the first clause);
+    /// otherwise advances `j` and, if the variable `q` of that literal is of level 0 and unmarked,
+    /// marks `q` and pushes the frame of its reason.
+    fn step0(&mut self) {
+        let n = self.stack.len();
+        if n >= 3 {
+            let v = self.stack[n - 3];
+            let j = self.stack[n - 2];
+            if j >= self.stack[n - 1] || j >= self.arena.len() {
+                self.stack.truncate(n - 3);
+                if v != NONE && self.hint0.len() < BIG {
+                    self.hint0.push(v);
+                }
+            } else {
+                self.stack[n - 2] = j + 1;
+                let q = self.arena[j] / 2;
+                if q < self.seen.len() && q < self.level.len() && q < self.reason.len() && self.level[q] == 0 && !self.seen[q] {
+                    self.seen[q] = true;
+                    let r = self.reason[q];
+                    self.frame0(q, r);
+                }
+            }
+        }
+    }
+
+    /// Appends to `hint0` the unmarked variables of level 0 that clause `c` needs: those of its
+    /// literals and, recursively, of the literals of their reasons, each after those of its
+    /// reason (a depth-first search over `stack`, which marks them).
+    fn close0(&mut self, c: usize) {
+        self.stack.clear();
+        self.frame0(NONE, c);
+        while self.stack.len() >= 3 {
+            self.step0();
+        }
+    }
+
+    /// Clears the marks of the variables of `hint0`.
+    fn unmark0(&mut self) {
+        let mut k: usize = 0;
+        while k < self.hint0.len() {
+            let v = self.hint0[k];
+            if v < self.seen.len() {
+                self.seen[v] = false;
+            }
+            k += 1;
+        }
+    }
+
+    /// Appends to `hint0` the variables of level 0 that the reasons of the variables of `hint` need
+    /// (`close0`).
+    fn close_hint(&mut self) {
+        let mut i: usize = 0;
+        while i < self.hint.len() {
+            let v = self.hint[i];
+            if v < self.reason.len() {
+                let c = self.reason[v];
+                self.close0(c);
+            }
+            i += 1;
+        }
+    }
+
+    /// The trail position below which `certify` checks the reasons of all variables. If the
+    /// variables of level 0 outnumber those of `hint`, 0, and `hint0` is set to the variables of
+    /// level 0 that the conflict clause `confl` and the reasons of the variables of `hint` need
+    /// (`close0`), so that `certify` checks only their reasons. Otherwise the end of level 0, and
+    /// `hint0` is empty: on few variables of level 0 (hole8, hole9: about one), checking all their
+    /// reasons is cheaper than the search over every reason of `hint`.
+    fn level0_hint(&mut self, confl: usize) -> usize {
+        self.hint0.clear();
+        if self.lim.len() == 0 {
+            return self.trail.len();
+        }
+        let lo = self.lim[0];
+        if lo <= self.hint.len() {
+            return lo;
+        }
+        self.close0(confl);
+        self.close_hint();
+        self.unmark0();
+        0
+    }
+
     /// The clause `learnt` follows from the formula and the clauses `learned`: its literals are false
     /// under `assign`, and the reasons of the trail, from the negation of `learnt`, force the values
     /// of `assign` that falsify clause `confl`. Every assignment that satisfies the clauses and
     /// falsifies `learnt` agrees with `assign` on the marked variables, so it falsifies clause `confl`:
-    /// there is none. Only the reasons of the variables of the trail positions below `lo` and of
-    /// `hint` are checked (the variables found redundant first, from position `nres` on, then the
-    /// first `nres` from the last down). `hint` and `nres` are untrusted: a variable is marked only
-    /// if it is one of `learnt` or its reason is checked, so a wrong hint can only make `certify`
-    /// return false. The marks are kept in `marks`. False if `assign` has `BIG` or more entries: `mark` may allocate
+    /// there is none. Only the reasons of the variables of the trail positions below `lo`, of
+    /// `hint0` and of `hint` are checked (those of `hint0` in order, until a pass forces none; then
+    /// the variables found redundant, from position `nres` of `hint` on; then the first `nres` from
+    /// the last down). `hint0`, `hint` and `nres` are untrusted: a variable is marked only if it is
+    /// one of `learnt` or its reason is checked, so a wrong hint can only make `certify` return
+    /// false. The marks are kept in `marks`. False if `assign` has `BIG` or more entries: `mark` may allocate
     /// `assign.len()` marks, and a `Vec<bool>` holds fewer than `2^63`.
     fn certify(&mut self, f: &Formula, learned: &Vec<Clause>, lo: usize, nres: usize, confl: usize, learnt: &Vec<Lit>) -> bool {
         if self.assign.len() >= BIG || !all_false(learnt, &self.assign) {
@@ -1613,6 +1720,7 @@ impl Search {
         let b = std::mem::replace(&mut self.marks, Vec::new());
         let forced = mark(learnt, self.assign.len(), b);
         let forced = force_trail(f, learned, &self.assign, &self.trail, &self.reason, lo, forced);
+        let forced = force_fix(f, learned, &self.assign, &self.reason, &self.hint0, 0, forced);
         let forced = force_fix(f, learned, &self.assign, &self.reason, &self.hint, nres, forced);
         let forced = force_back(f, learned, &self.assign, &self.reason, &self.hint, nres, forced);
         let r = reason_ok(f, learned, confl, false, 0, false, &self.assign, &forced);
@@ -1673,11 +1781,11 @@ fn on_conflict(s: &mut Search, f: &Formula, learned: &mut Vec<Clause>, confl: us
         return 2;
     }
     let learnt = s.analyze(f, learned, confl);
-    let lo = if s.lim.len() > 0 { s.lim[0] } else { s.trail.len() };
-    if learnt.len() == 0
-        || learned.len() >= BIG
-        || !s.certify(f, learned, lo, s.nres, confl, &learnt)
-    {
+    if learnt.len() == 0 || learned.len() >= BIG {
+        return 2;
+    }
+    let lo = s.level0_hint(confl);
+    if !s.certify(f, learned, lo, s.nres, confl, &learnt) {
         return 2;
     }
     let v = learnt[0].var;

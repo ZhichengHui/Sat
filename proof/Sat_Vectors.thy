@@ -248,7 +248,7 @@ definition sok :: \<open>Search \<Rightarrow> bool\<close> where
      (\<forall>w \<in> set (rvec_elems (Search_watches s)). vok L8 w) \<and> vok L16 (Search_learnt s) \<and>
      vok L8 (Search_stack s) \<and> vok L8 (Search_toclear s) \<and> vok L8 (Search_lim s) \<and>
      vok L8 (Search_lbd s) \<and> vok L1 (Search_dead s) \<and> vok L8 (Search_hint s) \<and>
-     rvec_wf (Search_marks s)\<close>
+     vok L8 (Search_hint0 s) \<and> rvec_wf (Search_marks s)\<close>
 
 text \<open>The invariant in a precondition. \<open>crush_base\<close> would use a premise \<open>sok s\<close> to
   instantiate the \<open>sok ?s'\<close> of a postcondition before the points-to fixes \<open>?s'\<close>.\<close>
