@@ -392,10 +392,7 @@ definition Search_rescale_contract :: \<open>('addr, 'gv, Search) Global_Store.r
 lemma Search_rescale_spec:
   shows \<open>\<Gamma>; Search_rescale r \<Turnstile>\<^sub>F Search_rescale_contract r g s\<close>
   apply (crush_boot f: Search_rescale_def contract: Search_rescale_contract_def)
-  apply (crush_base specs add: Search_heapify_spec contracts add: Search_heapify_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify)
-  apply (all \<open>search_bound?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (heap_crush specs: Search_heapify_spec contracts: Search_heapify_contract_def)
   subgoal for i_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -405,11 +402,7 @@ lemma Search_rescale_spec:
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base inline: NONE_def specs add: Search_heapify_spec contracts add: Search_heapify_contract_def
-        simp add: true_def false_def rvec_elems_focus_modify)
-    apply (all \<open>search_bound?\<close>)
-    apply (all \<open>sok_asm?\<close>)
-    apply (all \<open>(sok_tac; fail)?\<close>)
+    apply (heap_crush specs: Search_heapify_spec contracts: Search_heapify_contract_def)
     done
   done
 
@@ -446,11 +439,7 @@ definition Search_backtrack_contract :: \<open>('addr, 'gv, Search) Global_Store
 lemma Search_backtrack_spec:
   shows \<open>\<Gamma>; Search_backtrack r lvl \<Turnstile>\<^sub>F Search_backtrack_contract r g s lvl\<close>
   apply (crush_boot f: Search_backtrack_def contract: Search_backtrack_contract_def)
-  apply (crush_base inline: NONE_def
-      specs add: key_spec Search_reinsert_spec contracts add: key_contract_def Search_reinsert_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify)
-  apply (all \<open>search_bound?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (heap_crush specs: key_spec Search_reinsert_spec contracts: key_contract_def Search_reinsert_contract_def)
   apply (all \<open>ucincl_discharge\<open>
     rule_tac
       INV=\<open>\<lambda>k. \<Squnion>gs s'. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> can_alloc_reference \<star> \<langle>sok s'\<rangle>\<close> and
@@ -459,13 +448,8 @@ lemma Search_backtrack_spec:
       \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
       \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
     in wp_bounded_while_framedI\<close>\<close>)
-  apply (crush_base inline: NONE_def
-      specs add: key_spec contracts add: key_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify)
-  apply (all \<open>search_bound?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (heap_crush specs: key_spec contracts: key_contract_def)
   done
-
 
 definition Search_bump_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
     64 word \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where

@@ -12,14 +12,20 @@ begin
 
 section \<open>The heap\<close>
 
+text \<open>The steps after \<open>crush_boot\<close> of every heap function, with the contracts \<open>specs\<close> of
+  its callees: the bounds of the indices and \<open>sok\<close> of the updated state.\<close>
+method heap_crush uses specs contracts =
+  (crush_base inline: NONE_def BIG_def specs add: specs contracts add: contracts
+     simp add: true_def false_def rvec_elems_focus_modify,
+   all \<open>search_bound?\<close>, all \<open>sok_asm?\<close>, all \<open>(sok_tac; fail)?\<close>)
+
 definition Search_before_contract :: \<open>Search \<Rightarrow> 64 word \<Rightarrow> 64 word \<Rightarrow> ('s, bool, 'abort) function_contract\<close> where
   \<open>Search_before_contract s a b \<equiv> make_function_contract can_alloc_reference (\<lambda>_. can_alloc_reference)\<close>
 
 lemma Search_before_spec:
   shows \<open>\<Gamma>; Search_before s a b \<Turnstile>\<^sub>F Search_before_contract s a b\<close>
   apply (crush_boot f: Search_before_def contract: Search_before_contract_def)
-  apply (crush_base simp add: true_def false_def)
-  apply (all \<open>search_bound?\<close>)
+  apply heap_crush
   done
 
 definition Search_sift_up_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
@@ -32,10 +38,7 @@ definition Search_sift_up_contract :: \<open>('addr, 'gv, Search) Global_Store.r
 lemma Search_sift_up_spec:
   shows \<open>\<Gamma>; Search_sift_up r i \<Turnstile>\<^sub>F Search_sift_up_contract r g s i\<close>
   apply (crush_boot f: Search_sift_up_def contract: Search_sift_up_contract_def)
-  apply (crush_base inline: NONE_def specs add: Search_before_spec contracts add: Search_before_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify)
-  apply (all \<open>search_bound?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (heap_crush specs: Search_before_spec contracts: Search_before_contract_def)
   subgoal for i_ref go_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -47,10 +50,7 @@ lemma Search_sift_up_spec:
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base inline: NONE_def specs add: Search_before_spec contracts add: Search_before_contract_def
-        simp add: true_def false_def rvec_elems_focus_modify)
-    apply (all \<open>search_bound?\<close>)
-    apply (all \<open>(sok_tac; fail)?\<close>)
+    apply (heap_crush specs: Search_before_spec contracts: Search_before_contract_def)
     done
   done
 
@@ -64,10 +64,7 @@ definition Search_sift_down_contract :: \<open>('addr, 'gv, Search) Global_Store
 lemma Search_sift_down_spec:
   shows \<open>\<Gamma>; Search_sift_down r i \<Turnstile>\<^sub>F Search_sift_down_contract r g s i\<close>
   apply (crush_boot f: Search_sift_down_def contract: Search_sift_down_contract_def)
-  apply (crush_base inline: NONE_def BIG_def specs add: Search_before_spec contracts add: Search_before_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify)
-  apply (all \<open>search_bound?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (heap_crush specs: Search_before_spec contracts: Search_before_contract_def)
   subgoal for i_ref go_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -79,10 +76,7 @@ lemma Search_sift_down_spec:
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base inline: NONE_def BIG_def specs add: Search_before_spec contracts add: Search_before_contract_def
-        simp add: true_def false_def rvec_elems_focus_modify)
-    apply (all \<open>search_bound?\<close>)
-    apply (all \<open>(sok_tac; fail)?\<close>)
+    apply (heap_crush specs: Search_before_spec contracts: Search_before_contract_def)
     done
   done
 
@@ -96,10 +90,7 @@ definition Search_heapify_contract :: \<open>('addr, 'gv, Search) Global_Store.r
 lemma Search_heapify_spec:
   shows \<open>\<Gamma>; Search_heapify r \<Turnstile>\<^sub>F Search_heapify_contract r g s\<close>
   apply (crush_boot f: Search_heapify_def contract: Search_heapify_contract_def)
-  apply (crush_base specs add: Search_sift_down_spec contracts add: Search_sift_down_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify)
-  apply (all \<open>search_bound?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (heap_crush specs: Search_sift_down_spec contracts: Search_sift_down_contract_def)
   subgoal for i_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -109,11 +100,7 @@ lemma Search_heapify_spec:
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base specs add: Search_sift_down_spec contracts add: Search_sift_down_contract_def
-        simp add: true_def false_def rvec_elems_focus_modify)
-    apply (all \<open>search_bound?\<close>)
-    apply (all \<open>sok_asm?\<close>)
-    apply (all \<open>(sok_tac; fail)?\<close>)
+    apply (heap_crush specs: Search_sift_down_spec contracts: Search_sift_down_contract_def)
     done
   done
 
@@ -127,10 +114,7 @@ definition Search_insert_contract :: \<open>('addr, 'gv, Search) Global_Store.re
 lemma Search_insert_spec:
   shows \<open>\<Gamma>; Search_insert r v \<Turnstile>\<^sub>F Search_insert_contract r g s v\<close>
   apply (crush_boot f: Search_insert_def contract: Search_insert_contract_def)
-  apply (crush_base inline: NONE_def specs add: Search_sift_up_spec contracts add: Search_sift_up_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify)
-  apply (all \<open>search_bound?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (heap_crush specs: Search_sift_up_spec contracts: Search_sift_up_contract_def)
   done
 
 definition Search_reinsert_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
@@ -143,10 +127,7 @@ definition Search_reinsert_contract :: \<open>('addr, 'gv, Search) Global_Store.
 lemma Search_reinsert_spec:
   shows \<open>\<Gamma>; Search_reinsert r i \<Turnstile>\<^sub>F Search_reinsert_contract r g s i\<close>
   apply (crush_boot f: Search_reinsert_def contract: Search_reinsert_contract_def)
-  apply (crush_base specs add: Search_insert_spec contracts add: Search_insert_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify)
-  apply (all \<open>search_bound?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (heap_crush specs: Search_insert_spec contracts: Search_insert_contract_def)
   subgoal for j_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -156,11 +137,7 @@ lemma Search_reinsert_spec:
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base specs add: Search_insert_spec contracts add: Search_insert_contract_def
-        simp add: true_def false_def rvec_elems_focus_modify)
-    apply (all \<open>search_bound?\<close>)
-    apply (all \<open>sok_asm?\<close>)
-    apply (all \<open>(sok_tac; fail)?\<close>)
+    apply (heap_crush specs: Search_insert_spec contracts: Search_insert_contract_def)
     done
   done
 
@@ -174,10 +151,7 @@ definition Search_heap_pop_contract :: \<open>('addr, 'gv, Search) Global_Store.
 lemma Search_heap_pop_spec:
   shows \<open>\<Gamma>; Search_heap_pop r \<Turnstile>\<^sub>F Search_heap_pop_contract r g s\<close>
   apply (crush_boot f: Search_heap_pop_def contract: Search_heap_pop_contract_def)
-  apply (crush_base inline: NONE_def specs add: Search_sift_down_spec contracts add: Search_sift_down_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify)
-  apply (all \<open>search_bound?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (heap_crush specs: Search_sift_down_spec contracts: Search_sift_down_contract_def)
   done
 
 definition Search_pick_scan_contract :: \<open>Search \<Rightarrow> ('s, 64 word, 'abort) function_contract\<close> where
@@ -186,9 +160,7 @@ definition Search_pick_scan_contract :: \<open>Search \<Rightarrow> ('s, 64 word
 lemma Search_pick_scan_spec:
   shows \<open>\<Gamma>; Search_pick_scan s \<Turnstile>\<^sub>F Search_pick_scan_contract s\<close>
   apply (crush_boot f: Search_pick_scan_def contract: Search_pick_scan_contract_def)
-  apply (crush_base inline: NONE_def simp add: true_def false_def rvec_elems_focus_modify)
-  apply (all \<open>search_bound?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
+  apply heap_crush
   subgoal for best_ref best_act_ref v_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -199,9 +171,7 @@ lemma Search_pick_scan_spec:
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base inline: NONE_def simp add: true_def false_def rvec_elems_focus_modify)
-    apply (all \<open>search_bound?\<close>)
-    apply (all \<open>(sok_tac; fail)?\<close>)
+    apply heap_crush
     done
   done
 
@@ -215,10 +185,7 @@ definition Search_pick_heap_contract :: \<open>('addr, 'gv, Search) Global_Store
 lemma Search_pick_heap_spec:
   shows \<open>\<Gamma>; Search_pick_heap r \<Turnstile>\<^sub>F Search_pick_heap_contract r g s\<close>
   apply (crush_boot f: Search_pick_heap_def contract: Search_pick_heap_contract_def)
-  apply (crush_base inline: NONE_def specs add: Search_heap_pop_spec contracts add: Search_heap_pop_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify)
-  apply (all \<open>search_bound?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (heap_crush specs: Search_heap_pop_spec contracts: Search_heap_pop_contract_def)
   subgoal for best_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -227,11 +194,7 @@ lemma Search_pick_heap_spec:
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base inline: NONE_def specs add: Search_heap_pop_spec contracts add: Search_heap_pop_contract_def
-        simp add: true_def false_def rvec_elems_focus_modify)
-    apply (all \<open>search_bound?\<close>)
-    apply (all \<open>sok_asm?\<close>)
-    apply (all \<open>(sok_tac; fail)?\<close>)
+    apply (heap_crush specs: Search_heap_pop_spec contracts: Search_heap_pop_contract_def)
     done
   done
 
@@ -245,11 +208,8 @@ definition Search_pick_contract :: \<open>('addr, 'gv, Search) Global_Store.ref 
 lemma Search_pick_spec:
   shows \<open>\<Gamma>; Search_pick r \<Turnstile>\<^sub>F Search_pick_contract r g s\<close>
   apply (crush_boot f: Search_pick_def contract: Search_pick_contract_def)
-  apply (crush_base specs add: Search_pick_heap_spec Search_pick_scan_spec
-      contracts add: Search_pick_heap_contract_def Search_pick_scan_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify)
-  apply (all \<open>sok_asm?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (heap_crush specs: Search_pick_heap_spec Search_pick_scan_spec
+      contracts: Search_pick_heap_contract_def Search_pick_scan_contract_def)
   done
 
 definition iota_contract :: \<open>64 word \<Rightarrow> ('s, (64 word) rvec, 'abort) function_contract\<close> where
@@ -259,8 +219,7 @@ definition iota_contract :: \<open>64 word \<Rightarrow> ('s, (64 word) rvec, 'a
 lemma iota_spec:
   shows \<open>\<Gamma>; iota n \<Turnstile>\<^sub>F iota_contract n\<close>
   apply (crush_boot f: iota_def contract: iota_contract_def)
-  apply (crush_base simp add: true_def false_def rvec_elems_focus_modify)
-  apply (all \<open>search_bound?\<close>)
+  apply heap_crush
   subgoal for _ xs_ref i_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -270,8 +229,7 @@ lemma iota_spec:
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base simp add: true_def false_def rvec_elems_focus_modify)
-    apply (all \<open>search_bound?\<close>)
+    apply heap_crush
     done
   apply (simp add: word_less_nat_alt rvec_cap_max_def isize_max_def)
   done
