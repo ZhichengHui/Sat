@@ -9,27 +9,6 @@ text \<open>The contracts of the hint of level 0 of \<^verbatim>\<open>core/src/
 context Sat_ctx
 begin
 
-text \<open>The invariant after an update of \<open>hint0\<close>, as \<open>sok_elems\<close> and \<open>sok_push\<close> of
-  \<^verbatim>\<open>Sat_Minimize\<close> for the other lists.\<close>
-lemma sok_hint0:
-  assumes \<open>sok s\<close>
-  shows \<open>length (g1 (rvec_elems (Search_hint0 s))) \<le> rvec_length (Search_hint0 s) \<Longrightarrow>
-      sok (update_Search_hint0 (update_rvec_elems g1) s)\<close>
-    \<open>Search_hint0 s = v2 \<Longrightarrow> length (g2 (rvec_elems v2)) \<le> rvec_length v2 \<Longrightarrow>
-      sok (update_Search_hint0 (\<lambda>_. update_rvec_elems g2 v2) s)\<close>
-    \<open>Search_hint0 s = v \<Longrightarrow> word64_of_nat (rvec_length v) < (0x100000000000000 :: 64 word) \<Longrightarrow>
-      length xs \<le> 8 \<Longrightarrow> sok (update_Search_hint0 (\<lambda>_. the (rvec_append_val v xs)) s)\<close>
-    \<open>word64_of_nat (rvec_length (Search_hint0 s)) < (0x100000000000000 :: 64 word) \<Longrightarrow>
-      length xs \<le> 8 \<Longrightarrow> \<exists>y. rvec_append_val (Search_hint0 s) xs = Some y\<close>
-  using assms by (auto simp add: sok_def cap_max_big push_ok intro!: vok_update)
-
-text \<open>\<open>sok_fast\<close> with the rules of \<open>hint0\<close>.\<close>
-method sok0 =
-  ((match conclusion in \<open>sok_in _\<close> \<Rightarrow> succeed \<bar> \<open>sok _\<close> \<Rightarrow> succeed \<bar>
-     \<open>\<exists>y. rvec_append_val _ _ = Some y\<close> \<Rightarrow> succeed),
-   (unfold sok_in_def)?, ((rule sok_frame sok_elems sok_push sok_hint0)+)?,
-   (sok_asm | (simp (no_asm); fail) | (simp add: not_le; fail))+)
-
 definition Search_frame0_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
     64 word \<Rightarrow> 64 word \<Rightarrow> ('s, unit, 'abort) function_contract\<close> where
   \<open>Search_frame0_contract r g s v c \<equiv>
@@ -40,10 +19,9 @@ definition Search_frame0_contract :: \<open>('addr, 'gv, Search) Global_Store.re
 lemma Search_frame0_spec:
   shows \<open>\<Gamma>; Search_frame0 r v c \<Turnstile>\<^sub>F Search_frame0_contract r g s v c\<close>
   apply (crush_boot f: Search_frame0_def contract: Search_frame0_contract_def)
-  apply (crush_base inline: BIG_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
-  apply (all \<open>(sok0; fail)?\<close>)
+  apply (crush_base inline: BIG_def)
+  apply (all \<open>(sok_fast; fail)?\<close>)
   apply (all \<open>search_bound?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
   done
 
 definition Search_step0_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
@@ -58,10 +36,9 @@ lemma Search_step0_spec:
   apply (crush_boot f: Search_step0_def contract: Search_step0_contract_def)
   apply (crush_base inline: BIG_def NONE_def
       specs add: Search_frame0_spec contracts add: Search_frame0_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
-  apply (all \<open>(sok0; fail)?\<close>)
+      simp add: rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+  apply (all \<open>(sok_fast; fail)?\<close>)
   apply (all \<open>search_bound?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
   done
 
 definition Search_close0_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
@@ -74,10 +51,9 @@ definition Search_close0_contract :: \<open>('addr, 'gv, Search) Global_Store.re
 lemma Search_close0_spec:
   shows \<open>\<Gamma>; Search_close0 r c \<Turnstile>\<^sub>F Search_close0_contract r g s c\<close>
   apply (crush_boot f: Search_close0_def contract: Search_close0_contract_def)
-  apply (crush_base inline: BIG_def NONE_def
-      specs add: Search_frame0_spec contracts add: Search_frame0_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
-  apply (all \<open>(sok0; fail)?\<close>)
+  apply (crush_base inline: NONE_def
+      specs add: Search_frame0_spec contracts add: Search_frame0_contract_def)
+  apply (all \<open>(sok_fast; fail)?\<close>)
   apply (ucincl_discharge\<open>
     rule_tac
       INV=\<open>\<lambda>k. can_alloc_reference \<star> (\<Squnion>gs s'. r \<mapsto>\<langle>\<top>\<rangle> gs\<down>s' \<star> \<langle>sok_in s'\<rangle>)\<close> and
@@ -85,11 +61,9 @@ lemma Search_close0_spec:
       \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
       \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
     in wp_bounded_while_framedI\<close>)
-  apply (crush_base inline: BIG_def NONE_def
-      specs add: Search_step0_spec contracts add: Search_step0_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
-  apply (all \<open>(sok0; fail)?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
+  apply (crush_base inline: NONE_def
+      specs add: Search_step0_spec contracts add: Search_step0_contract_def)
+  apply (all \<open>(sok_fast; fail)?\<close>)
   done
 
 definition Search_unmark0_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
@@ -102,8 +76,8 @@ definition Search_unmark0_contract :: \<open>('addr, 'gv, Search) Global_Store.r
 lemma Search_unmark0_spec:
   shows \<open>\<Gamma>; Search_unmark0 r \<Turnstile>\<^sub>F Search_unmark0_contract r g s\<close>
   apply (crush_boot f: Search_unmark0_def contract: Search_unmark0_contract_def)
-  apply (crush_base simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
-  apply (all \<open>(sok0; fail)?\<close>)
+  apply crush_base
+  apply (all \<open>(sok_fast; fail)?\<close>)
   subgoal for k_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -113,10 +87,9 @@ lemma Search_unmark0_spec:
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
-    apply (all \<open>(sok0; fail)?\<close>)
+    apply crush_base
+    apply (all \<open>(sok_fast; fail)?\<close>)
     apply (all \<open>search_bound?\<close>)
-    apply (all \<open>(sok_tac; fail)?\<close>)
     done
   done
 
@@ -130,8 +103,8 @@ definition Search_close_hint_contract :: \<open>('addr, 'gv, Search) Global_Stor
 lemma Search_close_hint_spec:
   shows \<open>\<Gamma>; Search_close_hint r \<Turnstile>\<^sub>F Search_close_hint_contract r g s\<close>
   apply (crush_boot f: Search_close_hint_def contract: Search_close_hint_contract_def)
-  apply (crush_base simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
-  apply (all \<open>(sok0; fail)?\<close>)
+  apply crush_base
+  apply (all \<open>(sok_fast; fail)?\<close>)
   subgoal for i_ref
     apply (ucincl_discharge\<open>
       rule_tac
@@ -141,11 +114,9 @@ lemma Search_close_hint_spec:
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base specs add: Search_close0_spec contracts add: Search_close0_contract_def
-        simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
-    apply (all \<open>(sok0; fail)?\<close>)
+    apply (crush_base specs add: Search_close0_spec contracts add: Search_close0_contract_def)
+    apply (all \<open>(sok_fast; fail)?\<close>)
     apply (all \<open>search_bound?\<close>)
-    apply (all \<open>(sok_tac; fail)?\<close>)
     done
   done
 
@@ -160,10 +131,8 @@ lemma Search_level0_hint_spec:
   shows \<open>\<Gamma>; Search_level0_hint r c \<Turnstile>\<^sub>F Search_level0_hint_contract r g s c\<close>
   apply (crush_boot f: Search_level0_hint_def contract: Search_level0_hint_contract_def)
   apply (crush_base specs add: Search_close0_spec Search_close_hint_spec Search_unmark0_spec
-      contracts add: Search_close0_contract_def Search_close_hint_contract_def Search_unmark0_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
-  apply (all \<open>(sok0; fail)?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
+      contracts add: Search_close0_contract_def Search_close_hint_contract_def Search_unmark0_contract_def)
+  apply (all \<open>(sok_fast; fail)?\<close>)
   done
 
 end
