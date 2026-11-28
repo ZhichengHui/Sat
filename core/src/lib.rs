@@ -296,7 +296,8 @@ struct Cut {
 /// those it resolved on, from the last trail position down, then those `minimize` found redundant;
 /// `certify` checks only their reasons above level 0. `hint0` lists the variables of level 0 that
 /// the reasons of the conflict clause and of `hint` need, each after those its own reason needs
-/// (`level0_hint`); `certify` checks only their reasons at level 0. The hints are untrusted:
+/// (`level0_hint`); `certify` checks only their reasons at level 0, in that order, so that one
+/// `force_fix` pass forces them all. The hints are untrusted:
 /// `certify` checks every reason it uses, so a wrong hint can only make it fail. `marks` is the
 /// buffer of the marks of `certify`, kept between calls. `heap[0..hlen]` is a binary max-heap of
 /// variables in the order of `before` (activity descending, then index ascending): no variable at
@@ -1679,7 +1680,8 @@ impl Search {
     }
 
     /// Appends to `hint0` the variables of level 0 that the reasons of the variables of `hint` need
-    /// (`close0`).
+    /// (`close0`). A function of its own because `level0_hint` returns early: the proof of a loop
+    /// names the loop's reference, which fails in a function with a `return` before the loop.
     fn close_hint(&mut self) {
         let mut i: usize = 0;
         while i < self.hint.len() {
@@ -1697,7 +1699,10 @@ impl Search {
     /// level 0 that the conflict clause `confl` and the reasons of the variables of `hint` need
     /// (`close0`), so that `certify` checks only their reasons. Otherwise the end of level 0, and
     /// `hint0` is empty: on few variables of level 0 (hole8, hole9: about one), checking all their
-    /// reasons is cheaper than the search over every reason of `hint`.
+    /// reasons is cheaper than the search over every reason of `hint`. The rule compares the two
+    /// costs directly, the level-0 prefix that `certify` would check against the reasons of `hint`
+    /// that the search reads, so it has no tuned constant. Either way `certify` is sound: a wrong
+    /// order of `hint0` only costs further `force_fix` passes, a missing variable only a failed check.
     fn level0_hint(&mut self, confl: usize) -> usize {
         self.hint0.clear();
         if self.lim.len() == 0 {
