@@ -46,6 +46,10 @@ lemma sok_elems:
       sok (update_Search_learnt (update_rvec_elems g7) s)\<close>
     \<open>Search_learnt s = v8 \<Longrightarrow> length (g8 (rvec_elems v8)) \<le> rvec_length v8 \<Longrightarrow>
       sok (update_Search_learnt (\<lambda>_. update_rvec_elems g8 v8) s)\<close>
+    \<open>length (g9 (rvec_elems (Search_hint0 s))) \<le> rvec_length (Search_hint0 s) \<Longrightarrow>
+      sok (update_Search_hint0 (update_rvec_elems g9) s)\<close>
+    \<open>Search_hint0 s = v10 \<Longrightarrow> length (g10 (rvec_elems v10)) \<le> rvec_length v10 \<Longrightarrow>
+      sok (update_Search_hint0 (\<lambda>_. update_rvec_elems g10 v10) s)\<close>
   using assms by (auto simp add: sok_def intro!: vok_update)
 
 lemma sok_push:
@@ -56,16 +60,20 @@ lemma sok_push:
       length xs \<le> 8 \<Longrightarrow> sok (update_Search_toclear (\<lambda>_. the (rvec_append_val v xs)) s)\<close>
     \<open>Search_hint s = v \<Longrightarrow> word64_of_nat (rvec_length v) < (0x100000000000000 :: 64 word) \<Longrightarrow>
       length xs \<le> 8 \<Longrightarrow> sok (update_Search_hint (\<lambda>_. the (rvec_append_val v xs)) s)\<close>
+    \<open>Search_hint0 s = v \<Longrightarrow> word64_of_nat (rvec_length v) < (0x100000000000000 :: 64 word) \<Longrightarrow>
+      length xs \<le> 8 \<Longrightarrow> sok (update_Search_hint0 (\<lambda>_. the (rvec_append_val v xs)) s)\<close>
     \<open>word64_of_nat (rvec_length (Search_stack s)) < (0x100000000000000 :: 64 word) \<Longrightarrow>
       length xs \<le> 8 \<Longrightarrow> \<exists>y. rvec_append_val (Search_stack s) xs = Some y\<close>
     \<open>word64_of_nat (rvec_length (Search_toclear s)) < (0x100000000000000 :: 64 word) \<Longrightarrow>
       length xs \<le> 8 \<Longrightarrow> \<exists>y. rvec_append_val (Search_toclear s) xs = Some y\<close>
     \<open>word64_of_nat (rvec_length (Search_hint s)) < (0x100000000000000 :: 64 word) \<Longrightarrow>
       length xs \<le> 8 \<Longrightarrow> \<exists>y. rvec_append_val (Search_hint s) xs = Some y\<close>
+    \<open>word64_of_nat (rvec_length (Search_hint0 s)) < (0x100000000000000 :: 64 word) \<Longrightarrow>
+      length xs \<le> 8 \<Longrightarrow> \<exists>y. rvec_append_val (Search_hint0 s) xs = Some y\<close>
   using assms by (auto simp add: sok_def cap_max_big push_ok)
 
-text \<open>\<open>sok_in\<close>/\<open>sok\<close> and the pushes of the minimisation by the rules above, a premise and
-  the bounds of the premises; it fails fast on every other goal.\<close>
+text \<open>\<open>sok_in\<close>/\<open>sok\<close> and the pushes of the minimisation and of \<^verbatim>\<open>Sat_Level0\<close> by the
+  rules above, a premise and the bounds of the premises; it fails fast on every other goal.\<close>
 method sok_fast =
   ((match conclusion in \<open>sok_in _\<close> \<Rightarrow> succeed \<bar> \<open>sok _\<close> \<Rightarrow> succeed \<bar>
      \<open>\<exists>y. rvec_append_val _ _ = Some y\<close> \<Rightarrow> succeed),
