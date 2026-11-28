@@ -19,10 +19,9 @@ definition Search_frame0_contract :: \<open>('addr, 'gv, Search) Global_Store.re
 lemma Search_frame0_spec:
   shows \<open>\<Gamma>; Search_frame0 r v c \<Turnstile>\<^sub>F Search_frame0_contract r g s v c\<close>
   apply (crush_boot f: Search_frame0_def contract: Search_frame0_contract_def)
-  apply (crush_base inline: BIG_def simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+  apply (crush_base inline: BIG_def)
   apply (all \<open>(sok_fast; fail)?\<close>)
   apply (all \<open>search_bound?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
   done
 
 definition Search_step0_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
@@ -37,10 +36,9 @@ lemma Search_step0_spec:
   apply (crush_boot f: Search_step0_def contract: Search_step0_contract_def)
   apply (crush_base inline: BIG_def NONE_def
       specs add: Search_frame0_spec contracts add: Search_frame0_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+      simp add: rvec_elems_focus_modify rvec_elems_focus_modify_fun)
   apply (all \<open>(sok_fast; fail)?\<close>)
   apply (all \<open>search_bound?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
   done
 
 definition Search_close0_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
@@ -53,9 +51,8 @@ definition Search_close0_contract :: \<open>('addr, 'gv, Search) Global_Store.re
 lemma Search_close0_spec:
   shows \<open>\<Gamma>; Search_close0 r c \<Turnstile>\<^sub>F Search_close0_contract r g s c\<close>
   apply (crush_boot f: Search_close0_def contract: Search_close0_contract_def)
-  apply (crush_base inline: BIG_def NONE_def
-      specs add: Search_frame0_spec contracts add: Search_frame0_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+  apply (crush_base inline: NONE_def
+      specs add: Search_frame0_spec contracts add: Search_frame0_contract_def)
   apply (all \<open>(sok_fast; fail)?\<close>)
   apply (ucincl_discharge\<open>
     rule_tac
@@ -64,11 +61,9 @@ lemma Search_close0_spec:
       \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
       \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
     in wp_bounded_while_framedI\<close>)
-  apply (crush_base inline: BIG_def NONE_def
-      specs add: Search_step0_spec contracts add: Search_step0_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+  apply (crush_base inline: NONE_def
+      specs add: Search_step0_spec contracts add: Search_step0_contract_def)
   apply (all \<open>(sok_fast; fail)?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
   done
 
 definition Search_unmark0_contract :: \<open>('addr, 'gv, Search) Global_Store.ref \<Rightarrow> 'gv \<Rightarrow> Search \<Rightarrow>
@@ -81,7 +76,7 @@ definition Search_unmark0_contract :: \<open>('addr, 'gv, Search) Global_Store.r
 lemma Search_unmark0_spec:
   shows \<open>\<Gamma>; Search_unmark0 r \<Turnstile>\<^sub>F Search_unmark0_contract r g s\<close>
   apply (crush_boot f: Search_unmark0_def contract: Search_unmark0_contract_def)
-  apply (crush_base simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+  apply crush_base
   apply (all \<open>(sok_fast; fail)?\<close>)
   subgoal for k_ref
     apply (ucincl_discharge\<open>
@@ -92,10 +87,9 @@ lemma Search_unmark0_spec:
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+    apply crush_base
     apply (all \<open>(sok_fast; fail)?\<close>)
     apply (all \<open>search_bound?\<close>)
-    apply (all \<open>(sok_tac; fail)?\<close>)
     done
   done
 
@@ -109,7 +103,7 @@ definition Search_close_hint_contract :: \<open>('addr, 'gv, Search) Global_Stor
 lemma Search_close_hint_spec:
   shows \<open>\<Gamma>; Search_close_hint r \<Turnstile>\<^sub>F Search_close_hint_contract r g s\<close>
   apply (crush_boot f: Search_close_hint_def contract: Search_close_hint_contract_def)
-  apply (crush_base simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+  apply crush_base
   apply (all \<open>(sok_fast; fail)?\<close>)
   subgoal for i_ref
     apply (ucincl_discharge\<open>
@@ -120,11 +114,9 @@ lemma Search_close_hint_spec:
         \<tau>=\<open>\<lambda>_. \<langle>False\<rangle>\<close> and
         \<theta>=\<open>\<lambda>_. \<langle>False\<rangle>\<close>
       in wp_bounded_while_framedI\<close>)
-    apply (crush_base specs add: Search_close0_spec contracts add: Search_close0_contract_def
-        simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+    apply (crush_base specs add: Search_close0_spec contracts add: Search_close0_contract_def)
     apply (all \<open>(sok_fast; fail)?\<close>)
     apply (all \<open>search_bound?\<close>)
-    apply (all \<open>(sok_tac; fail)?\<close>)
     done
   done
 
@@ -139,10 +131,8 @@ lemma Search_level0_hint_spec:
   shows \<open>\<Gamma>; Search_level0_hint r c \<Turnstile>\<^sub>F Search_level0_hint_contract r g s c\<close>
   apply (crush_boot f: Search_level0_hint_def contract: Search_level0_hint_contract_def)
   apply (crush_base specs add: Search_close0_spec Search_close_hint_spec Search_unmark0_spec
-      contracts add: Search_close0_contract_def Search_close_hint_contract_def Search_unmark0_contract_def
-      simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
+      contracts add: Search_close0_contract_def Search_close_hint_contract_def Search_unmark0_contract_def)
   apply (all \<open>(sok_fast; fail)?\<close>)
-  apply (all \<open>(sok_tac; fail)?\<close>)
   done
 
 end
