@@ -255,42 +255,43 @@ definition "iota" :: \<open>(64 word) \<Rightarrow> ('s, (64 word) rvec, 'abort,
 definition "new_search" :: \<open>(64 word) \<Rightarrow> ('s, Search, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>new_search \<equiv> \<lambda>n. FunctionBody \<lbrakk>
     {
-      let fld_25 = rvec_from_elem(\<llangle>make_elem_layout 1 1\<rrangle>, false, n);
-      let fld_26 = rvec_from_elem(\<llangle>make_elem_layout 1 1\<rrangle>, false, n);
-      let fld_27 = rvec_from_elem(\<llangle>make_elem_layout 1 1\<rrangle>, false, 2_usize * n);
-      let fld_28 = rvec_from_elem(\<llangle>make_elem_layout 8 8\<rrangle>, 0_usize, n);
-      let fld_29 = rvec_from_elem(\<llangle>make_elem_layout 8 8\<rrangle>, NONE(), n);
-      let fld_30 = { let res_2 = { let vec_1 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_1 :: (64 word) rvec\<rrangle> }; \<llangle>res_2 :: (64 word) rvec\<rrangle> };
-      let fld_31 = { let res_4 = { let vec_3 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_3 :: (64 word) rvec\<rrangle> }; \<llangle>res_4 :: (64 word) rvec\<rrangle> };
-      let fld_32 = 0_usize;
-      let fld_33 = rvec_from_elem(\<llangle>make_elem_layout 24 8\<rrangle>, { let res_6 = { let vec_5 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_5 :: (64 word) rvec\<rrangle> }; \<llangle>res_6 :: (64 word) rvec\<rrangle> }, 2_usize * n);
-      let fld_34 = { let res_8 = { let vec_7 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_7 :: (64 word) rvec\<rrangle> }; \<llangle>res_8 :: (64 word) rvec\<rrangle> };
-      let fld_35 = { let res_10 = { let vec_9 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_9 :: (64 word) rvec\<rrangle> }; \<llangle>res_10 :: (64 word) rvec\<rrangle> };
-      let fld_36 = rvec_from_elem(\<llangle>make_elem_layout 1 1\<rrangle>, false, n);
-      let fld_37 = rvec_from_elem(\<llangle>make_elem_layout 8 8\<rrangle>, 0_usize, n);
-      let fld_38 = 1_usize;
-      let fld_39 = rvec_from_elem(\<llangle>make_elem_layout 1 1\<rrangle>, false, n);
-      let fld_40 = { let res_12 = { let vec_11 = rvec_new(\<llangle>make_elem_layout 16 8\<rrangle>); \<llangle>vec_11 :: Lit rvec\<rrangle> }; \<llangle>res_12 :: Lit rvec\<rrangle> };
-      let fld_41 = { let res_14 = { let vec_13 = rvec_new(\<llangle>make_elem_layout 1 1\<rrangle>); \<llangle>vec_13 :: bool rvec\<rrangle> }; \<llangle>res_14 :: bool rvec\<rrangle> };
-      let fld_42 = { let res_16 = { let vec_15 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_15 :: (64 word) rvec\<rrangle> }; \<llangle>res_16 :: (64 word) rvec\<rrangle> };
-      let fld_43 = rvec_from_elem(\<llangle>make_elem_layout 8 8\<rrangle>, 0_usize, n + 1_usize);
-      let fld_44 = 0_usize;
-      let fld_45 = { let res_18 = { let vec_17 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_17 :: (64 word) rvec\<rrangle> }; \<llangle>res_18 :: (64 word) rvec\<rrangle> };
-      let fld_46 = rvec_from_elem(\<llangle>make_elem_layout 1 1\<rrangle>, false, n);
-      let fld_47 = { let res_20 = { let vec_19 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_19 :: (64 word) rvec\<rrangle> }; \<llangle>res_20 :: (64 word) rvec\<rrangle> };
-      let fld_48 = { let res_22 = { let vec_21 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_21 :: (64 word) rvec\<rrangle> }; \<llangle>res_22 :: (64 word) rvec\<rrangle> };
-      let fld_49 = 0_usize;
-      let fld_50 = 0_usize;
+      let fld_27 = rvec_from_elem(\<llangle>make_elem_layout 1 1\<rrangle>, false, n);
+      let fld_28 = rvec_from_elem(\<llangle>make_elem_layout 1 1\<rrangle>, false, n);
+      let fld_29 = rvec_from_elem(\<llangle>make_elem_layout 1 1\<rrangle>, false, 2_usize * n);
+      let fld_30 = rvec_from_elem(\<llangle>make_elem_layout 8 8\<rrangle>, 0_usize, n);
+      let fld_31 = rvec_from_elem(\<llangle>make_elem_layout 8 8\<rrangle>, NONE(), n);
+      let fld_32 = { let res_2 = { let vec_1 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_1 :: (64 word) rvec\<rrangle> }; \<llangle>res_2 :: (64 word) rvec\<rrangle> };
+      let fld_33 = { let res_4 = { let vec_3 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_3 :: (64 word) rvec\<rrangle> }; \<llangle>res_4 :: (64 word) rvec\<rrangle> };
+      let fld_34 = 0_usize;
+      let fld_35 = rvec_from_elem(\<llangle>make_elem_layout 24 8\<rrangle>, { let res_6 = { let vec_5 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_5 :: (64 word) rvec\<rrangle> }; \<llangle>res_6 :: (64 word) rvec\<rrangle> }, 2_usize * n);
+      let fld_36 = { let res_8 = { let vec_7 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_7 :: (64 word) rvec\<rrangle> }; \<llangle>res_8 :: (64 word) rvec\<rrangle> };
+      let fld_37 = { let res_10 = { let vec_9 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_9 :: (64 word) rvec\<rrangle> }; \<llangle>res_10 :: (64 word) rvec\<rrangle> };
+      let fld_38 = rvec_from_elem(\<llangle>make_elem_layout 1 1\<rrangle>, false, n);
+      let fld_39 = rvec_from_elem(\<llangle>make_elem_layout 8 8\<rrangle>, 0_usize, n);
+      let fld_40 = 1_usize;
+      let fld_41 = rvec_from_elem(\<llangle>make_elem_layout 1 1\<rrangle>, false, n);
+      let fld_42 = { let res_12 = { let vec_11 = rvec_new(\<llangle>make_elem_layout 16 8\<rrangle>); \<llangle>vec_11 :: Lit rvec\<rrangle> }; \<llangle>res_12 :: Lit rvec\<rrangle> };
+      let fld_43 = { let res_14 = { let vec_13 = rvec_new(\<llangle>make_elem_layout 1 1\<rrangle>); \<llangle>vec_13 :: bool rvec\<rrangle> }; \<llangle>res_14 :: bool rvec\<rrangle> };
+      let fld_44 = { let res_16 = { let vec_15 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_15 :: (64 word) rvec\<rrangle> }; \<llangle>res_16 :: (64 word) rvec\<rrangle> };
+      let fld_45 = rvec_from_elem(\<llangle>make_elem_layout 8 8\<rrangle>, 0_usize, n + 1_usize);
+      let fld_46 = 0_usize;
+      let fld_47 = { let res_18 = { let vec_17 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_17 :: (64 word) rvec\<rrangle> }; \<llangle>res_18 :: (64 word) rvec\<rrangle> };
+      let fld_48 = rvec_from_elem(\<llangle>make_elem_layout 1 1\<rrangle>, false, n);
+      let fld_49 = { let res_20 = { let vec_19 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_19 :: (64 word) rvec\<rrangle> }; \<llangle>res_20 :: (64 word) rvec\<rrangle> };
+      let fld_50 = { let res_22 = { let vec_21 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_21 :: (64 word) rvec\<rrangle> }; \<llangle>res_22 :: (64 word) rvec\<rrangle> };
       let fld_51 = 0_usize;
       let fld_52 = 0_usize;
-      let fld_53 = { let res_24 = { let vec_23 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_23 :: (64 word) rvec\<rrangle> }; \<llangle>res_24 :: (64 word) rvec\<rrangle> };
+      let fld_53 = 0_usize;
       let fld_54 = 0_usize;
-      let fld_55 = rvec_from_elem(\<llangle>make_elem_layout 1 1\<rrangle>, false, n);
-      let fld_56 = iota(n);
-      let fld_57 = iota(n);
-      let fld_58 = n;
-      let fld_59 = n >= HEAP_MIN();
-      \<llangle>make_Search fld_25 fld_26 fld_27 fld_28 fld_29 fld_30 fld_31 fld_32 fld_33 fld_34 fld_35 fld_36 fld_37 fld_38 fld_39 fld_40 fld_41 fld_42 fld_43 fld_44 fld_45 fld_46 fld_47 fld_48 fld_49 fld_50 fld_51 fld_52 fld_53 fld_54 fld_55 fld_56 fld_57 fld_58 fld_59\<rrangle>
+      let fld_55 = { let res_24 = { let vec_23 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_23 :: (64 word) rvec\<rrangle> }; \<llangle>res_24 :: (64 word) rvec\<rrangle> };
+      let fld_56 = 0_usize;
+      let fld_57 = { let res_26 = { let vec_25 = rvec_new(\<llangle>make_elem_layout 8 8\<rrangle>); \<llangle>vec_25 :: (64 word) rvec\<rrangle> }; \<llangle>res_26 :: (64 word) rvec\<rrangle> };
+      let fld_58 = rvec_from_elem(\<llangle>make_elem_layout 1 1\<rrangle>, false, n);
+      let fld_59 = iota(n);
+      let fld_60 = iota(n);
+      let fld_61 = n;
+      let fld_62 = n >= HEAP_MIN();
+      \<llangle>make_Search fld_27 fld_28 fld_29 fld_30 fld_31 fld_32 fld_33 fld_34 fld_35 fld_36 fld_37 fld_38 fld_39 fld_40 fld_41 fld_42 fld_43 fld_44 fld_45 fld_46 fld_47 fld_48 fld_49 fld_50 fld_51 fld_52 fld_53 fld_54 fld_55 fld_56 fld_57 fld_58 fld_59 fld_60 fld_61 fld_62\<rrangle>
     }
   \<rbrakk>\<close>
 
@@ -594,6 +595,7 @@ definition "Search_certify" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<
     let b = mem_replace(self.Search_marks, { let res_2 = { let vec_1 = rvec_new(\<llangle>make_elem_layout 1 1\<rrangle>); \<llangle>vec_1 :: bool rvec\<rrangle> }; \<llangle>res_2 :: bool rvec\<rrangle> });
     let forced = mark(learnt, rvec_len(* (self.Search_assign)), b);
     let forced = force_trail(f, learned, * (self.Search_assign), * (self.Search_trail), * (self.Search_reason), lo, forced);
+    let forced = force_fix(f, learned, * (self.Search_assign), * (self.Search_reason), * (self.Search_hint0), 0_usize, forced);
     let forced = force_fix(f, learned, * (self.Search_assign), * (self.Search_reason), * (self.Search_hint), nres, forced);
     let forced = force_back(f, learned, * (self.Search_assign), * (self.Search_reason), * (self.Search_hint), nres, forced);
     let r = reason_ok(f, learned, confl, false, 0_usize, false, * (self.Search_assign), forced);
@@ -1104,6 +1106,101 @@ definition "Search_analyze" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<
     Search_copy_learnt(* self)
   \<rbrakk>\<close>
 
+(* Rust: Search::frame0 *)
+definition "Search_frame0" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_frame0 \<equiv> \<lambda>self v c. FunctionBody \<lbrakk>
+    let mut from_v = 0_usize;
+    let mut end_v = 0_usize;
+    if c < rvec_len(* (self.Search_start)) {
+      let o_v = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_start))[c];
+      if (o_v < BIG()) && ((o_v + 1_usize) < rvec_len(* (self.Search_arena))) {
+        * from_v = o_v + 6_usize;
+        * end_v = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_arena))[o_v + 1_usize];
+      }
+    };
+    if rvec_len(* (self.Search_stack)) < BIG() {
+      rvec_extend_from_slice(self.Search_stack, [v, * from_v, * end_v]);
+    }
+  \<rbrakk>\<close>
+
+(* Rust: Search::step0 *)
+definition "Search_step0" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_step0 \<equiv> \<lambda>self. FunctionBody \<lbrakk>
+    let n = rvec_len(* (self.Search_stack));
+    if n >= 3_usize {
+      let v = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_stack))[n - 3_usize];
+      let j = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_stack))[n - 2_usize];
+      if (j >= (\<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_stack))[n - 1_usize])) || (j >= rvec_len(* (self.Search_arena))) {
+        rvec_truncate(self.Search_stack, n - 3_usize);
+        if (v != NONE()) && (rvec_len(* (self.Search_hint0)) < BIG()) {
+          rvec_push(self.Search_hint0, v);
+        }
+      } else {
+        * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_stack)[n - 2_usize]) = j + 1_usize;
+        let q = (\<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_arena))[j]) / 2_usize;
+        if ((((q < rvec_len(* (self.Search_seen))) && (q < rvec_len(* (self.Search_level)))) && (q < rvec_len(* (self.Search_reason)))) && ((\<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_level))[q]) == 0_usize)) && (!(\<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_seen))[q])) {
+          * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_seen)[q]) = true;
+          let r = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_reason))[q];
+          Search_frame0(self, q, r);
+        }
+      }
+    }
+  \<rbrakk>\<close>
+
+(* Rust: Search::close0 *)
+definition "Search_close0" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_close0 \<equiv> \<lambda>self c. FunctionBody \<lbrakk>
+    rvec_clear(self.Search_stack);
+    Search_frame0(self, NONE(), c);
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while rvec_len(* (self.Search_stack)) >= 3_usize {
+      Search_step0(self);
+    }
+  \<rbrakk>\<close>
+
+(* Rust: Search::close_hint *)
+definition "Search_close_hint" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_close_hint \<equiv> \<lambda>self. FunctionBody \<lbrakk>
+    let mut i = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* i) < rvec_len(* (self.Search_hint)) {
+      let v = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_hint))[* i];
+      if v < rvec_len(* (self.Search_reason)) {
+        let c = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_reason))[v];
+        Search_close0(self, c);
+      };
+      * i += 1_usize;
+    }
+  \<rbrakk>\<close>
+
+(* Rust: Search::unmark0 *)
+definition "Search_unmark0" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_unmark0 \<equiv> \<lambda>self. FunctionBody \<lbrakk>
+    let mut k = 0_usize;
+    #[fuel(\<epsilon>\<open>urust_fuel\<close>)] while (* k) < rvec_len(* (self.Search_hint0)) {
+      let v = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_hint0))[* k];
+      if v < rvec_len(* (self.Search_seen)) {
+        * (\<llangle>focus_reference rvec_elems_focus\<rrangle>\<^sub>1(self.Search_seen)[v]) = false;
+      };
+      * k += 1_usize;
+    }
+  \<rbrakk>\<close>
+
+(* Rust: Search::level0_hint *)
+definition "Search_level0_hint" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, 64 word, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
+  \<open>Search_level0_hint \<equiv> \<lambda>self confl. FunctionBody \<lbrakk>
+    rvec_clear(self.Search_hint0);
+    if rvec_len(* (self.Search_lim)) == 0_usize {
+      return rvec_len(* (self.Search_trail));
+    };
+    let lo = \<llangle>rvec_elems\<rrangle>\<^sub>1(* (self.Search_lim))[0_usize];
+    if lo <= rvec_len(* (self.Search_hint)) {
+      return lo;
+    };
+    Search_close0(self, confl);
+    Search_close_hint(self);
+    Search_unmark0(self);
+    0_usize
+  \<rbrakk>\<close>
+
 (* Rust: Search::insert *)
 definition "Search_insert" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rightarrow> (64 word) \<Rightarrow> ('s, unit, 'abort, 'i prompt, 'o prompt_output) function_body\<close> where
   \<open>Search_insert \<equiv> \<lambda>self v. FunctionBody \<lbrakk>
@@ -1166,12 +1263,11 @@ definition "on_conflict" :: \<open>(('addr, 'gv, Search) Global_Store.ref) \<Rig
       return 2_usize;
     };
     let learnt = Search_analyze(s, f, * learned, confl);
-    let lo = if rvec_len(* (s.Search_lim)) > 0_usize {
-      \<llangle>rvec_elems\<rrangle>\<^sub>1(* (s.Search_lim))[0_usize]
-    } else {
-      rvec_len(* (s.Search_trail))
+    if (rvec_len(learnt) == 0_usize) || (rvec_len(* learned) >= BIG()) {
+      return 2_usize;
     };
-    if ((rvec_len(learnt) == 0_usize) || (rvec_len(* learned) >= BIG())) || (!Search_certify(s, f, * learned, lo, * (s.Search_nres), confl, learnt)) {
+    let lo = Search_level0_hint(s, confl);
+    if !Search_certify(s, f, * learned, lo, * (s.Search_nres), confl, learnt) {
       return 2_usize;
     };
     let v = \<llangle>rvec_elems\<rrangle>\<^sub>1(learnt)[0_usize].Lit_var;

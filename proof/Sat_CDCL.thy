@@ -1,5 +1,5 @@
 theory Sat_CDCL
-  imports Sat_Proof.Sat_Reduce
+  imports Sat_Proof.Sat_Level0
 begin
 
 text \<open>The contract of the CDCL search of \<^verbatim>\<open>core/src/lib.rs\<close>, \<^verbatim>\<open>cdcl\<close>. The functions it calls
@@ -194,9 +194,10 @@ lemma on_conflict_spec:
   apply (crush_boot f: on_conflict_def contract: on_conflict_contract_def)
   apply (crush_base inline: ACT_def NONE_def BIG_def Clause_mk_def
       specs add: Search_certify_spec Search_analyze_spec Search_backtrack_spec Search_attach_spec
-        Search_enqueue_spec Search_learnt_lbd_spec
+        Search_enqueue_spec Search_learnt_lbd_spec Search_level0_hint_spec
       contracts add: Search_certify_contract_def Search_analyze_contract_def Search_backtrack_contract_def
         Search_attach_contract_def Search_enqueue_contract_def Search_learnt_lbd_contract_def
+        Search_level0_hint_contract_def
       simp add: true_def false_def rvec_elems_focus_modify rvec_elems_focus_modify_fun)
   apply (all \<open>sok_asm?\<close>)
   apply (all \<open>(rule sok_lbd_dead; (assumption | (simp add: not_le; fail)))?\<close>)
